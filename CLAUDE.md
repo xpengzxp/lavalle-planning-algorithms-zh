@@ -55,3 +55,13 @@ Planning Algorithm/
 | 3 | `part2/ch3-geometric-representations.html` | 12 个：半平面交、姜饼人脸、超椭圆、齐次矩阵、YPR、三连杆、DH、PUMA 560、辛烷、运动树、闭环、线性变换 | 自包含单文件，颜色约定：绿 = 障碍 O，红 = 机器人 A，蓝 = 坐标系 |
 | 4 | `part2/ch4-configuration-space.html` | 15 个：内点/边界点、有限拓扑检查器、区间同胚、流形检测、粘合正方形（习题 27）、同伦与基本群、O(2)、柱面规划、四元数、一维 Minkowski、星形算法（含旋转）、两连杆 C-space、两连杆簇、三连杆簇/四连杆、连杆图与 Grübler | 共享布局 + `part2/js/ch4-*.js` + `part2/code/ch4_configuration_space.py`；颜色沿用第 3 章：绿 = 障碍，红 = 机器人，蓝 = 坐标/路径 |
 | 5 | `part2/ch5-sampling-based-planning.html` | 21 处（19 种）：Lp 度量、SO(2) 距离、位移度量、球面/SO(3) 采样、van der Corput、采样方法对比（×3：随机/Sukharev/Halton）、维数灾难、包围体层次、特征 Voronoi、路径段检查、连杆 Lipschitz、网格 A*、随机势场、RDT 探索、Kd 树、RRT 规划器、PRM、可见性路线图、采样启发式 | 共享布局 + `part2/js/ch5-*.js`（`ch5-lib.js` 是本章共用库，组件实例挂在 `el._w` 上便于调试）+ `part2/code/ch5_sampling.py`；2D 图都直接画在 C-space 里：灰 = Cobs，绿 = 解路径，蓝 = qI 树，紫 = qG 树 |
+
+## 5. 云端会话（Claude Code cloud）的补充约定
+
+从第 6 章起，每章由一个**云端会话**生成。仓库是 `github.com/xpengzxp/planning-algorithms-study`（目前私有，全部写完后开源）。本地有一个协调会话负责启动、检查和合并。云端会话除了第 2 节的流程，还要遵守：
+
+- **分支**：从最新的 `main` 拉一个分支 `claude/chK-<slug>`，所有改动都提交在这个分支上。不要直接推 `main`，也不要改别的章节文件。
+- **PDF**：`book/` 在 `.gitignore` 里（版权原因，原书 PDF 不进主分支）。先 `curl -fL -o book/chK.pdf https://lavalle.pl/planning/chK.pdf`；下载失败就从 `book-pdfs` 分支取：`git fetch origin book-pdfs && git show origin/book-pdfs:book/chK.pdf > book/chK.pdf`。不要把 PDF 提交进你的分支。
+- **验证**：云端没有浏览器面板。用 `node --check` 检查每个 JS 文件（云端一般装了 node），用 `python3 -m http.server` 加 `curl` 确认页面引用的本地文件都返回 200，参考代码用 `python3` 跑通。浏览器里的实际渲染和交互检查由本地协调会话在合并前完成。
+- **登记点**：第 2 节第 3–5 步照做，另外把本章加到本文件第 4 节的登记表里。
+- **收尾**：全部完成后一次性 `git push -u origin claude/chK-<slug>`，最后一个提交信息写 `chK: done`。若能用 `gh` 或 GitHub 工具，就开一个指向 `main` 的 PR；不能也没关系，协调会话会按分支名找到它。最后在对话里用中文写一段总结：做了哪些互动图、哪些地方标了「补充」、原书有哪些笔误、还有哪些没验证的地方。
