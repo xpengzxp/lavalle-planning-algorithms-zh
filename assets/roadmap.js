@@ -44,7 +44,7 @@
       desc: "大量含微分约束的模型：车轮滚动约束、机械系统动力学。", key: "", pre: [4] },
     { n: 14, part: "IV", title: "微分约束下的采样规划", en: "Sampling-Based Planning Under Differential Constraints",
       desc: "第 5 章方法的扩展；在微分约束下组合方法几乎无能为力，所以全部是基于采样的方法。", key: "", pre: [13, 5] },
-    { n: 15, part: "IV", title: "系统理论与解析方法", en: "System Theory and Analytical Techniques",
+    { n: 15, part: "IV", title: "系统理论与解析方法", en: "System Theory and Analytical Techniques", href: "part4/ch15-system-theory-and-analytical-techniques.html",
       desc: "主要来自控制理论文献的概念与工具，与第 14 章的算法互补。", key: "", pre: [13] },
   ];
 

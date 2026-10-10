@@ -38,6 +38,7 @@ Planning Algorithm/
 | 11 | 传感器与信息空间 Sensors and Information Spaces | [part3/ch11-sensors-and-information-spaces.html](part3/ch11-sensors-and-information-spaces.html) |
 | 12 | 感知不确定下的规划 Planning Under Sensing Uncertainty | [part3/ch12-planning-under-sensing-uncertainty.html](part3/ch12-planning-under-sensing-uncertainty.html) |
 | 13 | 微分模型 Differential Models | [part4/ch13-differential-models.html](part4/ch13-differential-models.html) |
+| 15 | 系统理论与解析方法 System Theory and Analytical Techniques | [part4/ch15-system-theory-and-analytical-techniques.html](part4/ch15-system-theory-and-analytical-techniques.html) |
 
 ## 新增一章
 
