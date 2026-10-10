@@ -36,7 +36,7 @@
       desc: "单步决策：在其他决策者（真实对手或用来建模不确定性的「自然」）的干扰下做出最好的决策。", key: "", pre: [2] },
     { n: 10, part: "III", title: "序贯决策论", en: "Sequential Decision Theory", href: "part3/ch10-sequential-decision-theory.html",
       desc: "把第 9 章的单步决策串成多步；2.3 节的动态规划在这里变得重要。假设当前状态总是已知。", key: "", pre: [9, 2] },
-    { n: 11, part: "III", title: "传感器与信息空间", en: "Sensors and Information Spaces",
+    { n: 11, part: "III", title: "传感器与信息空间", en: "Sensors and Information Spaces", href: "part3/ch11-sensors-and-information-spaces.html",
       desc: "执行时当前状态未知：信息来自传感器观测与历史动作。信息空间之于感知不确定性，就像配置空间之于运动规划。", key: "", pre: [10] },
     { n: 12, part: "III", title: "感知不确定下的规划", en: "Planning Under Sensing Uncertainty",
       desc: "定位、建图、追逃（pursuit–evasion）、操作等问题，统一在信息空间中规划。", key: "", pre: [11] },

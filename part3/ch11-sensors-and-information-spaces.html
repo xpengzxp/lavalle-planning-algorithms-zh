@@ -1,0 +1,975 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>传感器与信息空间 · 第 11 章</title>
+<meta name="description" content="LaValle《Planning Algorithms》第 11 章的中文互动教程：传感器与原像、历史信息空间、信息映射与充分性、不确定 / 概率信息空间、L 形走廊与 NFA、POMDP、连续状态空间的保守近似与矩近似、传感器目录、无传感器规划、卡尔曼滤波、粒子滤波、博弈中的信息模型。">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<link rel="stylesheet" href="../assets/style.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+<script src="../assets/common.js"></script>
+<script defer src="js/ch11-lib.js"></script>
+<script defer src="js/ch11-discrete.js"></script>
+<script defer src="js/ch11-examples.js"></script>
+<script defer src="js/ch11-continuous.js"></script>
+<script defer src="js/ch11-projection.js"></script>
+<script defer src="js/ch11-prob.js"></script>
+<script defer src="js/ch11-games.js"></script>
+<style>
+  .ch11-stage { width: 100%; }
+  .ch11-stage canvas { margin: 0 auto; border-radius: 6px; }
+  .box.intuition ul { margin: 0; padding-left: 1.2em; }
+  .fn { font-size: .8em; }
+  .fig { max-width: 680px; margin: 0 auto; display: block; }
+  .two-ways td:first-child { white-space: nowrap; }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <a class="brand" href="../index.html">Planning Algorithms 学习站</a>
+  <span class="crumbs"><a href="../index.html">首页</a> › Part III › 第 11 章 传感器与信息空间</span>
+  <button class="icon-btn" id="theme-toggle" type="button" aria-label="切换深浅色">☾</button>
+</header>
+
+<div class="layout">
+<nav class="toc" aria-label="目录">
+  <p class="toc-title">本章目录</p>
+  <ol>
+    <li><a href="#overview">本章导读</a></li>
+    <li><a href="#s11-1">11.1 离散状态空间</a>
+      <ol>
+        <li><a href="#s11-1-1">传感器</a></li>
+        <li><a href="#s11-1-2">历史信息空间</a></li>
+        <li><a href="#s11-1-3">定义规划问题</a></li>
+      </ol>
+    </li>
+    <li><a href="#s11-2">11.2 派生信息空间</a>
+      <ol>
+        <li><a href="#s11-2-1">信息映射与充分性</a></li>
+        <li><a href="#s11-2-2">不确定信息空间</a></li>
+        <li><a href="#s11-2-3">概率信息空间</a></li>
+        <li><a href="#s11-2-4">有限记忆信息空间</a></li>
+      </ol>
+    </li>
+    <li><a href="#s11-3">11.3 离散状态空间的例子</a>
+      <ol>
+        <li><a href="#s11-3-1">基本的不确定性例子</a></li>
+        <li><a href="#s11-3-2">非确定有限自动机</a></li>
+        <li><a href="#s11-3-3">概率情形：POMDP</a></li>
+      </ol>
+    </li>
+    <li><a href="#s11-4">11.4 连续状态空间</a>
+      <ol>
+        <li><a href="#s11-4-1">离散阶段的 I-空间</a></li>
+        <li><a href="#s11-4-2">连续时间的 I-空间</a></li>
+        <li><a href="#s11-4-3">派生 I-空间与近似</a></li>
+      </ol>
+    </li>
+    <li><a href="#s11-5">11.5 连续状态空间的例子</a>
+      <ol>
+        <li><a href="#s11-5-1">传感器模型</a></li>
+        <li><a href="#s11-5-2">简单投影的例子</a></li>
+        <li><a href="#s11-5-3">有自然传感动作的例子</a></li>
+        <li><a href="#s11-5-4">不用传感器获得信息</a></li>
+      </ol>
+    </li>
+    <li><a href="#s11-6">11.6 计算概率 I-state</a>
+      <ol>
+        <li><a href="#s11-6-1">卡尔曼滤波</a></li>
+        <li><a href="#s11-6-2">基于采样的方法</a></li>
+      </ol>
+    </li>
+    <li><a href="#s11-7">11.7 博弈论中的信息空间</a>
+      <ol>
+        <li><a href="#s11-7-1">博弈树中的 I-state</a></li>
+        <li><a href="#s11-7-2">状态空间上的博弈</a></li>
+      </ol>
+    </li>
+    <li><a href="#further">延伸阅读</a></li>
+    <li><a href="#cheatsheet">本章速查表</a></li>
+    <li><a href="#pitfalls">常见陷阱</a></li>
+    <li><a href="#exercises">习题导引</a></li>
+    <li><a href="#notes">脚注：原书笔误</a></li>
+  </ol>
+</nav>
+
+<main class="content">
+
+<p class="kicker">Part III · 第 11 章</p>
+<h1>传感器与信息空间 <span class="en">Sensors and Information Spaces</span></h1>
+<p class="lede">到目前为止，全书都假设<b>当前状态是已知的</b>。如果不知道呢？这一章回答：把「我知道什么」本身当成状态。机器人执行计划时拥有的全部信息——初始条件、动作历史、观测历史——组成<b>信息状态 information state</b>；所有信息状态组成<b>信息空间 information space</b>。它之于感知不确定性，正如第 4 章的配置空间之于几何变换。</p>
+
+<section id="overview">
+<h2 style="border-top:0;margin-top:1em">本章导读</h2>
+
+<svg class="fig" viewBox="0 0 640 150" role="img" aria-label="图 11.1：决策者 M 与环境 E">
+  <defs><marker id="f111" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker></defs>
+  <rect x="150" y="40" width="110" height="70" rx="8" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="205" y="72" text-anchor="middle" font-size="18" fill="var(--text)">M</text>
+  <text x="205" y="94" text-anchor="middle" font-size="11.5" fill="var(--muted)">决策者（机器人）</text>
+  <rect x="380" y="40" width="110" height="70" rx="8" fill="var(--warn-soft)" stroke="var(--warn)"/>
+  <text x="435" y="72" text-anchor="middle" font-size="18" fill="var(--text)">E</text>
+  <text x="435" y="94" text-anchor="middle" font-size="11.5" fill="var(--muted)">环境（状态未知）</text>
+  <path d="M378 58 L264 58" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#f111)"/>
+  <path d="M262 92 L376 92" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#f111)"/>
+  <text x="320" y="50" text-anchor="middle" font-size="12.5" fill="var(--text)">感知 Sensing</text>
+  <text x="320" y="110" text-anchor="middle" font-size="12.5" fill="var(--text)">执行 Actuation</text>
+</svg>
+<p class="small muted" style="text-align:center">图 11.1 的重画：环境的状态是未知的。可以用来推断它的，只有传感器观测的历史、已施加的动作和初始条件——这段历史就是<b>信息状态</b>。</p>
+
+<p>关于状态的信息有三个来源：</p>
+<ol>
+  <li><b>初始条件</b>：执行之前就有的信息，可能强到「初始状态已知」，也可能什么都没有。</li>
+  <li><b>传感器观测</b>：执行中对状态的测量，通常不完整，或者带有扰动。</li>
+  <li><b>已经执行的动作</b>：例如机器人被命令向东走（且只有状态未知这一种不确定性），那么它现在应该比原来更靠东。</li>
+</ol>
+<p>使用信息空间有两种思路：</p>
+<div class="table-wrap">
+<table class="data two-ways">
+  <tr><th>思路</th><th>做法</th><th>计划的形式</th></tr>
+  <tr><td>1. 估计状态</td><td>用全部信息估计状态，然后「假装」没有不确定性；希望（或证明）估计误差合理时计划仍然有效。这是经典做法，估计好了以后就回到第 8 章的反馈规划。</td><td>\(\pi : X \to U\)</td></tr>
+  <tr><td>2. 直接在信息空间里解</td><td>目标和分析都在信息空间里表述，<b>根本不需要</b>知道确切状态。很多问题因此大大简化。</td><td>\(\pi : \mathcal{I} \to U\)</td></tr>
+</table>
+</div>
+<p>本章的重点是第二种。为了简短，书中把 information 简写成 I：信息空间、信息状态写作 <b>I-空间 I-space</b>、<b>I-state</b>，就像把配置空间写成 C-space。</p>
+
+<div class="box">
+  <div class="box-title">本章地图与读法</div>
+  <ul style="margin:0">
+    <li><b>11.1–11.3 离散状态空间</b>：传感器、历史 I-空间、规划问题 → 派生 I-空间（I-map、充分性、不确定 / 概率 I-空间）→ 例子（L 形走廊、NFA、POMDP）。这部分最容易表述，建议先读透。</li>
+    <li><b>11.4–11.6 连续状态空间</b>：同样的概念搬到连续空间（状态空间可以就是 C-space），再加近似方法、传感器目录、卡尔曼滤波与粒子滤波。</li>
+    <li><b>11.7 博弈论</b>：多个玩家在同一个状态空间上博弈，每人有自己的 I-空间。</li>
+  </ul>
+  <p style="margin:.6em 0 0">前置知识：第 10 章的 Formulation 10.1（自然动作 \(\theta\)、非确定 / 概率两种模型）与代价到达 / 代价到去（<a href="ch10-sequential-decision-theory.html">第 10 章教程</a>）；9.2.3 节的观测模型 \(y = h(\theta,\psi)\)（<a href="ch9-basic-decision-theory.html">第 9 章教程</a>）；2.3 节的终止动作 \(u_T\)。第 12 章会在 I-空间里真正求解规划问题。</p>
+</div>
+<p class="small muted">颜色约定（沿用第 9 章定的 Part III 约定）：<b style="color:var(--accent)">蓝</b> = 机器人的动作与它「知道」的不确定 I-state；<b style="color:var(--warn)">橙</b> = 自然（干扰 θ、传感噪声 ψ）、观测 y 与原像 H(y)；<b style="color:var(--c-alive2)">紫</b> = 概率 I-state；<b style="color:var(--ok)">绿</b> = 目标；深色实心点 = 规划者看不到的真实状态。参考代码 <a href="code/ch11_information_spaces.py"><code>part3/code/ch11_information_spaces.py</code></a> 核对了页面上出现的数值与笔误判断。</p>
+</section>
+
+<!-- ============================================================ 11.1 -->
+<section id="s11-1">
+<h2>11.1 离散状态空间 <span class="en">Discrete State Spaces</span></h2>
+<p>11.1–11.3 节假设状态空间 \(X\) 有限或可数无穷，就像 Formulation 2.1、2.3。离散情形比连续情形容易表述得多，先把它弄透再进入 11.4 节。</p>
+
+<h3 id="s11-1-1">11.1.1 传感器 <span class="en">Sensors</span></h3>
+<p><b>传感器</b>由两部分定义：(1) <b>观测空间 observation space</b> \(Y\)——所有可能的读数；(2) <b>传感器映射 sensor mapping</b> \(h\)——给定当前状态（或其它信息），会读到什么。注意：在规划模型里状态并没有真的「给出」，只是在<b>建模传感器</b>时假设它给定。这推广了 9.2.3 节的观测模型（那里观测的是 \(\theta\) 而不是 \(x\)）。三种传感器映射，一种比一种一般：</p>
+<ol>
+  <li><b>状态传感器映射 state sensor mapping</b>：\(h : X \to Y\)，状态完全决定观测。</li>
+  <li><b>状态-自然传感器映射 state-nature sensor mapping</b>：对每个 \(x\) 有一个有限集合 \(\Psi(x)\)，称为<b>自然传感动作 nature sensing actions</b>；\(\psi\in\Psi(x)\) 干扰观测，\(y = h(x,\psi)\)。执行时 \(\psi\) 未知，但作为传感模型的一部分是给定的。</li>
+  <li><b>基于历史的传感器映射 history-based sensor mapping</b>：观测可以依赖当前及以前所有状态。第 \(k\) 阶段的自然传感动作集合记作 \(\Psi_k(x)\)，
+    <div class="eq">$$y_k = h_k(x_1,\ldots,x_k,\psi_k). \tag{11.1}$$</div>
+    \(h_k\) 带下标是因为每个阶段的定义域不同。任何一种传感器映射都可以随阶段变化。</li>
+</ol>
+<p>例 11.1–11.6 都是状态传感器映射（\(X = \mathbb{Z}\) 时）：</p>
+<ul>
+  <li><b>例 11.1 奇偶传感器</b>：\(Y=\{0,1\}\)，\(y = h(x) = 0\)（\(x\) 偶）或 \(1\)（\(x\) 奇）<span class="eqno">(11.2)</span>。只知道奇偶，和别的信息合起来也许能推出状态。</li>
+  <li><b>例 11.2 模传感器</b>：\(Y = \{0,\ldots,k-1\}\)，\(y = x \bmod k\) <span class="eqno">(11.3)</span>。</li>
+  <li><b>例 11.3 符号传感器</b>：\(Y=\{-1,0,1\}\)，\(y = \operatorname{sgn} x\) <span class="eqno">(11.4)</span>。信息很少，但能精确判断 \(x=0\)。</li>
+  <li><b>例 11.4 选择性传感器</b>：\(X = \mathbb{Z}\times\mathbb{Z}\)，只观测第一个分量，\(y = h(i,j) = i\) <span class="eqno">(11.5)</span>。推广到任何笛卡儿积状态空间：暴露一部分分量，隐藏其余的。</li>
+  <li><b>例 11.5 双射传感器</b>：\(Y = X\)，\(h\) 是双射，于是 \(x = h^{-1}(y)\)。特例是<b>恒等传感器 identity sensor</b>——本章之前的所有规划问题都默认有它。</li>
+  <li><b>例 11.6 零传感器 null sensor</b>：\(Y=\{0\}\)，\(h(x)=0\)，不提供任何信息。</li>
+</ul>
+<p><b>原像 preimage</b>：\(h\) 不是双射时，定义</p>
+<div class="eq">$$H(y) = \{x\in X \mid y = h(x)\}. \tag{11.6}$$</div>
+<p>所有 \(y\) 的原像构成 \(X\) 的一个<b>划分</b>，某种意义上就是传感器的「分辨率」：双射传感器把 \(X\) 划分成单点（完美信息）；零传感器只有一块，就是 \(X\) 本身；符号传感器分成三块 \(H(1)=\{1,2,\ldots\}\)、\(H(-1)=\{\ldots,-2,-1\}\)、\(H(0)=\{0\}\)。有代数背景的读者会联想到用同态构造商群。</p>
+<p><b>自然的两种模型</b>：对状态-自然传感器映射，\(\psi\) 如何选可以是 (1) <b>非确定的 nondeterministic</b>——除了 \(\psi\in\Psi(x)\) 之外一无所知；(2) <b>概率的 probabilistic</b>——已知 \(P(\psi|x)\)。（10.1.1 节对干扰状态转移的自然动作也有同样两种模型。）概率模型可以写成给定状态时 \(Y\) 上的分布；与 (9.28) 由 \(P(\psi|\theta)\) 得到 \(P(y|\theta)\) 一样，若 \(h\) 限制到固定的 \(x\) 上是从 \(\Psi\) 到 \(Y\) 的单射，</p>
+<div class="eq">$$P(y|x) = \begin{cases} P(\psi|x) & \text{对唯一满足 } y = h(x,\psi) \text{ 的 }\psi \\ 0 & \text{若不存在这样的 }\psi. \end{cases} \tag{11.7}$$</div>
+<p>去掉单射假设时，对所有满足 \(y = h(x,\psi)\) 的 \(\psi\) 求和。</p>
+<ul>
+  <li><b>例 11.7 传感器扰动</b>：\(X = Y = \mathbb{Z}\)，\(\Psi = \{-1,0,1\}\)，\(y = x + \psi\) <span class="eqno">(11.8)</span>。没有自然时它就是恒等传感器；现在只知道 \(|x-y|\le 1\)，即 \(x \in\{y-1, y, y+1\}\)。</li>
+  <li><b>例 11.8 扰动的符号传感器</b>：\(y = \operatorname{sgn}(x+\psi)\) <span class="eqno">(11.9)</span>。读到 \(y = 0\) 时不再确定 \(x=0\)，可能是 \(\pm1\)；而 \(x=0\) 时三种读数都可能。</li>
+  <li><b>例 11.9 扰动的奇偶传感器</b>：\(Y=\Psi=\{0,1\}\)，\(y = (x+\psi)\) 的奇偶 <span class="eqno">(11.10)</span>。非确定模型下它<b>毫无用处</b>：无论读到什么，都不知道 \(x\) 是奇是偶。概率模型下却可能有用。</li>
+</ul>
+<p>状态-自然传感器映射的原像是</p>
+<div class="eq">$$H(y) = \{x\in X \mid \exists\psi\in\Psi(x)\ \text{使得}\ y = h(x,\psi)\}. \tag{11.11}$$</div>
+<p>它比状态传感器映射的原像大，而且一般<b>不构成划分</b>。例 11.8 的原像是 \(H(1)=\{0,1,\ldots\}\)、\(H(0)=\{-1,0,1\}\)、\(H(-1)=\{\ldots,-2,-1,0\}\)——每个都含 0。也可以不经过 \(\psi\)，直接为每个 \(y\) 指定 \(H(y)\)。<b>例 11.10 延迟观测传感器</b>（基于历史）：\(X=Y=\mathbb{Z}\)，\(y_k = x_{k-i}\)，给出 \(i\) 个阶段之前状态的精确值；变体很多，比如只给 \(i\) 个阶段之前状态的符号。</p>
+
+<div class="widget wide" data-widget="sensor-preimage"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>「符号」→「扰动符号」：点 y = 0。原像从 {0} 变成 {−1, 0, 1}；再点 x = 0，它能读出三种值——原像互相重叠，不再是划分。</li>
+  <li>「扰动奇偶」：非确定模型下 H(0) = H(1) = 整个 X。勾上「概率模型」，把 P(ψ = 0) 从 0.5 往上拖：一旦不等于 1/2，P(y|x) 就随奇偶不同，观测开始带信息（参考代码第 1 项）。</li>
+  <li>「模 k」把 k 从 2 调到 5：块数越多，分辨率越高；「选择性」的每一块都是一整列，无穷大。</li>
+</ul></div>
+
+<h3 id="s11-1-2">11.1.2 定义历史信息空间 <span class="en">Defining the History Information Space</span></h3>
+<p>这一节定义最基本、最自然的 I-空间，后面的许多 I-空间（11.2 节）都由它派生。设 \(X\)、\(U\)、\(f\) 如 Formulation 10.1，阶段如 Formulation 2.2。执行计划时产生状态序列 \(x_1,x_2,\ldots\) 和动作序列 \(u_1,u_2,\ldots\)，但现在状态序列是<b>未知的</b>，每个阶段得到一个观测 \(y_k\)：</p>
+
+<svg class="fig" viewBox="0 0 560 130" role="img" aria-label="图 11.2：每个阶段得到观测，状态对决策者隐藏">
+  <defs><marker id="f112" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker></defs>
+  <g font-size="15" fill="var(--text)" text-anchor="middle">
+    <text x="60" y="100" fill="var(--muted)">x₁</text><text x="160" y="100" fill="var(--accent)">u₁</text><text x="260" y="100" fill="var(--muted)">x₂</text><text x="360" y="100" fill="var(--accent)">u₂</text><text x="460" y="100" fill="var(--muted)">x₃</text><text x="530" y="100" fill="var(--muted)">⋯</text>
+    <text x="60" y="26" fill="var(--warn)">y₁</text><text x="260" y="26" fill="var(--warn)">y₂</text><text x="460" y="26" fill="var(--warn)">y₃</text>
+  </g>
+  <g stroke="var(--muted)" stroke-width="1.5" marker-end="url(#f112)">
+    <line x1="76" y1="95" x2="142" y2="95"/><line x1="176" y1="95" x2="242" y2="95"/><line x1="276" y1="95" x2="342" y2="95"/><line x1="376" y1="95" x2="442" y2="95"/><line x1="476" y1="95" x2="512" y2="95"/>
+    <line x1="60" y1="84" x2="60" y2="36"/><line x1="260" y1="84" x2="260" y2="36"/><line x1="460" y1="84" x2="460" y2="36"/>
+  </g>
+  <g fill="none" stroke="var(--border-strong)" stroke-dasharray="4 3"><circle cx="60" cy="95" r="15"/><circle cx="260" cy="95" r="15"/><circle cx="460" cy="95" r="15"/></g>
+</svg>
+<p class="small muted" style="text-align:center">图 11.2 的重画：每个阶段收到观测 \(y_k\in Y\)，施加动作 \(u_k\in U\)；状态 \(x_k\)（虚线圈）对决策者隐藏。</p>
+
+<p>以前的表述允许动作集合 \(U(x)\) 随 \(x\) 变化。现在 \(x\) 未知，再这样做就很奇怪——光看哪些动作可用，就能推断状态<sup class="fn"><a href="#fn-ux" id="fn-ux-ref">注</a></sup>。所以默认 \(U\) 对所有 \(x\) 相同；某些特殊场合可以放开。</p>
+<p><b>初始条件</b>有三种（统一记作 \(\eta_0\)）：</p>
+<ol>
+  <li><b>已知状态 known state</b>：给定 \(x_1\in X\)。即便如此，若自然干扰状态转移，不确定性仍会出现。</li>
+  <li><b>非确定的</b>：给定 \(X_1\subset X\)，只知道初始状态在其中（推广了第一种，那里只允许单点）。</li>
+  <li><b>概率的</b>：给定 \(X\) 上的分布 \(P(x_1)\)。</li>
+</ol>
+<p><b>历史</b>：第 \(k\) 阶段结束时，<b>观测历史 sensing history</b> 与<b>动作历史 action history</b> 分别是</p>
+<div class="eq">$$\tilde y_k = (y_1, y_2, \ldots, y_k), \tag{11.12}$$</div>
+<div class="eq">$$\tilde u_{k-1} = (u_1, u_2, \ldots, u_{k-1}). \tag{11.13}$$</div>
+<p>动作历史只到 \(u_{k-1}\)：施加 \(u_k\) 就会得到 \(x_{k+1}\)、进入第 \(k+1\) 阶段，超出了当前阶段。加上初始条件，得到<b>历史 I-state history I-state</b>：</p>
+<div class="eq">$$\eta_k = (\eta_0, \tilde u_{k-1}, \tilde y_k). \tag{11.14}$$</div>
+<p>它对应到第 \(k\) 阶段为止知道的全部信息。状态 \(x_1,\ldots,x_k\) 也许不知道，但<b>历史 I-state 永远是已知的</b>——它是直接用已有的信息定义的。书中约定忽略括号嵌套的问题（把 (11.14) 看成一个序列）。递推地写，</p>
+<div class="eq">$$\eta_k = (\eta_{k-1}, u_{k-1}, y_k), \tag{11.15}$$</div>
+<p>第 \(k-1\) 阶段之后新增的信息只有刚施加的 \(u_{k-1}\) 和新观测 \(y_k\)。</p>
+
+<h4>历史 I-空间</h4>
+<p>历史 I-空间就是所有可能的历史 I-state 的集合。虽然 I-state 看起来复杂，把它们抽象地想成一个新空间里的点会很有帮助。所有观测历史的集合是 \(k\) 个 \(Y\) 的笛卡儿积，</p>
+<div class="eq">$$\tilde Y_k = \underbrace{Y\times Y\times\cdots\times Y}_{k}, \tag{11.16}$$</div>
+<p>同理动作历史的集合 \(\tilde U_{k-1}\) 是 \(k-1\) 个 \(U\) 的积。<b>初始条件空间</b> \(\mathcal{I}_0\) 按三种初始条件分别是：已知状态时 \(\mathcal{I}_0\subseteq X\)（通常 \(\mathcal{I}_0 = X\)）；非确定时 \(\mathcal{I}_0\subseteq\operatorname{pow}(X)\)（幂集，通常取等号）；概率时 \(\mathcal{I}_0\subseteq\mathcal{P}(X)\)，即 \(X\) 上所有概率分布的集合<sup class="fn"><a href="#fn-1" id="fn-1-ref">1</a></sup>。<b>第 \(k\) 阶段的历史 I-空间</b>是</p>
+<div class="eq">$$\mathcal{I}_k = \mathcal{I}_0\times\tilde U_{k-1}\times\tilde Y_k. \tag{11.17}$$</div>
+<p>每个 \(\eta_k\in\mathcal{I}_k\) 给出一个初始条件、一段动作历史和一段观测历史。如果有 \(K\) 个阶段，<b>历史 I-空间</b>是这些集合的<b>并</b>（不要误以为是笛卡儿积！）：</p>
+<div class="eq">$$\mathcal{I}_{hist} = \mathcal{I}_0\cup\mathcal{I}_1\cup\mathcal{I}_2\cup\cdots\cup\mathcal{I}_K. \tag{11.18}$$</div>
+<p>阶段数通常不固定，此时对所有 \(k\in\{0\}\cup\mathbb{N}\) 取并：</p>
+<div class="eq">$$\mathcal{I}_{hist} = \mathcal{I}_0\cup\mathcal{I}_1\cup\mathcal{I}_2\cup\cdots. \tag{11.19}$$</div>
+<p>这类似于 7.1 节时变运动规划的状态空间：历史 I-空间与阶段有关，因为信息随时间累积；在离散模型里时间只通过阶段隐含地出现，阶段号 \(k\) 可以想成 \(\mathcal{I}_{hist}\) 的一根「轴」。一个直接的问题是：历史随阶段数线性增长，I-state 可以任意长。暂时只把 \(\mathcal{I}_{hist}\) 想成另一种状态空间，不去管每个 \(\eta\) 有多复杂——11.2 节的任务就是化简它。</p>
+
+<div class="widget wide" data-widget="three-state"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>点「按书中例子回放」：这就是 11.2.2 节的例 11.13——X₁ = {0, 2}，y₁ = 2，u₁ = 1，y₂ = 3。左边逐行对应 (11.30) 的并与 (11.31) 的交，结果 {1, 2} 与书中 (11.34) 一致（参考代码第 3 项）。</li>
+  <li>多施加几次动作，看下面的历史 I-state 越来越长、「长度为 k 的历史有多少种」指数增长；右边的 Hasse 图却永远只有 8 个结点——不确定 I-空间是有限的。</li>
+  <li>把自然的 ψ 固定为 2，然后一直施加 u = 0：观测 y = x + 2 ≥ 2……什么时候能把状态确定下来？再试 ψ 固定为 1。</li>
+</ul></div>
+
+<h3 id="s11-1-3">11.1.3 定义规划问题 <span class="en">Defining a Planning Problem</span></h3>
+<p>规划问题直接定义在历史 I-空间上，它在很多方面看起来就像一个普通的状态空间——只是要记得，它派生自另一个无法得到完美观测的状态空间。10.1 节的反馈计划是状态的函数；现在状态在执行中一般未知，不能作为决策依据，而 I-state 总是已知的，所以决策基于 I-state。</p>
+<p>设 \(\pi_K\) 是 \(K\) 步的<b>信息反馈计划 information-feedback plan</b>：\(K\) 个函数 \((\pi_1,\ldots,\pi_K)\)，\(\pi_k:\mathcal{I}_k\to U\)，每个阶段用 \(\eta_k\) 选动作 \(u_k = \pi_k(\eta_k)\)。由于自然通过状态转移和传感器映射干扰，计划结束前不知道产生的动作序列 \((u_1,\ldots,u_K)\) 会是什么。像 Formulation 2.3 那样，假设 \(U\) 含<b>终止动作</b> \(u_T\)：在第 \(k\) 阶段施加后就一直重复施加，状态 \(x_k\) 从此固定（但仍然未知）。严格说施加 \(u_T\) 后历史 I-state 还在增长，但不再做决策，可以忽略。阶段数每次执行都可能不同，所以写成 \(\pi = (\pi_1,\pi_2,\ldots)\)；用 (11.19)，信息反馈计划就是</p>
+<div class="eq">$$\pi : \mathcal{I}_{hist}\to U. \tag{11.20}$$</div>
+
+<div class="box def formulation">
+  <div class="box-title">Formulation 11.1（离散信息空间规划 Discrete Information Space Planning）</div>
+  <ol>
+    <li>非空<b>状态空间</b> \(X\)，有限或可数无穷。</li>
+    <li>非空有限<b>动作空间</b> \(U\)，含特殊的<b>终止动作</b>（效果同 Formulation 2.3）。</li>
+    <li>对每个 \(x\in X\)、\(u\in U\)，有限的<b>自然动作空间</b> \(\Theta(x,u)\)。</li>
+    <li><b>状态转移函数</b> \(f\)：对每个 \(x\in X\)、\(u\in U\)、\(\theta\in\Theta(x,u)\) 给出状态 \(f(x,u,\theta)\)。</li>
+    <li>有限或可数无穷的<b>观测空间</b> \(Y\)。</li>
+    <li>对每个 \(x\in X\)，有限的<b>自然传感动作空间</b> \(\Psi(x)\)。</li>
+    <li><b>传感器映射</b> \(h\)：对每个 \(x\in X\)、\(\psi\in\Psi(x)\) 给出观测 \(y = h(x,\psi)\)。（这里假设状态-自然传感器映射；也可以换成 11.1.1 节的状态传感器映射或基于历史的映射。）</li>
+    <li>一组<b>阶段</b>，从 \(k = 1\) 开始，无限延续。</li>
+    <li><b>初始条件</b> \(\eta_0\)，是<b>初始条件空间</b> \(\mathcal{I}_0\) 的元素。</li>
+    <li><b>历史 I-空间</b> \(\mathcal{I}_{hist}\)：\(\mathcal{I}_0\) 与所有 \(\mathcal{I}_k = \mathcal{I}_0\times\tilde U_{k-1}\times\tilde Y_k\)（\(k\in\mathbb{N}\)）的并。</li>
+    <li>阶段可加的<b>代价泛函</b> \(L\)，作用在状态历史与动作历史的任意一对 \((\tilde x_{K+1},\tilde u_K)\) 上：
+      <div class="eq">$$L(\tilde x_{K+1},\tilde u_K) = \sum_{k=1}^{K} l(x_k,u_k) + l_F(x_{K+1}). \tag{11.21}$$</div>
+      若在第 \(k\) 阶段施加 \(u_T\)，则对所有 \(i\ge k\)：\(u_i = u_T\)、\(x_i = x_k\)、\(l(x_i,u_T) = 0\)。可以像 Formulation 10.1 那样定义可行规划或最优规划问题，但计划写成 \(\pi:\mathcal{I}\to U\)。</li>
+  </ol>
+</div>
+<p>目标集合可以是 \(X_G\subset X\)；也可以把目标表示成历史 I-state 的一个理想集合——11.2 节之后会看到，目标可以用由历史派生的 I-state 来表达。两个直接的扩展：允许 \(U(x)\)（但小心，如果它随 \(x\) 变化，光凭动作集合就能推出当前状态的信息）；让代价依赖自然，写成 \(l(x_k,u_k,\theta_k)\)。</p>
+
+<h4>计划的代价</h4>
+<p>把 10.1.3 节固定计划的代价到去推广到不完美状态信息。先看非确定模型：给定计划 \(\pi\) 和非确定初始条件 \(\eta_0\)，有些状态-动作历史可能出现，有些不可能。记 \(\mathcal{H}(\pi,\eta_0)\) 为 \(\pi\) 从 \(\eta_0\) 出发可能产生的所有状态-动作历史，用<b>最坏情况分析</b>：</p>
+<div class="eq">$$G_\pi(\eta_0) = \max_{(\tilde x,\tilde u)\in\mathcal{H}(\pi,\eta_0)}\Big\{L(\tilde x,\tilde u)\Big\}. \tag{11.22}$$</div>
+<p>注意 \(\tilde x\) 含 \(x_1\)，它一般不知道（只知道在 \(\eta_0\) 给出的 \(X_1\) 里）。设 \(\Pi\) 为所有可能计划的集合；最坏情况下的最优计划对所有 \(\pi\in\Pi\)、\(\eta_0\in\mathcal{I}_0\) 都使 (11.22) 最小。可行规划问题则通常有很多等价的解。概率模型下用<b>期望情况分析</b>：</p>
+<div class="eq">$$G_\pi(\eta_0) = E_{\mathcal{H}(\pi,\eta_0)}\Big[L(\tilde x,\tilde u)\Big], \tag{11.23}$$</div>
+<p>期望对 \(\mathcal{H}(\pi,\eta_0)\) 上的概率分布取。任务是找使 (11.23) 最小的 \(\pi\in\Pi\)。</p>
+
+<h4>信息空间就是另一个状态空间</h4>
+<p>这一章和第 12 章最重要的观点之一：<b>把 I-空间看成普通的状态空间</b>。它只是因为派生自另一个状态空间才显得特殊；忘掉这一点，它有普通状态空间的许多性质。一个好处是：<b>这个特殊空间里的状态总是已知的</b>。从原状态空间换到 I-空间，就从「不完美的状态信息」变成了「在一个更大的空间里永远知道状态」。</p>
+<p>于是状态转移方程可以「提升」到 I-空间，得到<b>信息转移函数 information transition function</b> \(f_{\mathcal{I}}\)。先假设没有传感器、没有观测，未来的 I-state 是可预测的：</p>
+<div class="eq">$$\eta_{k+1} = f_{\mathcal{I}}(\eta_k,u_k), \tag{11.24}$$</div>
+<p>\(f_{\mathcal{I}}\) 只是把 \(u_k\) 接到 \(\eta_k\) 后面。有观测时，观测一般不可预测。10.1 节用自然动作 \(\theta_k\in\Theta(x,u)\) 刻画不可预测性；在信息转移方程里 \(y_{k+1}\) 起同样的作用：决定施加 \(u_k\) 时还不知道 \(y_{k+1}\)（就像 10.1 节中不知道 \(\theta_k\)）。在完美状态信息的序贯博弈里，下一阶段能直接观测到 \(x_{k+1}\)；这里观测到的是 \(y_{k+1}\)，于是能确定 \(\eta_{k+1}\)——把 \(u_k\) 和 \(y_{k+1}\) 接到 \(\eta_k\) 后面：</p>
+<div class="eq">$$\eta_{k+1} = f_{\mathcal{I}}(\eta_k,u_k,y_{k+1}). \tag{11.25}$$</div>
+<p>自然让未来 I-state 不可预测，但<b>当前 I-state 总是已知的</b>。于是计划 \(\pi:\mathcal{I}\to U\) 看起来就是一个状态反馈计划，转移全部由 \(f_{\mathcal{I}}\) 给出。新状态空间里的代价可以由原代价泛函导出，但要对给定当前信息下所有可能的状态取最大或期望——12.1 节再讲。</p>
+</section>
+
+<!-- ============================================================ 11.2 -->
+<section id="s11-2">
+<h2>11.2 派生信息空间 <span class="en">Derived Information Spaces</span></h2>
+<p>历史 I-空间太复杂：I-state 的长度随阶段线性增长。常见的办法是把历史 I-state 映射到更简单的空间。在许多应用中，能否做这种化简是找到实用解的关键。有时化简<b>完全保留</b>历史 I-空间的信息——完备性（以及最优性）不会丢；有时则愿意容忍破坏大部分结构的化简，以换取 I-空间大小的显著缩减。</p>
+
+<h3 id="s11-2-1">11.2.1 信息映射 <span class="en">Information Mappings</span></h3>
+<p>形式上，设 \(\kappa:\mathcal{I}_{hist}\to\mathcal{I}_{der}\) 是从历史 I-空间到<b>派生 I-空间 derived I-space</b> \(\mathcal{I}_{der}\) 的函数，称为<b>信息映射 information mapping</b>，简称 <b>I-map</b>。派生 I-空间可以是任何集合，定义 I-map 的自由度很大（理想情况下 \(\kappa\) 应是到 \(\mathcal{I}_{der}\) 上的满射，但为了方便不作要求）。</p>
+
+<svg class="fig" viewBox="0 0 560 200" role="img" aria-label="图 11.3：多种信息映射">
+  <defs><marker id="f113" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker></defs>
+  <g font-size="15" fill="var(--text)" text-anchor="middle">
+    <text x="70" y="40">𝓘<tspan font-size="11" dy="4">hist</tspan></text>
+    <text x="300" y="40">𝓘<tspan font-size="11" dy="4">ndet</tspan></text>
+    <text x="490" y="40">𝓘<tspan font-size="11" dy="4">2</tspan></text>
+    <text x="300" y="130">𝓘<tspan font-size="11" dy="4">prob</tspan></text>
+    <text x="490" y="130">𝓘<tspan font-size="11" dy="4">3</tspan></text>
+    <text x="60" y="180">X</text>
+    <text x="160" y="180">𝓘<tspan font-size="11" dy="4">1</tspan></text>
+  </g>
+  <g stroke="var(--muted)" stroke-width="1.5" fill="none" marker-end="url(#f113)">
+    <line x1="105" y1="35" x2="272" y2="35"/><line x1="335" y1="35" x2="470" y2="35"/>
+    <line x1="100" y1="45" x2="268" y2="118"/><line x1="335" y1="125" x2="470" y2="125"/>
+    <line x1="62" y1="50" x2="60" y2="160"/><line x1="85" y1="50" x2="150" y2="160"/>
+  </g>
+  <g font-size="13" fill="var(--accent-text)" text-anchor="middle" font-style="italic">
+    <text x="190" y="28">κ_ndet</text><text x="405" y="28">κ₂</text><text x="210" y="80">κ_prob</text><text x="405" y="118">κ₃</text><text x="40" y="110">κ_est</text><text x="132" y="110">κ₁</text>
+  </g>
+</svg>
+<p class="small muted" style="text-align:center">图 11.3 的重画：从 \(\mathcal{I}_{hist}\) 出发可以定义许多 I-map，每个都得到一个派生 I-空间。\(\kappa_{ndet}\)、\(\kappa_{prob}\) 是 11.2.2、11.2.3 节的主角；\(\kappa_{est}\) 用历史估计状态（例 11.11）；\(\mathcal{I}_2\)、\(\mathcal{I}_3\) 由复合得到。</p>
+<p>一般地，I-map 甚至可以把一个派生 I-空间映到另一个，\(\kappa:\mathcal{I}_{der}\to\mathcal{I}'_{der}\)；I-map 的复合仍是 I-map。</p>
+
+<h4>更小的信息反馈计划</h4>
+<p>I-map 的主要用途是<b>简化计划的描述</b>。在派生 I-空间上的反馈计划是 \(\pi:\mathcal{I}_{der}\to U\)：执行时每个阶段先算 \(\kappa(\eta_k)\in\mathcal{I}_{der}\)，再选 \(\pi(\kappa(\eta_k))\in U\)。设 \(\Pi_{hist}\)、\(\Pi_{der}\) 分别是 \(\mathcal{I}_{hist}\)、\(\mathcal{I}_{der}\) 上所有计划的集合。任何 \(\pi\in\Pi_{der}\) 都能转换成等价的 \(\pi'\in\Pi_{hist}\)：对每个 \(\eta\) 令 \(\pi'(\eta) = \pi(\kappa(\eta))\)。反过来却不一定行：可能有 \(\eta_1,\eta_2\) 使 \(\pi'(\eta_1)\ne\pi'(\eta_2)\) 而 \(\kappa(\eta_1)=\kappa(\eta_2)\)——\(\Pi_{hist}\) 中的计划要求两段历史采取不同动作，派生 I-空间里却分不清它们。</p>
+<p>I-map 通过诱导 \(\mathcal{I}_{hist}\) 的一个划分来压缩它。对每个 \(\eta_{der}\)，原像</p>
+<div class="eq">$$\kappa^{-1}(\eta_{der}) = \{\eta\in\mathcal{I}_{hist}\mid\eta_{der} = \kappa(\eta)\} \tag{11.26}$$</div>
+<p>是映到 \(\eta_{der}\) 的那些历史。这个划分可以直观地看作刻画历史 I-空间的「分辨率」。块越大，I-空间缩得越多。目标是选 \(\kappa\) 让块尽量大，但不能压缩到问题不再可解。</p>
+<ul>
+  <li><b>例 11.11 状态估计</b>：经典做法——有某种技术用 \(\eta\) 计算当前状态的估计，I-map 就是 \(\kappa_{est}:\mathcal{I}_{hist}\to X\)。派生 I-空间恰好是 \(X\)！计划就是状态反馈计划 \(\pi:X\to U\)。\(\kappa_{est}^{-1}(x)\) 是所有给出同一估计的历史；计划不再能区分它们，<b>编码估计不确定性的能力丢了</b>：也许让动作依赖估计的协方差是明智的，但决策只基于估计本身。</li>
+  <li><b>例 11.12 阶段号</b>：\(\kappa_{stage}(\eta_k) = k\)，派生 I-空间是 \(\mathbb{N}\)，计划 \(\pi:\mathbb{N}\to U\) 等价于 2.3.2 节的动作序列 \((u_1,u_2,\ldots)\)。反馈是平凡的——这正是不带反馈的原始规划，即<b>开环计划 open-loop plan</b><sup class="fn"><a href="#fn-misc" id="fn-misc-ref">注</a></sup>。</li>
+</ul>
+
+<h4>构造派生信息转移方程</h4>
+<p>到目前为止，要算派生 I-state 还需要完整的历史。更好的是丢掉历史，<b>完全在派生 I-空间里工作</b>。为此需要一个派生信息转移方程，关键要求是：</p>
+<div class="box warn"><div class="box-title">充分性的要求</div>
+<p style="margin:0">若用 \(\kappa(\eta_k)\) 代替 \(\eta_k\)，那么 \(\kappa(\eta_{k+1})\) 必须<b>只用</b> \(\kappa(\eta_k)\)、\(u_k\) 和 \(y_{k+1}\) 就能正确地确定。</p></div>
+<p>换句话说：给定 \(\kappa(\eta_k)\)，完整历史 \(\eta\) 中不再有任何能进一步约束 \(\kappa(\eta_{k+1})\) 的信息——\(\kappa\) 提供的信息对确定下一个派生 I-state 是<b>充分</b>的。这类似决策论中的<b>充分统计量 sufficient statistic</b>。满足要求的 \(\kappa\) 称为<b>充分 I-map sufficient I-map</b>。一个怪处是：充分性是<b>相对于 \(\mathcal{I}_{der}\)</b> 而言的，不是绝对的——例如任何映到 \(\mathcal{I}_{der} = \{0\}\) 的 I-map 都是充分的，因为 \(\kappa(\eta_{k+1})\) 永远是 0。对充分 I-map，<b>派生信息转移方程</b>是</p>
+<div class="eq">$$\kappa(\eta_{k+1}) = f_{\mathcal{I}_{der}}(\kappa(\eta_k),u_k,y_{k+1}). \tag{11.27}$$</div>
+<p>这意味着 \(\mathcal{I}_{der}\) 就是问题「所在」的新 I-空间，决策者没有理由再考虑历史。这一点对许多规划算法的成功至关重要。11.2.2、11.2.3 节的不确定 / 概率 I-空间都来自充分 I-map；例 11.12 的 \(\kappa_{stage}\) 也是充分的；例 11.11 的估计 I-map 通常<b>不</b>充分，因为要给出更好的估计还需要一些历史。</p>
+
+<svg class="fig" viewBox="0 0 640 190" role="img" aria-label="图 11.4：充分性的交换图">
+  <defs><marker id="f114" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker></defs>
+  <g font-size="14" fill="var(--text)" text-anchor="middle">
+    <text x="50" y="30">𝓘<tspan font-size="10" dy="4">hist</tspan></text><text x="250" y="30">𝓘<tspan font-size="10" dy="4">hist</tspan></text>
+    <text x="50" y="140">𝓘<tspan font-size="10" dy="4">der</tspan></text><text x="250" y="140">𝓘<tspan font-size="10" dy="4">der</tspan></text>
+    <text x="370" y="30">𝓘<tspan font-size="10" dy="4">hist</tspan></text><text x="570" y="30">𝓘<tspan font-size="10" dy="4">hist</tspan></text>
+    <text x="370" y="140">𝓘<tspan font-size="10" dy="4">der</tspan></text><text x="570" y="140">𝓘<tspan font-size="10" dy="4">der</tspan></text>
+  </g>
+  <g stroke="var(--muted)" stroke-width="1.4" fill="none" marker-end="url(#f114)">
+    <line x1="82" y1="25" x2="218" y2="25"/><line x1="50" y1="40" x2="50" y2="120"/><line x1="250" y1="40" x2="250" y2="120"/>
+    <line x1="402" y1="25" x2="538" y2="25"/><line x1="370" y1="120" x2="370" y2="42"/><line x1="570" y1="40" x2="570" y2="120"/><line x1="560" y1="70" x2="410" y2="128"/>
+  </g>
+  <line x1="80" y1="135" x2="216" y2="135" stroke="var(--ok)" stroke-width="1.6" stroke-dasharray="6 4" marker-end="url(#f114)"/>
+  <g font-size="12" fill="var(--muted)" text-anchor="middle" font-style="italic">
+    <text x="150" y="18">f_𝓘</text><text x="36" y="84">κ</text><text x="264" y="84">κ</text><text x="150" y="128" fill="var(--ok)">f_𝓘der ?</text>
+    <text x="470" y="18">f_𝓘</text><text x="352" y="84">κ⁻¹</text><text x="584" y="84">κ</text><text x="470" y="96" fill="var(--bad)">单点吗？</text>
+    <text x="150" y="180" font-style="normal">(a) 两条路径必须得到同一个结果</text><text x="470" y="180" font-style="normal">(b) κ⁻¹ 可能含许多历史</text>
+  </g>
+</svg>
+<p class="small muted" style="text-align:center">图 11.4 的重画：(a) 要使 I-map 充分，从左上到右下无论走哪条路，结果必须相同；(b) 问题在于 \(\kappa\) 通常不可逆，\(\kappa^{-1}(\eta_{der})\) 是一组历史，对它们施加 \(f_{\mathcal{I}}\) 再施加 \(\kappa\) 可能得到多个派生 I-state。</p>
+<p>如果在所有情况下都得到单点，就得到了需要的 \(f_{\mathcal{I}_{der}}\)；否则当前派生 I-state 上出现了新的不确定性——可以再在 I-空间上定义 I-空间来处理，但书中避开了这种麻烦。既然 I-map 可以从任何派生 I-空间定义到另一个，这一节的概念不必以 \(\mathcal{I}_{hist}\) 为起点：\(\kappa:\mathcal{I}_{der}\to\mathcal{I}'_{der}\) 可以称为「相对于 \(\mathcal{I}_{der}\) 充分」。</p>
+
+<div class="widget wide" data-widget="sufficiency"></div>
+<div class="box intuition"><div class="box-title">试一试（补充：书中没有这个检验器）</div><ul>
+  <li>依次切换 κ_ndet、κ_sf、κ₁、κ₂、κ_stage：全是「充分」——包括只记最新观测的 κ_sf 和只记阶段号的 κ_stage。充分 ≠ 有用：充分性只是说「派生 I-state 能自己往前推」。</li>
+  <li>切到「估计 = 最小的状态」：检验器找出两段历史，估计相同、接上同样的 (u, y) 后估计却不同——这就是例 11.11 说的「估计 I-map 通常不充分」（参考代码第 4 项）。</li>
+  <li>「可能状态的个数」也不充分：只知道「有两个可能」而不知道是哪两个，下一步就推不出来。</li>
+</ul></div>
+
+<h3 id="s11-2-2">11.2.2 不确定信息空间 <span class="en">Nondeterministic Information Spaces</span></h3>
+<p>这一节定义图 11.3 中的 I-map \(\kappa_{ndet}\)：把每个历史 I-state 转换成所有可能的当前状态构成的集合。自然按非确定模型处理——除了从 \(\Theta\)、\(\Psi\) 中选，对它一无所知。假设用 11.1.1 节的状态-自然传感器映射。由于模型不涉及概率，\(\eta_0\) 代表一个集合 \(X_1\subseteq X\)。令 \(\kappa_{ndet}(\eta_k)\) 为给定 \(\eta_k\) 时已知 \(x_k\) 所在的<b>最小</b>子集，称为<b>不确定 I-state nondeterministic I-state</b>，记作 \(X_k(\eta_k)\)。重要的是：它要在与 \(\eta_k\) 相容的前提下尽可能小。</p>
+<p>由 (11.6)，每个观测 \(y_k\) 给出一个可能值的集合 \(H(y_k)\)，这是不确定 I-state 的粗略估计：肯定有 \(X_k(\eta_k)\subseteq H(y_k)\)。若从初始条件出发，仔细地沿状态转移方程施加约束，就能得到 \(H(y_k)\) 的恰当子集。由状态转移函数定义集合值函数</p>
+<div class="eq">$$F(x,u) = \{x'\in X\mid\exists\theta\in\Theta(x,u)\ \text{使得}\ x' = f(x,u,\theta)\}. \tag{11.28}$$</div>
+<p>\(F\) 和 \(H\) 都是集合值函数，把自然动作「消掉」了——自然的作用体现在得到的集合里。下面归纳地计算 \(X_k(\eta_k)\)。<b>基础情形</b> \(k=1\)：</p>
+<div class="eq">$$X_1(\eta_1) = X_1(\eta_0,y_1) = X_1\cap H(y_1). \tag{11.29}$$</div>
+<p>第一个等号把 \(\eta_1\) 写成更长的 \((\eta_0,y_1)\)；第二部分用交集让两条信息一致：初始状态在 \(X_1\) 里，且 \(H(y_1)\) 中的状态与观测相容。<b>归纳步骤</b>：设已算出 \(X_k(\eta_k)\)，要算 \(X_{k+1}(\eta_{k+1})\)。由 (11.15)，\(\eta_{k+1} = (\eta_k,u_k,y_{k+1})\)，新信息只有施加了 \(u_k\) 和观测到 \(y_{k+1}\)，分两步考虑。若 \(x_k\) 已知，施加 \(u_k\) 后状态可能在 \(F(x_k,u_k)\) 中任何地方；\(x_k\) 实际未知，但已知 \(x_k\in X_k(\eta_k)\)，所以</p>
+<div class="eq">$$X_{k+1}(\eta_k,u_k) = \bigcup_{x_k\in X_k(\eta_k)} F(x_k,u_k). \tag{11.30}$$</div>
+<p>这是从 \(X_k(\eta_k)\) 中某个状态出发，施加 \(u_k\) 和任意 \(\theta_k\in\Theta(x_k,u_k)\) 能到达的所有状态（书中图 11.5：对每个可能的 \(x_k\) 画出 \(F(x_k,u_k)\)，再取并）。下一步考虑观测 \(y_{k+1}\)：单凭它就知道 \(x_{k+1}\in H(y_{k+1})\)，于是取交集：</p>
+<div class="eq">$$X_{k+1}(\eta_{k+1}) = X_{k+1}(\eta_k,u_k,y_{k+1}) = X_{k+1}(\eta_k,u_k)\cap H(y_{k+1}). \tag{11.31}$$</div>
+<p>从 (11.29) 出发反复迭代 (11.30)、(11.31) 就能算出任意阶段的不确定 I-state。由于它总是 \(X\) 的子集，<b>不确定 I-空间</b>是 \(\mathcal{I}_{ndet} = \operatorname{pow}(X)\)。若 \(X\) 有限，\(\mathcal{I}_{ndet}\) 也有限——而 \(\mathcal{I}_{hist}\) 随阶段增长。阶段数无界或相对 \(|X|\) 很大时，不确定 I-state 更可取。</p>
+<p>还有：\(\kappa_{ndet}\) 是<b>充分</b> I-map。(11.30)、(11.31) 表明 \(X_{k+1}(\eta_{k+1})\) 能只由 \(X_k(\eta_k)\)、\(u_k\)、\(y_{k+1}\) 算出，派生信息转移方程存在。所以规划问题可以完全用 \(\mathcal{I}_{ndet}\) 表达，不必维护历史；目标区域可以直接写成不确定 I-state，规划任务就是在某个满足 \(X_k(\eta_k)\subseteq X_G\) 的 I-state 终止。不确定 I-空间也可以当作「又一个状态空间」——许多历史映到同一个不确定 I-state，而我们假设决策时一旦知道 \(X_k(\eta_k)\)，具体是哪段历史就无关紧要了。</p>
+<p><b>例 11.13（三状态例子）</b>：\(X=\{0,1,2\}\)，\(U=\{-1,0,1\}\)，所有 \(x,u\) 的 \(\Theta(x,u)=\{0,1\}\)，状态转移 \(f(x,u,\theta) = (x+u+\theta)\bmod 3\)。传感：\(Y=\{0,1,2,3,4\}\)，\(\Psi(x)=\{0,1,2\}\)，\(y = h(x,\psi) = x+\psi\)。历史 I-空间对只有三个状态的问题显得很笨重，不确定 I-空间却是</p>
+<div class="eq">$$\mathcal{I}_{ndet} = \{\emptyset,\{0\},\{1\},\{2\},\{0,1\},\{1,2\},\{0,2\},\{0,1,2\}\}, \tag{11.32}$$</div>
+<p>即 \(X\) 的幂集。空集通常可以删掉<sup class="fn"><a href="#fn-nfa0" id="fn-nfa0-ref">注</a></sup>。设初始条件 \(X_1 = \{0,2\}\)，真实初始状态 \(x_1 = 0\)（决策者不知道，只用来保证例子里的观测是合理的）。第一个观测 \(y_1 = 2\)：\(H(2)=\{0,1,2\}\) 没什么用，由 (11.29) 得 \(X_1(\eta_1)=\{0,2\}\)。施加 \(u_1=1\)，自然选 \(\theta_1=1\)，得 \(x_2=2\)。决策者不知道 \(\theta_1\)，必须考虑所有可能的自然动作，由 (11.30)：</p>
+<div class="eq">$$X_2(\eta_1,u_1) = F(2,1)\cup F(0,1) = \{0,1\}\cup\{1,2\} = \{0,1,2\}. \tag{11.33}$$</div>
+<p>再观测到 \(y_2=3\)，\(H(3)=\{1,2\}\)，由 (11.31)：</p>
+<div class="eq">$$X_2(\eta_2) = X_2(\eta_1,u_1)\cap H(y_2) = \{0,1,2\}\cap\{1,2\} = \{1,2\}. \tag{11.34}$$</div>
+<p>这个过程可以重复任意多个阶段，在 \(\mathcal{I}_{ndet}\) 中走出一条路径。一旦观测到 \(y_k = 4\)，状态立刻知道了：\(H(4)=\{2\}\)。（上面「三状态例子」互动图的「按书中例子回放」就是这一段。）</p>
+
+<h3 id="s11-2-3">11.2.3 概率信息空间 <span class="en">Probabilistic Information Spaces</span></h3>
+<p>这一节定义 I-map \(\kappa_{prob}\)：把每个历史 I-state 转换成 \(X\) 上的概率分布。假设<b>马尔可夫</b>的概率模型：自然的动作只依赖当前状态和动作，不依赖状态或动作的历史。(11.30)、(11.31) 中的并与交分别换成<b>边缘化</b>与<b>贝叶斯公式</b>——在某种意义上，它们是并与交的概率版本。对照 11.2.2 节的式子会很有帮助。</p>
+<p>与其写 \(\kappa_{prob}(\eta)\)，不如用标准概率记号 \(P(x|\eta)\)。本节大部分式子 \(P(x_k|\cdot)\) 在 11.2.2 节都有对应的 \(X_k(\cdot)\)。第一步构造 \(H\) 和 \(F\) 的概率版本：\(P(x_k|y_k)\) 和 \(P(x_{k+1}|x_k,u_k)\)。后者在 10.1.1 节给出过。前者：由 \(P(\psi_k|x_k)\) 很容易得到 \(P(y_k|x_k)\)，再用贝叶斯公式：</p>
+<div class="eq">$$P(x_k|y_k) = \frac{P(y_k|x_k)P(x_k)}{P(y_k)} = \frac{P(y_k|x_k)P(x_k)}{\sum\limits_{x_k\in X}P(y_k|x_k)P(x_k)}. \tag{11.35}$$</div>
+<p>最后一步用边缘化 (9.8) 改写了 \(P(y_k)\)；求和变量是 \(x_k\)，所以分母只是 \(y_k\) 的函数。贝叶斯公式需要先验 \(P(x_k)\)，下面它会被一个概率 I-state 代替。</p>
+<p>概率 I-state 是 \(X\) 上的分布，记作 \(P(x_k|\eta_k)\)。初始条件给出 \(P(x_1)\)。和不确定情形一样可以归纳地算。基础情形唯一的新信息是 \(y_1\)，令 (11.35) 中 \(k=1\)：</p>
+<div class="eq">$$P(x_1|\eta_1) = P(x_1|y_1) = \frac{P(y_1|x_1)P(x_1)}{\sum\limits_{x_1\in X}P(y_1|x_1)P(x_1)}. \tag{11.36}$$</div>
+<p>归纳步骤：设已知 \(P(x_k|\eta_k)\)，求 \(P(x_{k+1}|\eta_{k+1}) = P(x_{k+1}|\eta_k,u_k,y_{k+1})\)。仍分两步：先考虑 \(u_k\)，再考虑 \(y_{k+1}\)。首先注意</p>
+<div class="eq">$$P(x_{k+1}|\eta_k,x_k,u_k) = P(x_{k+1}|x_k,u_k), \tag{11.37}$$</div>
+<p>因为一旦给定 \(x_k\)，\(\eta_k\) 对预测 \(x_{k+1}\) 不再有额外信息。\(x_k\) 并没有给定，用边缘化 (9.8) 把它消掉：</p>
+<div class="eq">$$P(x_{k+1}|\eta_k,u_k) = \sum_{x_k\in X}P(x_{k+1}|x_k,u_k,\eta_k)P(x_k|\eta_k) = \sum_{x_k\in X}P(x_{k+1}|x_k,u_k)P(x_k|\eta_k). \tag{11.38}$$</div>
+<p>它是 (11.30) 的概率对应。下一步考虑观测 \(y_{k+1}\)：写一个以至今累积的信息 \(\eta_k\)、\(u_k\) 为条件的 (11.35)，并把 \(k\) 换成 \(k+1\)：</p>
+<div class="eq">$$P(x_{k+1}|y_{k+1},\eta_k,u_k) = \frac{P(y_{k+1}|x_{k+1},\eta_k,u_k)P(x_{k+1}|\eta_k,u_k)}{\sum\limits_{x_{k+1}\in X}P(y_{k+1}|x_{k+1},\eta_k,u_k)P(x_{k+1}|\eta_k,u_k)}. \tag{11.39}$$</div>
+<p>它是 (11.31) 的概率对应。左边就是第 \(k+1\) 阶段的概率 I-state \(P(x_{k+1}|\eta_{k+1})\)。右边 \(P(x_{k+1}|\eta_k,u_k)\) 由 (11.38) 给出，只剩</p>
+<div class="eq">$$P(y_{k+1}|x_{k+1},\eta_k,u_k) = P(y_{k+1}|x_{k+1}), \tag{11.40}$$</div>
+<p>因为传感器映射只依赖状态（自然传感动作的概率模型也只依赖状态）。\(P(y_{k+1}|x_{k+1})\) 是传感模型的一部分，于是我们知道了如何从 \(P(x_k|\eta_k)\)、\(u_k\)、\(y_{k+1}\) 得到 \(P(x_{k+1}|\eta_{k+1})\)：\(\mathcal{I}_{prob}\) 又是一个可以当作状态空间的 I-空间。</p>
+<p><b>概率 I-空间</b> \(\mathcal{I}_{prob}\) 是 \(X\) 上所有概率分布的集合。(11.38)、(11.39) 说明 \(\kappa_{prob}\) 是充分的，规划问题可以完全用 \(\mathcal{I}_{prob}\) 表达，不必维护历史。目标区域可以写成对概率的约束，例如对某个特定 \(x\)，目标是到达任何满足 \(P(x_k|\eta_k) > 1/2\) 的概率 I-state。</p>
+<p><b>例 11.14（三状态例子再访）</b>：回到例 11.13，这次用概率模型。记 \(p_i\) 为当前状态是 \(i\) 的概率，任何概率 I-state 都可以写成 \((p_0,p_1,p_2)\in\mathbb{R}^3\)，于是 I-空间可以漂亮地嵌在 \(\mathbb{R}^3\) 里。由概率公理（9.1.2 节），\(p_0+p_1+p_2=1\)——一个平面方程，把 \(\mathcal{I}_{prob}\) 限制成二维集合；又每个 \(0\le p_i\le1\)，于是 \(\mathcal{I}_{prob}\) 是 \(\mathbb{R}^3\) 里的一个三角形区域（<b>2-单纯形</b>）。三个顶点 \((0,0,1)\)、\((0,1,0)\)、\((1,0,0)\) 对应完美状态信息的三种情形；某种意义上，离顶点的距离就是状态不确定性的大小，均匀分布 \((1/3,1/3,1/3)\) 离三个顶点等远。投影到 \(\mathbb{R}^2\)（图 11.6）：\(p_0\)、\(p_1\) 确定平面上的一点，\(p_2 = 1-p_0-p_1\) 自动确定。</p>
+<p>这个三角形区域是<b>不可数</b>无穷集，而固定初始条件时历史 I-空间只是可数无穷。这看起来奇怪，其实没错：对固定的初始条件，一般不可能到达 \(\mathcal{I}_{prob}\) 的所有点；如果初始条件可以是 \(\mathcal{I}_{prob}\) 中任何一点，即 \(\mathcal{I}_0 = \mathcal{I}_{prob}\)，那么整个概率 I-空间都被覆盖。</p>
+
+<div class="widget wide" data-widget="belief-simplex"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>选「例 11.13 的模型」（补充：书中例 11.14 没给概率，这里让 θ、ψ 都取均匀分布），按 y=2、u=1、y=3 操作：概率 I-state 的<b>支撑集</b>依次是 {0,2}、{0,1,2}、{1,2}——正是 (11.29)、(11.33)、(11.34) 的不确定 I-state（参考代码第 5 项）。概率 I-state 比不确定 I-state 多了「各有多大可能」。</li>
+  <li>点「回放习题 5 的历史 (11.96)」：最后的分布约为 [0.147, 0.556, 0.297]。注意习题 5 的数据需要先更正才能用<sup class="fn"><a href="#fn-16" id="fn-16-ref">16</a></sup>。</li>
+  <li>观察两种移动：预测 (11.38) 是对三个顶点的<b>线性</b>混合（虚线，总把点往「平均」拉）；贝叶斯修正 (11.39) 把点推向似然大的顶点（实线箭头）。在 k = 1 时点三角形任意一点改先验——I₀ = I_prob 时任何一点都可以是初始条件。</li>
+</ul></div>
+
+<h3 id="s11-2-4">11.2.4 有限记忆信息空间 <span class="en">Limited-Memory Information Spaces</span></h3>
+<p>限制记忆量是缩小历史 I-state 的另一种办法。除了特殊情形，它通常不保持原问题的可行性或最优性；但在别无他法缩小 I-空间时，这类 I-map 在实践中非常有用，偶尔还能保持可行性甚至最优性。</p>
+<p><b>只记前 \(i\) 个阶段</b>：历史 I-state 被截断，\(i\) 个阶段之前的动作和观测都从记忆中丢掉。定义 I-map</p>
+<div class="eq">$$\kappa_i(\eta_k) = (u_{k-i},\ldots,u_{k-1},y_{k-i+1},\ldots,y_k), \tag{11.41}$$</div>
+<p>对任何整数 \(i>0\)、\(k>i\)。若 \(i\ge k\)，派生 I-state 就是完整的历史 I-state (11.14)<sup class="fn"><a href="#fn-2" id="fn-2-ref">2</a></sup>。如果能导出解，好处是 I-state 的长度不再随阶段增长；\(X\)、\(U\) 有限时派生 I-空间也有限。注意 \(\kappa_i\) 在 11.2.1 节的意义下是充分的：每个阶段传下去的历史足以确定下一个派生 I-state（滑动窗口）。</p>
+<p><b>传感器反馈 sensor feedback</b>：只保留最后一个观测，\(\kappa_{sf}:\mathcal{I}_{hist}\to Y\)，\(\kappa_{sf}(\eta_k) = y_k\)。此时所有决策都直接用当前观测做出；派生 I-空间是 \(Y\)，派生 I-空间上的计划 \(\pi:Y\to U\) 称为<b>传感器反馈计划 sensor-feedback plan</b>，有些文献叫<b>纯反应式计划 reactive plan</b>。很多在历史 I-空间里有解的问题用传感器反馈解不了：忽略历史就无法做那些关于状态的复杂推理；某种意义上，传感器反馈会导致短视，可能无可避免地反复犯同样的错误。但它值得一试：这样的计划更容易实现，动作可以直接连到传感器输出。如果某个问题有传感器反馈解、而且只关心可行性，那么去设计基于历史 I-空间或更大派生 I-空间的计划就毫无意义。注意这个 I-map 是充分的，尽管它忽略了整段历史。</p>
+</section>
+
+<!-- ============================================================ 11.3 -->
+<section id="s11-3">
+<h2>11.3 离散状态空间的例子 <span class="en">Examples for Discrete State Spaces</span></h2>
+
+<h3 id="s11-3-1">11.3.1 基本的不确定性例子 <span class="en">Basic Nondeterministic Examples</span></h3>
+<p><b>例 11.15（用符号传感器）</b>：类似例 10.1，但这里是<b>感知</b>不确定而不是预测不确定。\(X=\mathbb{Z}\)，\(U=\{-1,1,u_T\}\)，\(Y=\{-1,0,1\}\)，\(y = h(x) = \operatorname{sgn} x\)；状态转移 \(x_{k+1} = f(x_k,u_k) = x_k+u_k\)，没有自然干扰，所以未来的历史 I-state 是可预测的：\(\eta_{k+1} = f_{\mathcal{I}}(\eta_k,u_k)\)。设初始 \(\eta_0 = X\)（任何初始状态都可能），目标是停在 \(0\in X\)。第 \(k\) 阶段历史 I-state 的一般形式是</p>
+<div class="eq">$$\eta_k = (X,u_1,\ldots,u_{k-1},y_1,\ldots,y_k). \tag{11.42}$$</div>
+<p>书中举例「一个可能的 I-state 是 \(\eta_5 = (X,-1,1,1,-1,1,1,1,1,0)\)」<sup class="fn"><a href="#fn-3" id="fn-3-ref">3</a></sup>。用 11.2.2 节的不确定 I-空间 \(\mathcal{I}_{ndet} = \operatorname{pow}(X)\)（不可数无穷）。仔细看会发现大部分不确定 I-state 都不可达：若 \(y_k = 0\)，则 \(x_k=0\)，\(X_k(\eta_k)=\{0\}\)；若 \(y_k = 1\)，只要还没观测到 0，就总有 \(X_k(\eta_k) = \{1,2,\ldots\}\)；若 \(y_k=-1\)，则 \(X_k(\eta_k)=\{\ldots,-2,-1\}\)。在这三个 I-state 上定义计划：第一个 \(\pi(X_k(\eta_k)) = u_T\)，另两个分别是 \(-1\) 和 \(1\)——按符号往 0 走。允许其它初始条件就能到达更多不确定 I-state，但问题没有这样要求。这个计划给出的是<b>最优长度</b>的解。它甚至可以用传感器反馈实现，因为动作只依赖当前读数：</p>
+<div class="eq">$$\pi(y) = \begin{cases} -1 & y = 1\\ \ \ 1 & y = -1\\ u_T & y = 0. \end{cases} \tag{11.43}$$</div>
+<p>与定义在 \(\mathcal{I}_{hist}\) 上的计划相比，这节省了大量记忆。</p>
+<p><b>例 11.16（目标可识别性 goal recognizability）</b>：一个从不知道当前状态、却能解决问题的简单例子，引出 12.5.1 节的目标可识别性问题。\(X=\mathbb{Z}\)，\(U=\{-1,1,u_T\}\)，\(Y = \mathbb{Z}\)，\(x_{k+1} = x_k+u_k\)；传感用例 11.7 的变体 \(y = x+\psi\)，\(\Psi = \{-5,-4,\ldots,5\}\)；\(\eta_0 = X\)。此时<b>无法保证</b>到达目标 \(X_G=\{0\}\)：传感器的扰动不允许足够精确的测量来推断已经到达。把目标放大到 \(X_G=\{-5,-4,\ldots,5\}\) 问题就能解了。由于扰动，不确定 I-state 总是连续 11 个状态的子集；很容易设计一个计划，平移这个区间直到它成为 \(X_G\) 的子集，然后施加 \(u_T\)。解题过程中从不需要知道确切状态。</p>
+
+<div class="widget wide" data-widget="integer-line"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>例 11.15：点「自动执行计划」。I-state 只在三个之间切换：{1, 2, …}、{…, −2, −1}、{0}。点数轴换一个初始状态再试——步数总是 |x₁|。</li>
+  <li>例 11.16，「ψ 对手式」、X_G = {−5, …, 5}：区间永远是 11 个，但能被整体推进 X_G，然后 u_T 保证到达。把目标换成 {0}：计划在 0 附近来回却永远不敢宣布到达。</li>
+  <li>换成「ψ 随机」：运气好时两个观测从两侧夹住，区间会缩短甚至缩成一点——但这不是保证（参考代码第 7 项：随机 ψ 下 2000 次试验区间最宽 11）。</li>
+</ul></div>
+
+<p>图 11.7 的问题有两个用途。第一，它是<b>无传感器规划 sensorless planning</b> 的例子（11.5.4、12.5.2 节）：完全没有观测。这类问题很有意思，因为看上去无法获得任何关于状态的信息；与直觉相反，对这个例子和很多其它例子，都能设计出<b>估计状态</b>的计划。第二，它展示 11.2.1 节的 I-map 能把 I-空间压缩得多厉害：标准的不确定 I-空间有 \(2^{19}\) 个 I-state，却可以映到只有几个元素的派生 I-空间。</p>
+<p><b>例 11.17（在 L 形走廊里移动）</b>：状态空间有 19 个状态，各对应一个白格子。记状态为 \((i,j)\)：10 个<b>底部状态</b> \((1,1),(2,1),\ldots,(10,1)\)，10 个<b>左边状态</b> \((1,1),(1,2),\ldots,(1,10)\)；\((1,1)\) 既是底部又是左边，称为<b>拐角状态</b>。没有传感器观测，但自然干扰状态转移：试图走一步时，自然可能让它走两步或三步。建模为</p>
+<div class="eq">$$U = \{(1,0),(-1,0),(0,1),(0,-1)\}, \tag{11.44}$$</div>
+<p>\(\Theta = \{1,2,3\}\)，没被挡住（撞到死胡同）时 \(f(x,u,\theta) = x+\theta u\)。例如 \(x=(5,1)\)、\(u=(-1,0)\)、\(\theta=2\) 时下一状态是 \((5,1)+2(-1,0) = (3,1)\)。若可能被挡住，状态就尽量走，直到被挡住；因为会被挡，甚至可能 \(f(x,u,\theta) = x\)。没有观测，所以第 \(k\) 阶段的历史 I-state 是</p>
+<div class="eq">$$\eta_k = (\eta_0,u_1,\ldots,u_{k-1}). \tag{11.45}$$</div>
+<p>用不确定 I-空间 \(\mathcal{I}_{ndet}=\operatorname{pow}(X)\)。初始状态 \(x_1 = (10,1)\) 已知，即 \(\eta_0 = \{(10,1)\}\)；目标是到达 I-state \(\{(1,10)\}\)——任务是设计一个计划从右下角移到左上角。有完美信息时这很平凡；没有传感器，不确定性可能增长得非常快：施加 \(u_1=(-1,0)\) 后不确定 I-state 是 \(\{(7,1),(8,1),(9,1)\}\)，施加 \(u_2=(-1,0)\) 后变成 \(\{(4,1),\ldots,(8,1)\}\)。这个问题好在<b>不用传感也能减少不确定性</b>：一直施加 \((-1,0)\)，接近拐角时不确定性减少，因为状态不可能被自然推得更远。已知每次施加 \((-1,0)\) 都使横坐标至少减 1，所以九个或更多阶段之后，不确定 I-state 就是 \(\{(1,1)\}\)<sup class="fn"><a href="#fn-4" id="fn-4-ref">4</a></sup>。然后施加 \((0,1)\)，在左边状态间移动时不确定性又增加；施加九次或更多次后，就确定 \(x_k=(1,10)\)。</p>
+<p>成功的计划：(1) 九个阶段施加 \((-1,0)\)；(2) 再九个阶段施加 \((0,1)\)。它可以定义在 \(\mathcal{I}_{ndet}\) 上，但更简单的是用例 11.12 的 I-map \(\kappa_{stage}\)，把计划定义成 \(\pi:\mathbb{N}\to U\)：\(1\le k\le9\) 时 \(\pi(k) = (-1,0)\)，\(10\le k\le18\) 时 \(\pi(k)=(0,1)\)，\(k>18\) 时 \(\pi(k)=u_T\)。即使初始条件是 \(X\) 的任何子集，这个计划也有效；从这里开始假设任何子集都可以作为初始条件。</p>
+<p>再看几个由 \(\mathcal{I}_{ndet}\) 派生出的其它 I-空间。令 \(\kappa_3\) 是从 \(\mathcal{I}_{ndet}\) 到三元集合 \(\mathcal{I}_3=\{g,l,a\}\) 的 I-map（\(g\) = goal「目标」，\(l\) = left「左边」，\(a\) = any「任意」）：</p>
+<div class="eq">$$\kappa_3(X(\eta)) = \begin{cases} g & X(\eta) = \{(1,10)\}\\ l & X(\eta)\ \text{是左边状态集合的子集}\\ a & \text{其它情况.}\end{cases} \tag{11.46}$$</div>
+<p>（原书左边印的是 \(X(\eta)\)<sup class="fn"><a href="#fn-4" id="fn-4b-ref">4</a></sup>。）根据前面的成功计划，\(\mathcal{I}_3\) 上的解是 \(\pi(g)=u_T\)、\(\pi(l)=(0,1)\)、\(\pi(a)=(-1,0)\)。它比 \(\mathbb{N}\) 上的计划更简单，但有一个缺点：<b>\(\kappa_3\) 不充分</b>。执行时还得维护更多的不确定 I-state，否则无法知道某些转移何时发生：例如在 \(a\) 施加 \((-1,0)\)，机器人怎么判断下一阶段到达 \(l\) 还是仍是 \(a\)？这用不确定 I-state 很容易判断。</p>
+<p>为此考虑新的 I-map \(\kappa_{19}:\mathcal{I}_{ndet}\to\mathcal{I}_{19}\)，它是<b>充分</b>的。有 19 个派生 I-state：\(g\)、\(l_j\)（\(1\le j\le9\)）、\(a_i\)（\(2\le i\le10\)）。定义：若 \(X(\eta)=\{(1,10)\}\)，\(\kappa_{19}(X(\eta)) = g\)；否则若存在 \(i\) 使 \(X(\eta)\subseteq\{(1,i),\ldots,(1,10)\}\)，取最小的这样的 \(i\)，\(\kappa_{19}(X(\eta)) = l_i\)；否则取最小的 \(i\) 使 \(X(\eta)\subseteq\{(1,1),\ldots,(1,10),(2,1),\ldots,(i,1)\}\)，\(\kappa_{19}(X(\eta))=a_i\)。计划定义为 \(\pi(g)=u_T\)、\(\pi(l_i)=(0,1)\)、\(\pi(a_i)=(-1,0)\)。计划变大了，但机器人不必表示完整的不确定 I-state，正确的转移会自然发生：在 \(a_5\) 施加 \((-1,0)\) 得到 \(a_4\)；在 \(a_2\) 施加得到 \(l_1\)；再施加 \((0,1)\) 得到 \(l_2\)，如此反复直到 \(l_9\)，最后到达 \(g\)。不过得到的计划并没有比原来的开环计划更好。</p>
+
+<div class="widget wide" data-widget="corridor"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>点 18 次「按 κ_stage 计划走一步」：九步后蓝色只剩拐角，再九步只剩 (1,10)。换成「X₁ = X」重来——同一个计划也行（参考代码第 8 项：F 对集合单调）。</li>
+  <li>点格子自定义初始集合，比如只选 (2,1)，看 κ₃ 是 a；施加一次 ← 后变成 l。再只选 (3,1)：同样是 a，施加 ← 后却还是 a。这就是 κ₃ 不充分的反例。</li>
+  <li>「按 κ₁₉ 计划走」时，右边表格里 κ₁₉ 的变化 a₅ → a₄ → … → a₂ → l₁ → … → l₉ → g 只靠标签本身就能推算。参考代码在全部 2¹⁹ − 1 个非空 I-state 上验证了 κ₁₉ 充分。</li>
+</ul></div>
+
+<h3 id="s11-3-2">11.3.2 非确定有限自动机 <span class="en">Nondeterministic Finite Automata</span></h3>
+<p>本章的思想与计算理论中的有限自动机理论有一个有趣的联系。2.1 节提到过：判断是否存在被 DFA 接受的串，等价于一个离散可行规划问题。把不可预测性引入模型，就得到<b>非确定有限自动机 nondeterministic finite automaton (NFA)</b>（图 11.8）。它是理论计算机科学中最简单的非确定性例子之一；这类模型是定义计算模型及其复杂性类的强大工具，也给出了有趣的 I-空间例子。</p>
+<p>NFA 通常画成有向图（图 11.8b），看作特殊的有限状态机：每个顶点是一个状态，边是可能的转移。机器读入一个有限长的<b>输入串 input string</b>（通常是 0、1 序列）。初始状态由一个没有起点的箭头指出（指向 a），机器从这里开始读第一个符号并据此转移。DFA 必须对每个状态的每个输入（0 和 1）指定下一状态；NFA 中对一个符号可以有任意多条（包括零条）出边——例如从 c 读 0 有两条出边（c 到 b 的箭头其实是两条有向边，一条对应 0、一条对应 1）。还有标着特殊符号 \(\epsilon\) 的边：状态可以不读符号就沿 \(\epsilon\) 边转移，而且可以对遇到的 \(\epsilon\) 边任意次地这样做。非确定性来自：同一个输入和 \(\epsilon\) 转移有多条边可选，而没有传感器指出实际选了哪一条。</p>
+<p>计算理论的常见解释是：有多种选择时，机器<b>克隆</b>自己，每个副本走一种选择——就像有多个平行宇宙，自然在其中同时采取每一种可能的动作。某个状态与输入的组合没有出边，那个克隆就死掉。双圈的状态（如 a）是<b>接受状态 accept states</b>；输入串读完时，只要<b>至少有一个</b>平行宇宙的最终状态是接受状态，NFA 就<b>接受</b>这个串。</p>
+
+<div class="box def formulation">
+  <div class="box-title">Formulation 11.2（非确定有限自动机）</div>
+  <ol>
+    <li>有限状态空间 \(X\)。</li>
+    <li>有限的<b>字母表</b> \(\Sigma\)，表示可能的输入符号；令 \(\Sigma_\epsilon = \Sigma\cup\{\epsilon\}\)。</li>
+    <li><b>转移函数</b> \(\delta : X\times\Sigma_\epsilon\to\operatorname{pow}(X)\)：对每个状态和符号，用到达的状态集合指定出边。</li>
+    <li><b>起始状态</b> \(x_0\in X\)。</li>
+    <li><b>接受状态</b>集合 \(A\subseteq X\)。</li>
+  </ol>
+</div>
+<p><b>例 11.18（三状态 NFA）</b>：图 11.8 可以写成 \(X=\{a,b,c\}\)，\(\Sigma = \{0,1\}\)，\(\Sigma_\epsilon=\{0,1,\epsilon\}\)，\(x_0 = a\)，\(A=\{a\}\)；状态转移要对每个 \(x\in X\) 和 \(\Sigma_\epsilon\) 中的符号给出：</p>
+<div class="table-wrap"><table class="data" style="width:auto;margin:0 auto">
+  <tr><th></th><th>0</th><th>1</th><th>ε</th></tr>
+  <tr><td>a</td><td>∅</td><td>{c}</td><td>{b}</td></tr>
+  <tr><td>b</td><td>{a}</td><td>∅</td><td>∅</td></tr>
+  <tr><td>c</td><td>{b, c}</td><td>{b}</td><td>∅</td></tr>
+</table></div>
+<p class="small muted" style="text-align:center">(11.47)</p>
+<p>现在把 NFA 和它对串的接受重新表述为一种规划问题。输入串可以看作一个<b>不使用任何反馈的计划</b>——固定的动作序列。可行规划问题就是判断是否存在被 NFA 接受的串。没有反馈，就没有传感模型；初始状态已知，但之后的状态无法测量。第 \(k\) 阶段的历史 I-state 化为 \(\eta_k = \tilde u_{k-1} = (u_1,\ldots,u_{k-1})\)，即动作历史。非确定性用干扰状态转移的自然动作来表示：</p>
+<div class="box def formulation">
+  <div class="box-title">Formulation 11.3（NFA 规划问题）</div>
+  <ol>
+    <li>有限状态空间 \(X\)。</li>
+    <li>动作空间 \(U = \Sigma\cup\{u_T\}\)。</li>
+    <li><b>状态转移函数</b> \(F : X\times U\to\operatorname{pow}(X)\)：对每个状态和符号，用到达的状态集合指定出边。</li>
+    <li><b>初始状态</b> \(x_0 = x_1\)。</li>
+    <li><b>目标状态</b>集合 \(X_G = A\)。</li>
+  </ol>
+</div>
+<p>历史 I-空间对每个 \(k\in\mathbb{N}\) 用</p>
+<div class="eq">$$\mathcal{I}_k = \tilde U_{k-1} \tag{11.48}$$</div>
+<p>再按 (11.19) 取并来定义；NFA 的初始状态总是固定的，所以不出现在 \(\mathcal{I}_{hist}\) 的定义里。表达规划任务最好用 11.2.2 节的不确定 I-空间 \(\mathcal{I}_{ndet}=\operatorname{pow}(X)\)：每个不确定 I-state \(X(\eta)\) 是机器可能所在的状态集合。由于 \(\epsilon\) 转移可以从 \(x_1\) 立即发生，初始条件可以是 \(X\) 的任何子集；之后的不确定 I-state 直接由 \(F\) 得到。任务是计算形如</p>
+<div class="eq">$$\pi = (u_1,u_2,\ldots,u_K,u_T) \tag{11.49}$$</div>
+<p>的计划，使得 \(X_{K+1}(\eta_{K+1})\in\mathcal{I}_{ndet}\) 满足 \(X_{K+1}(\eta_{K+1})\cap X_G\ne\emptyset\)：施加终止动作后，NFA 至少有一个可能的状态在 \(X_G\) 中。这比一般的规划要求<b>弱</b>得多——用最坏情况分析，通常会要求<b>每个</b>可能的 NFA 状态都在 \(X_G\) 中。</p>
+<p>Formulation 11.3 并不严格是 Formulation 11.1 的特例：为方便起见直接定义了 \(F\)，而不是要求用自然动作 \(\Theta(x,u)\) 定义 \(f\)（对 NFA，\(\Theta\) 同时依赖 \(x\) 和 \(u\)）。还有一个小问题：本书的规划问题总假设存在当前状态，而 NFA 某个输入没有出边时克隆会死掉，甚至可能所有克隆都死掉，没有任何当前状态。可以给 \(X\) 加一个额外的<b>死亡 dead</b> 状态来表示克隆死亡：它永远不在 \(X_G\) 中，一旦转移进去就永远留下。本节没有这样增广，但 NFA 的表述很容易与 Formulation 11.3 保持一致。</p>
+<p>和计算理论中 NFA 的标准用法比较：NFA 的<b>语言 language</b> 是它接受的所有输入串的集合。这里的规划问题判断是否存在被 NFA 接受的串（一个以终止动作结尾的计划）；等价地，规划算法判断 NFA 的语言是否为空。构造所有成功计划的集合，等价于求出 NFA 的语言。</p>
+<p><b>例 11.19（为三状态 NFA 规划）</b>：图 11.8 用 Formulation 11.3 表达<sup class="fn"><a href="#fn-5" id="fn-5-ref">5</a></sup>：\(X=\{a,b,c\}\)，\(\Sigma=\{0,1\}\)，\(x_0 = a\)，\(X_G=\{a\}\)。函数 \(F(x,u)\) 为</p>
+<div class="table-wrap"><table class="data" style="width:auto;margin:0 auto">
+  <tr><th></th><th>0</th><th>1</th></tr>
+  <tr><td>a</td><td>∅</td><td>{c}</td></tr>
+  <tr><td>b</td><td>{a, b}</td><td>∅</td></tr>
+  <tr><td>c</td><td>{b, c}</td><td>{b}</td></tr>
+</table></div>
+<p class="small muted" style="text-align:center">(11.50)　——把 (11.47) 中的 ε 转移「并进」了每一步（参考代码第 9 项从 δ 推出了这张表）</p>
+<p>不确定 I-空间是 \(\{\emptyset,\{a\},\{b\},\{c\},\{a,b\},\{a,c\},\{b,c\},\{a,b,c\}\}\) <span class="eqno">(11.51)</span>，初始条件是 \(\eta_0 = \{a,b\}\)——因为从 a 立即会发生 \(\epsilon\) 转移。一个解是 \((1,0,0,u_T,\ldots)\)，对应把输入串「100」送进 NFA。执行时得到的不确定 I-state 序列是</p>
+<div class="eq">$$\{a,b\}\xrightarrow{1}\{c\}\xrightarrow{0}\{b,c\}\xrightarrow{0}\{a,b,c\}\xrightarrow{u_T}\{a,b,c\}. \tag{11.52}$$</div>
+<p>有限自动机理论的一个基本定理：对 NFA 接受的串集合，存在一个接受同样集合的 DFA（确定的）。证明的方法正是<b>直接从不确定 I-空间构造 DFA</b>：每个不确定 I-state 看作 DFA 的一个状态；原 NFA 有 \(n\) 个状态，DFA 就有 \(2^n\) 个状态；DFA 的转移直接由不确定 I-state 之间的转移得到——给一个输入（动作），就从 \(X\) 的一个子集转到另一个。这个构造很好地说明了 I-空间是原状态未知时出现的<b>新状态空间</b>：I-空间通常比原状态空间大，但它的状态总是已知的，于是行为看起来就像完美状态信息的情形。这个想法非常一般，适用于 DFA、NFA 之外的许多问题（12.1.2 节）。</p>
+
+<div class="widget wide" data-widget="nfa"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>点「“100”」，再用「◀ 单步」「单步 ▶」看 (11.52) 的每一步：左边 NFA 里亮着的状态就是所有活着的克隆，右边是同一个 I-state 在 DFA 里的位置。</li>
+  <li>空串就已经被接受（初始 I-state {a,b} 含 a）；「0」「00」也都接受。输入「111」：所有克隆都死了，I-state 变成 ∅。</li>
+  <li>右图就是习题 4(a) 要的 DFA：8 个子集里从 {a,b} 出发只有 6 个可达（参考代码第 9 项列出了每个 I-state 的最短到达串）。</li>
+</ul></div>
+
+<h3 id="s11-3-3">11.3.3 概率情形：POMDP <span class="en">The Probabilistic Case: POMDPs</span></h3>
+<p>例 11.14 很自然地推广到 \(n\) 个状态。在运筹学和人工智能文献里，这类问题叫做<b>部分可观测马尔可夫决策过程 partially observable Markov decision processes</b>，简称 <b>POMDP</b>（读作「pom dee peez」）。三个状态时，概率 I-空间 \(\mathcal{I}_{prob}\) 是嵌在 \(\mathbb{R}^3\) 里的 2-单纯形。一般地，若 \(|X| = n\)，\(\mathcal{I}_{prob}\) 是嵌在 \(\mathbb{R}^n\) 里的 \((n-1)\)-单纯形，点的坐标是 \((p_0,p_1,\ldots,p_{n-1})\in\mathbb{R}^n\)。由概率公理 \(p_0+\cdots+p_{n-1}=1\)，所以 \(\mathcal{I}_{prob}\) 位于 \(\mathbb{R}^n\) 的一个 \((n-1)\) 维子空间里。单纯形的顶点对应状态已知的 \(n\) 种情形，坐标为 \((0,0,\ldots,0,1)\)、\((0,0,\ldots,0,1,0)\)、……、\((1,0,\ldots,0)\)。为方便起见，可以把单纯形投影到 \(\mathbb{R}^{n-1}\)：指定 \(\mathbb{R}^{n-1}\) 中满足 \(p_0+\cdots+p_{n-2}\le1\) 的一点，再令最后一个坐标 \(p_{n-1} = 1-p_0-\cdots-p_{n-2}\)<sup class="fn"><a href="#fn-6" id="fn-6-ref">6</a></sup>。12.1.3 节介绍 POMDP 的规划算法。</p>
+</section>
+
+<!-- ============================================================ 11.4 -->
+<section id="s11-4">
+<h2>11.4 连续状态空间 <span class="en">Continuous State Spaces</span></h2>
+<p>这一节把 11.1、11.2 节发展的概念推广到连续状态空间。这是重要的推广，因为 Part II 中定义运动规划用的 C-space 都是连续状态空间：状态空间可以是第 4 章定义的 \(X = \mathcal{C}\) 或任何其它连续状态空间，很多有趣的问题来自机器人学。很多情况下表述和离散情形完全一样；另一些情况下连续情形更复杂，但通常保留了离散情形的部分性质。11.5.1 节引入连续传感模型后会看到，有些问题在连续空间里的表述甚至比离散版本更优雅、更好理解。</p>
+
+<h3 id="s11-4-1">11.4.1 离散阶段的信息空间 <span class="en">Discrete-Stage Information Spaces</span></h3>
+<p>先假设阶段是离散的。设 \(X\subseteq\mathbb{R}^m\) 是 \(n\) 维流形（\(n\le m\)），称为状态空间（没读第 4 章、不熟悉流形的读者可以当作 \(X = \mathbb{R}^n\)，没有影响；对 \(Y\)、\(\Psi(x)\)、\(U\)、\(\Theta(x,u)\) 也作同样假设）。设 \(Y\subseteq\mathbb{R}^m\) 是 \(n_y\) 维流形（\(n_y\le m\)），称为观测空间；对每个 \(x\in X\)，\(\Psi(x)\subseteq\mathbb{R}^m\) 是 \(n_n\) 维流形（\(n_n\le m\)），称为自然传感动作集合。11.1.1 节的三种传感器映射都可以用：状态映射 \(y = h(x)\)、状态-自然映射 \(y = h(x,\psi)\)、基于历史的映射 \(y = h_k(x_1,\ldots,x_k,\psi)\)。对状态映射，原像 \(H(y)\) 再次诱导 \(X\) 的一个划分；也可以为状态-动作映射定义原像，但它们不一定构成划分。</p>
+<p>连续状态空间里可以表述很多有趣的传感模型，11.5.1 节给出一份目录。自然传感动作仍然可以选非确定或概率不确定性：非确定时，表达式与离散情形相同；概率模型用概率密度函数 \(p:\Psi\to[0,\infty)\) 定义（假设所有连续空间都是测度空间，所有概率密度都是这些空间上的可测函数），\(p(\psi)\) 是 \(P(\psi)\) 的连续替代；同样可以写成 \(p(y|x)\)，就像离散情形的 \(P(y|x)\)。</p>
+<p>初始条件照例有三种：给定 \(x_1\in X\)；给定子集 \(X_1\subseteq X\)；给定概率密度 \(p(x)\)<sup class="fn"><a href="#fn-7" id="fn-7-ref">7</a></sup>。后两种的初始条件空间可能非常大：例如 \(X = [0,1]\) 且任何子集都可以作初始条件时，\(\mathcal{I}_0\) 是幂集，基数比 \(\mathbb{R}\) 还高。若任何概率密度都可以，\(\mathcal{I}_0\) 是一个函数空间（一般可以看作无穷维向量空间，回忆例 8.5：要精确表示 \([0,1]\) 上的解析函数，可能需要无穷多个实系数）。</p>
+<p>11.1.2 节的 I-空间定义不变，只是所有变量都连续：(11.17) 和 (11.19) 仍分别是 \(\mathcal{I}_k\) 和 \(\mathcal{I}\) 的定义。设 \(U\subseteq\mathbb{R}^m\) 是 \(n_u\) 维流形，\(\Theta(x,u)\) 是 \(n_\theta\) 维流形。把 Formulation 11.1 中每个离散变量换成同名的连续对应物，就得到连续空间上的离散阶段 I-空间规划问题，书中不再重复写出。</p>
+
+<h3 id="s11-4-2">11.4.2 连续时间的信息空间 <span class="en">Continuous-Time Information Spaces</span></h3>
+<p>现在设阶段是连续的。11.4.1 节的大部分组成不变：\(X\)、\(Y\)、\(\Psi(x)\)、\(U\)、\(\Theta(x,u)\) 和传感器映射都一样。主要区别在状态转移方程：自然的作用必须用速度表示（10.6 节已经介绍过，但那里只有预测的不确定性；现在预测和感知都可能不确定）。离散阶段时历史 I-state 基于动作和观测<b>序列</b>；连续时间时历史变成时间的<b>函数</b>。如 7.1.1 节，设 \(T\) 是时间区间（有界或无界）。\(\tilde y_t:[0,t]\to Y\) 称为到时刻 \(t\in T\) 为止的<b>观测历史</b>；同样 \(\tilde u_t:[0,t]\to U\)、\(\tilde x_t:[0,t]\to X\) 分别是<b>动作历史</b>和<b>状态历史</b>。三种传感器映射变成：</p>
+<ol>
+  <li>状态传感器映射 \(y(t) = h(x(t))\)；</li>
+  <li>状态-自然映射 \(y(t) = h(x(t),\psi(t))\)，自然对每个 \(t\in T\) 选 \(\psi(t)\in\Psi(x(t))\)；</li>
+  <li>基于历史的映射：可以依赖至今的所有状态，即整个函数 \(\tilde x_t\)；若自然也干扰观测，可写成 \(y(t) = h(\tilde x_t,\psi(t))\)。</li>
+</ol>
+<p>把 \(\tilde u_t\)、\(\tilde y_t\) 和初始条件 \(\eta_0\) 合起来，就得到<b>时刻 \(t\) 的历史 I-state</b>：</p>
+<div class="eq">$$\eta_t = (\eta_0,\tilde u_t,\tilde y_t). \tag{11.53}$$</div>
+<p>所有可能的 \(\eta_t\) 构成<b>时刻 \(t\) 的历史 I-空间</b> \(\mathcal{I}_t\)——一个函数空间，因为每个 \(\eta_t\) 都含函数。离散阶段时各个 \(\mathcal{I}_k\) 用 (11.18)、(11.19) 并成一个历史 I-空间；连续时间的对应物是</p>
+<div class="eq">$$\mathcal{I}_{hist} = \bigcup_{t\in T}\mathcal{I}_t. \tag{11.54}$$</div>
+<p>这是一个不规则的函数集合，因为函数的定义域各不相同——离散情形里 \(\mathcal{I}_{hist}\) 由长度不同的序列组成，同样不规则。Formulation 11.1 的代价泛函的连续时间版本可以用来评估计划的执行：设 \(L\) 是可作用于任意状态-动作历史 \((\tilde x_t,\tilde u_t)\) 的代价泛函，</p>
+<div class="eq">$$L(\tilde x_t,\tilde u_t) = \int_0^t l(x(t'),u(t'))\,dt' + l_F(x(t)), \tag{11.55}$$</div>
+<p>其中 \(l(x(t'),u(t'))\) 是瞬时代价，\(l_F(x(t))\) 是终端代价。</p>
+
+<h3 id="s11-4-3">11.4.3 派生信息空间 <span class="en">Derived Information Spaces</span></h3>
+<p>对连续状态空间，构造派生 I-空间的动机比离散情形更强，因为 I-空间很快就变得难以驾驭。</p>
+<h4>离散阶段的不确定 / 概率 I-空间</h4>
+<p>11.2 节的 I-map 与派生 I-空间直接推广到连续空间：非确定情形下 \(\kappa_{ndet}\) 仍把初始条件和历史变成 \(X\) 的子集；概率情形下 \(\kappa_{prob}\) 给出 \(X\) 上的概率密度。先看离散阶段。不确定 I-state 完全照 11.2.2 节得到，只是离散集合换成连续的对应物，例如 (11.28) 的 \(F(x,u)\) 现在是连续集合，\(X\)、\(\Theta(x,u)\) 也是。概率 I-state 是概率密度函数，11.2.3 节的推导要稍作修改，但没有重要的概念差别。(11.35) 的替代是</p>
+<div class="eq">$$p(x_k|y_k) = \frac{p(y_k|x_k)p(x_k)}{\displaystyle\int_X p(y_k|x_k)p(x_k)\,dx_k}, \tag{11.56}$$</div>
+<p>其中一部分基于从 \(p(\psi_k|x_k)\) 推出 \(p(y_k|x_k)\)。归纳的基础（替代 (11.36)）令 (11.56) 中 \(k=1\)。照 (11.37)–(11.40) 的推导、换成概率密度，得到更新式</p>
+<div class="eq">$$p(x_{k+1}|\eta_k,u_k) = \int_X p(x_{k+1}|x_k,u_k,\eta_k)p(x_k|\eta_k)\,dx_k = \int_X p(x_{k+1}|x_k,u_k)p(x_k|\eta_k)\,dx_k, \tag{11.57}$$</div>
+<div class="eq">$$p(x_{k+1}|y_{k+1},\eta_k,u_k) = \frac{p(y_{k+1}|x_{k+1})p(x_{k+1}|\eta_k,u_k)}{\displaystyle\int_X p(y_{k+1}|x_{k+1})p(x_{k+1}|\eta_k,u_k)\,dx_{k+1}}. \tag{11.58}$$</div>
+
+<h4>近似不确定与概率 I-空间</h4>
+<p>许多其它派生 I-空间直接推广到连续空间，比如 11.2.4 节的有限记忆模型、例 11.11 和 11.12。在这里，尽可能压缩 I-空间极其有用，因为在大多数实际应用中它往往难以驾驭。回忆：I-map \(\kappa:\mathcal{I}_{hist}\to\mathcal{I}_{der}\) 把 \(\mathcal{I}_{hist}\) 划分成若干块，每块上必须施加同一个动作；主要的担心是把计划限制在 \(\mathcal{I}_{der}\) 上会不会妨碍找到解。</p>
+<p>考虑构造<b>近似</b>不确定或概率 I-state 的派生 I-空间。连续情形下 \(X\) 通常是度量空间，近似是有意义的。目标是在尽量不丢失关键信息的前提下大幅简化 I-空间：近似的质量和派生 I-空间的大小之间有取舍。不确定 I-state 用<b>保守近似 conservative approximations</b>：保证包含不确定 I-state 的集合；概率情形用<b>基于矩的近似 moment-based approximations</b>，基于概率统计里近似概率密度的一般技术。为避免不必要的复杂，下面只讨论离散阶段模型。</p>
+
+<h5>保守近似</h5>
+<p>设用非确定的不确定性，并对不确定 I-state 做近似。定义 I-map \(\kappa_{app}:\mathcal{I}_{ndet}\to\mathcal{I}_{app}\)，\(\mathcal{I}_{app}\) 是 \(X\) 的某一族子集。例如 \(\mathcal{I}_{app}\) 可以是所有球形子集：若 \(X=\mathbb{R}^2\)，球就是圆盘，只需三个参数 \((x,y,r)\)（圆心与半径），于是 \(\mathcal{I}_{app}\subset\mathbb{R}^3\)——比 \(\mathcal{I}_{ndet}\)（\(\mathbb{R}^2\) 中复杂区域的集合）简单得多。要让 \(\mathcal{I}_{app}\) 更小，可以要求 \(x\)、\(y\)、\(r\) 是整数（或按 5.2.3 节的某种分散度采样）。若 \(\mathcal{I}_{app}\) 有界，派生 I-state 的个数就有限——代价是 \(\mathcal{I}_{ndet}\) 可能被近似得很差。</p>
+<p>对一个固定的动作序列 \((u_1,u_2,\ldots)\)，不确定 I-state 的序列是</p>
+<div class="eq">$$X_1(\eta_1)\xrightarrow{u_1,y_2}X_2(\eta_2)\xrightarrow{u_2,y_3}X_3(\eta_3)\xrightarrow{u_3,y_4}\cdots \tag{11.59}$$</div>
+<p>（图 11.9：这些区域可能复杂得难以甚至无法计算）。I-map 必须为每个不确定 I-state 选一个包围区域。从历史 I-state \(\eta\) 出发，可以先算出 \(X_k(\eta_k)\)，再施加 \(\kappa_{app}\) 得到包围区域<sup class="fn"><a href="#fn-misc" id="fn-misc2-ref">注</a></sup>。若对任何 \(\eta_k\) 都能高效算出 \(X_k(\eta_k)\)，那么 \(\mathcal{I}_{app}\) 上的计划可能比 \(\mathcal{I}_{ndet}\) 或 \(\mathcal{I}_{hist}\) 上的简单得多。</p>
+<p>如果 \(X_k(\eta_k)\) 难以计算，一个可能是按 11.2.1 节定义派生信息转移方程。麻烦在于 \(\kappa_{app}\) 通常<b>不充分</b>：想计算 \(\kappa_{app}(X_{k+1}(\eta_{k+1}))\)，可以从 \(X_k(\eta_k)\) 出发用 (11.30)、(11.31) 更新，再施加 \(\kappa_{app}\)；而从包围区域 \(\kappa_{app}(X_k(\eta_k))\) 出发、用 (11.30)(11.31) 更新再施加 \(\kappa_{app}\)，结果一般不同。所以不再丢失信息，就无法完全在 \(\mathcal{I}_{app}\) 里表达转移。但如果能容忍这种损失，<b>破坏信息的近似</b>仍可能有用：每次迭代给不确定 I-state 一个包围区域，记第 \(k\) 阶段的包围区域为 \(\hat X_k\)。要小心：如图 11.9、11.10 所示，派生 I-state 的序列会分叉——图 11.10 的序列<b>不是</b>简单地给每个算出的 I-state 套一个 \(\mathcal{I}_{app}\) 元素，整个序列都不同。</p>
+<p>初始时选 \(\hat X_1\) 使 \(X_1(\eta_1)\subseteq\hat X_1\)。每个归纳步骤把 \(\hat X_k\) 当作真正的不确定 I-state（而不是近似）。用 (11.30)、(11.31)，考虑 \(u_k\) 和 \(y_{k+1}\) 的更新是</p>
+<div class="eq">$$\hat X'_{k+1} = \Big(\bigcup_{x_k\in\hat X_k}F(x_k,u_k)\Big)\cap H(y_{k+1}). \tag{11.60}$$</div>
+<p>一般 \(\hat X'_{k+1}(\eta_{k+1})\) 不在 \(\mathcal{I}_{app}\) 中，于是在 \(\hat X'_{k+1}\subseteq\hat X_{k+1}\) 的约束下选一个 \(\hat X_{k+1}\in\mathcal{I}_{app}\) 来近似。这就完成了归纳步骤，与基础情形一起得到序列</p>
+<div class="eq">$$\hat X_1\xrightarrow{u_1,y_2}\hat X_2\xrightarrow{u_2,y_3}\hat X_3\xrightarrow{u_3,y_4}\cdots \tag{11.61}$$</div>
+<p>（图 11.10）。现在计划 \(\pi:\mathcal{I}_{app}\to U\) 和信息转移都可以定义在 \(\mathcal{I}_{app}\) 上。为了保证计划是可靠的，近似必须是<b>保守的</b>：若某次迭代中 \(\hat X_{k+1}(\eta_{k+1})\subset\hat X'_{k+1}(\eta_{k+1})\)，真实状态就不一定在近似 I-state 里——例如派生 I-state 说机器人不可能碰撞，而它实际上在碰撞状态。保持保守就能避免这种糟糕的行为。极端情况下，总令 \(\hat X_{k+1}(\eta_{k+1}) = X\) 就非常保守，但毫无用处——唯一可能的计划只能在每个阶段施加一个固定动作。近似好一些时，也可能仍然无法在近似 I-state 之间引起需要的转移。要保证规划问题有解，就要让包围体尽量贴近派生 I-state。</p>
+<p>包围体的简单性与计算代价之间的取舍在 5.3.2 节碰撞检测中也见过：用更简单的形状能大幅提升性能，但在这里可能导致解不出问题。用球作为包围体给出的界可能不太紧；用实心椭球会紧一些，但 \(\mathcal{I}_{app}\) 的维数随 \(X\) 的维数二次增长：球的方程一般要 \(n+1\) 个参数，椭球要 \(\binom{n}{2}+2n\) 个（参考代码第 10 项）。\(X\) 的维数高时，椭球近似可能困难甚至不可行。非凸包围形状能给出更好的近似，但即使 \(X=\mathbb{R}^2\)，所需参数也可能多到无法处理。不过对非常特殊的问题，也许能设计出既好处理、又能紧密近似不确定 I-state 的形状族——这带来很多有趣的研究问题。</p>
+
+<div class="widget wide" data-widget="approx-robot"></div>
+<div class="box intuition"><div class="box-title">试一试（模型是 11.5.3 节的例 11.23）</div><ul>
+  <li>选「不近似」，点几次「下一步」：预测（浅蓝）是环形扇区的并（图 11.25、11.26c），观测后与橙色圆求交（图 11.26b、11.27）。不确定 I-state 的边界由圆弧和线段组成（习题 13）。</li>
+  <li>选「包围圆」：黄色虚线是按 (11.60)(11.61) 一路传下来的 X̂_k。它总包住蓝色（保守），但「近似 / 真实」的面积比会变大——包围圆从一开始就比真实的 I-state 胖，用它去预测又会更胖：这就是图 11.10 说的「整个序列都不同」。</li>
+  <li>把 ε_u 调大到 40°、传感器 r 调小：真实 I-state 主要由传感器决定，近似也被拉回来；r 调大则近似越来越松。换成「轴对齐包围盒」比较两种 I_app。</li>
+</ul></div>
+
+<h5>基于矩的近似</h5>
+<p>概率 I-state 是函数，所以很自然地会用函数逼近的方法来近似 \(\mathcal{I}_{prob}\)。一种可能是用泰勒展开的前 \(m\) 个系数，派生 I-空间就成了可能的泰勒系数构成的空间；\(m\) 越大近似越好，但派生 I-空间的维数也越高。由于处理的是概率密度，通常更好的是用<b>矩</b>来近似，而不是泰勒系数或其它通用的函数逼近。一阶矩和二阶矩就是熟悉的<b>均值</b>和<b>协方差</b>，它们优于其它近似，因为均值和协方差能<b>精确</b>表示高斯密度——概率论中最基本、最重要的密度。所以用一阶、二阶矩近似概率 I-空间，等价于假设得到的概率密度总是高斯的。这种近似因为方便而在实践中被大量使用。一般地，可以用更高阶的矩得到质量更高的近似，代价是更多系数。记基于矩的 I-map 为 \(\kappa_{mom}:\mathcal{I}_{prob}\to\mathcal{I}_{mom}\)。</p>
+<p>\(\kappa_{mom}\) 和 \(\kappa_{app}\) 有同样的问题：大多数情况下 \(\kappa_{mom}\) 不是充分 I-map。矩的计算方式和保守近似一样：对概率 I-state 施加更新式 (11.57)、(11.58)，但每一步之后对得到的概率密度施加 \(\kappa_{mom}\)，于是派生 I-state 被「困」在 \(\mathcal{I}_{mom}\) 里。矩可以在 (11.57)、(11.58) 各自之后算，也可以在两者都做完之后算（结果可能不同），后者视应用而定可能更难算。</p>
+<p>先考虑只用均值（一阶矩）表示概率 I-state \(p(x|\eta)\)。记 \(x_i\) 为 \(x\) 的第 \(i\) 个坐标，关于 \(x_i\) 的均值一般定义为</p>
+<div class="eq">$$\bar x_i = \int_X x_i\,p(x|\eta)\,dx. \tag{11.62}$$</div>
+<p>得到向量均值 \(\bar x = (\bar x_1,\ldots,\bar x_n)\)。若只用均值构造 \(\mathcal{I}_{mom}\)：既然没有密度的协方差信息，用 \(\bar x\) 就和估计状态非常相似——均值就是估计，\(\mathcal{I}_{mom} = X\)。这当然简化了 I-空间，但无法推断与 I-state 相关的不确定性有多大：概率质量是集中在 \(\bar x\) 附近，还是在 \(X\) 上弥漫开来？用二阶矩可以缓解。关于两个变量 \(x_i\)、\(x_j\) 的协方差<sup class="fn"><a href="#fn-8" id="fn-8-ref">8</a></sup>是</p>
+<div class="eq">$$\sigma_{i,j} = \int_X x_ix_j\,p(x|\eta)\,dx. \tag{11.63}$$</div>
+<p>由于 \(\sigma_{ij} = \sigma_{ji}\)，二阶矩可以组织成对称的<b>协方差矩阵</b></p>
+<div class="eq">$$\Sigma = \begin{pmatrix}\sigma_{1,1}&\sigma_{1,2}&\cdots&\sigma_{1,n}\\ \sigma_{2,1}&\sigma_{2,2}&\cdots&\sigma_{2,n}\\ \vdots&\vdots&&\vdots\\ \sigma_{n,1}&\sigma_{n,2}&\cdots&\sigma_{n,n}\end{pmatrix}, \tag{11.64}$$</div>
+<p>它有 \(\binom{n}{2}+n\) 个不同元素，对应每个 \(x_{i,i}\) 和每一对 \(1\le i,j\le n\) 的不同 \(x_i\)、\(x_j\)。所以用一阶、二阶矩时，\(\mathcal{I}_{mom}\) 的维数是 \(\binom{n}{2}+2n\)。对某些问题，所有概率 I-state 可能确实都是高斯的，这时均值与协方差精确地刻画了概率 I-空间，这个 I-map 是充分的——这引出强大的<b>卡尔曼滤波</b>（11.6.1 节）。更高质量的近似可以取更高阶的矩，第 \(r\) 阶矩定义为</p>
+<div class="eq">$$\int_X x_{i_1}x_{i_2}\cdots x_{i_r}\,p(x|\eta)\,dx, \tag{11.65}$$</div>
+<p>其中 \(i_1,\ldots,i_r\) 是从 \(\{1,\ldots,n\}\) 中<b>可重复地</b>选出的 \(r\) 个整数。</p>
+<p>基于矩的近似与非确定性的保守近似非常相似：用均值和协方差就像在非确定情形用椭球。高斯密度的等值集是椭球，这些等值集把<b>置信区间</b>推广成<b>置信椭球</b>，从而把非确定与概率两种情形紧密联系起来。高斯密度的定义域是 \(\mathbb{R}^n\)，不像非确定情形那样有界；但对给定的置信水平可以近似成有界集合，例如算出包含 99.9% 概率质量的椭球区域。一般地，也许能结合矩与包围体的思想构造概率情形的派生 I-空间，既保证计划的正确性又考虑概率——可惜这会再次增加派生 I-空间的维数。</p>
+
+<h4>连续时间的派生 I-空间</h4>
+<p>连续时间情形难得多，无论是表达还是一般地计算；不过在很多特殊情形下有优雅的计算方法，11.5 节和第 12 章会讲一些。为了完整，这里给出一般的表达式。一般地，I-map 和派生 I-空间可以按 11.2.1 节的思路构造。由于没有离散的转移规则，派生 I-state 无法写成简单的更新规则，但至少可以写成一个函数：给出施加 \(\tilde u_t\) 与 \(\tilde\theta_t\) 后从初始状态 \(x(0)\) 会到达的状态 \(x(t)\)——通常这要通过某种积分得到（14.1 节），尽管不需要显式地写出来。一般地，记 \(X_t(\eta_t)\subset X\) 为时刻 \(t\) 的不确定 I-state，它替代离散阶段的 \(X_k\)；初始条件记作 \(X_0\)（离散阶段时用 \(X_1\)）。</p>
+<p>要准确刻画 \(X_t(\eta_t)\) 还需要几个定义：\(\tilde\theta_t:[0,t)\to\Theta\) 是到时刻 \(t\) 为止的自然动作历史，\(\tilde\psi_t:[0,t]\to\Psi\) 是自然传感动作的历史。设初始条件是 \(X_0\subset X\)，不确定 I-state 定义为</p>
+<div class="eq">$$X_t(\eta_t) = \{x\in X\mid \exists x'\in X_0,\ \exists\tilde\theta_t,\ \exists\tilde\psi_t\ \text{使得}\ x = \Phi(x',\tilde u_t,\tilde\theta_t)\ \text{且}\ \forall t'\in[0,t],\ y(t') = h(x(t'),\psi(t'))\}. \tag{11.66}$$</div>
+<p>也就是说，状态 \(x(t)\) 属于 \(X_t(\eta_t)\) 当且仅当存在初始状态 \(x'\in X_0\)、自然历史 \(\tilde\theta_t\) 和自然传感动作历史 \(\tilde\psi_t\)，使得转移方程带来到达 \(x(t)\)，并且观测历史 \(\tilde y_t\) 在 0 到 \(t\) 的整个时间里都与传感器映射相符。也可以推出概率 I-state，但需要连续时间随机过程与随机微分方程的技术细节，有些情况下结果很漂亮，但很难写出一般的表达式，因为它依赖随机过程行为的许多技术假设（见书中文献 [28]）。</p>
+</section>
+
+<!-- ============================================================ 11.5 -->
+<section id="s11-5">
+<h2>11.5 连续状态空间的例子 <span class="en">Examples for Continuous State Spaces</span></h2>
+
+<h3 id="s11-5-1">11.5.1 传感器模型 <span class="en">Sensor Models</span></h3>
+<p>涉及连续状态空间的应用中出现了种类繁多的传感模型。这一节给出一份主要受机器人学启发的传感器目录，集中在一处便于查阅：有些会在后面用到，有些是为了帮助理解 I-空间。每种传感器通常有两个版本，取决于是否包含自然传感动作。</p>
+
+<h4>线性传感模型</h4>
+<p><b>线性传感模型 linear sensing models</b> 主要在控制理论文献中发展，是最常见、最重要的一族。设 \(X=Y=\mathbb{R}^n\)（非奇异线性变换允许传感器空间的维数更低）。最简单的是<b>恒等传感器</b> \(y=x\)：状态立即已知；如果每个阶段都有它，I-空间就通过 I-map \(\kappa_{sf}:\mathcal{I}_{hist}\to X\) 塌缩成 \(X\)。</p>
+<p>现在用自然传感动作破坏完美的观测：\(y = h(x,\psi) = x+\psi\)。设 \(y\) 是 \(x\) 的估计，误差不超过常数 \(r\in(0,\infty)\)，可以对每个 \(x\) 令 \(\Psi(x)\) 是以原点为心、半径 \(r\) 的闭球：</p>
+<div class="eq">$$\Psi = \{\psi\in\mathbb{R}^n\mid\|\psi\|\le r\}. \tag{11.67}$$</div>
+<p>（图 11.11：收到 \(y\) 后，真实状态在以 \(y\) 为心、半径 \(r\) 的球里——这就是原像 \(H(y)\)，见 (11.11)。）要使模型成为概率的，可以在 \(\Psi\) 上定义密度，例如均匀密度（不太现实：在边界处概率质量不连续地跳到零）。更典型的概率模型令 \(\Psi(x) = \mathbb{R}^n\)，在整个 \(\mathbb{R}^n\) 上定义密度（这个传感器的非确定版本毫无用处）。最容易处理的选择之一是多元高斯密度</p>
+<div class="eq">$$p(\psi) = \frac{1}{\sqrt{(2\pi)^n|\Sigma|}}\,e^{-\frac12\psi^T\Sigma^{-1}\psi}, \tag{11.68}$$</div>
+<p>\(\Sigma\) 是协方差矩阵 (11.64)，\(|\Sigma|\) 是它的行列式<sup class="fn"><a href="#fn-9" id="fn-9-ref">9</a></sup>。书中把二次型展开为</p>
+<div class="eq">$$\psi^T\Sigma\psi = \sum_{i=1}^{n}\sum_{j=1}^{n}\sigma_{i,j}\psi_i\psi_j. \tag{11.69}$$</div>
+<p>（用在 (11.68) 里时，\(\sigma_{i,j}\) 应理解为 \(\Sigma^{-1}\) 的元素。）若 \(p(x)\) 是高斯的且收到 \(y\)，在这个模型下得到的密度也是高斯的——这在 11.6.1 节非常重要。</p>
+<p>前面的传感模型可以用线性变换推广。设 \(C\) 是 \(n\times n\) 非奇异实矩阵，传感器映射 \(y=h(x)=Cx\) 时状态仍然立即可以确定（双射），每个 \(H(y)\) 都只含 \(X\) 的一个点。也可以对自然传感动作做线性变换，设 \(W\) 是 \(n\times n\) 矩阵：</p>
+<div class="eq">$$y = h(x) = Cx + W\psi. \tag{11.70}$$</div>
+<p>一般 \(C\)、\(W\) 甚至可以奇异，仍是线性传感模型。设 \(W=0\)：若 \(C\) 奇异，就无法从单个观测直接推出状态，这对应从 \(n\) 维状态空间到 \(Y\) 的一个子集的投影，维数等于 \(C\) 的秩。例如</p>
+<div class="eq">$$C = \begin{pmatrix}0&1\\0&0\end{pmatrix}, \tag{11.71}$$</div>
+<p>则 \(y=Cx\) 给出 \(y_1 = x_2\)、\(y_2=0\)：每个 \((x_1,x_2)\) 只有 \(x_2\) 能被观测，因为 \(C\) 的秩为 1。所以在某些特殊情形，奇异矩阵可以测量一部分状态变量、让其余不可见。对一般的奇异矩阵 \(C\)，解释是：传感器把 \(X\) 投影到某个 \(k\) 维子空间，\(k\) 是 \(C\) 的秩。若 \(W\) 奇异，自然的作用就受限：自然能扭曲观测的自由度是 \(W\) 的秩。这些概念引出下一组传感模型。</p>
+
+<h4>简单投影传感器</h4>
+<p>许多常见的传感模型都是观测 \(X\) 的某些坐标、隐藏其余坐标——例 11.4 选择性传感器的连续版本。设想平面世界 \(\mathcal{W}=\mathbb{R}^2\) 里能平移和旋转的移动机器人，状态空间（配置空间）是 \(X=\mathbb{R}^2\times\mathbb{S}^1\)。为便于可视化，把机器人想成一个很小的点，避开 4.3 节复杂的配置空间构造。记 \(p=(p_1,p_2)\) 为点的坐标，\(s\in\mathbb{S}^1\) 为朝向，\(\mathbb{R}^2\times\mathbb{S}^1\) 中的状态记作 \((p_1,p_2,s)\)（不写 \((x,y,\theta)\)，以免和 \(X\)、\(Y\)、\(\Theta\) 混淆）。</p>
+<ul>
+  <li><b>位置传感器 position sensor</b>：能估计位置但不知道朝向，\(Y=\mathbb{R}^2\)，\(y=h(x)=p\)，第三个变量 \(s\) 未知。可以加自然传感动作，例如高斯误差。</li>
+  <li><b>指南针 / 朝向传感器 compass / orientation sensor</b>：只观测 \(s\)，\(Y=\mathbb{S}^1\)，\(y=s\)。可以加误差：已知 \(|s-y|\le\epsilon\)。高斯模型不能直接用，因为它的定义域无界而 \(\mathbb{S}^1\) 有界——可以截断高斯或换更合适的分布。</li>
+  <li>三维世界 \(\mathcal{W}=\mathbb{R}^3\)：状态空间是 \(X=SE(3)\)，可表示为 \(\mathbb{R}^3\times\mathbb{RP}^3\)（4.2 节）。位置传感器测前三个坐标，朝向传感器测后三个；测三维朝向的物理传感器常叫<b>陀螺仪 gyroscope</b>（利用进动：旋转的圆盘因角动量而不愿改变朝向）。用转动关节连接的连杆，状态空间的一点给出每对相连连杆的夹角，<b>关节编码器 joint encoder</b> 测其中一个角。</li>
+</ul>
+<p>机械系统的动力学要到 Part IV 才考虑，但值得一提几种传感器：那时状态空间扩展到包含速度甚至加速度参数。<b>速度计 speedometer</b> 测速度向量或标量速率；也有测<b>角速度 angular velocity</b> 的传感器；<b>加速度计 accelerometer</b> 测加速度参数。这些模型都可以用自然传感动作表示测量误差。</p>
+
+<h4>边界传感器</h4>
+<p>状态空间有有意思的边界时（比如运动规划的 \(\mathcal{C}_{free}\)），可以基于检测边界来表述许多重要的<b>边界传感器 boundary sensors</b>（图 11.12）。设状态空间是边界清晰的闭集；为了和运动规划联系，设 \(X = \mathrm{cl}(\mathcal{C}_{free})\)。<b>接触传感器 contact sensor</b> 判断是否碰到边界：\(Y=\{0,1\}\)，\(x\in\partial X\) 时 \(h(x)=1\)，否则 \(h(x)=0\)。这种传感器不告诉你沿边界哪里发生了接触。在移动机器人中与障碍物接触可能是灾难性的，常改用<b>接近传感器 proximity sensor</b>：状态离 \(\partial X\) 不超过给定常数 \(r\) 时 \(h(x)=1\)。机器人操作、触觉界面等机器与环境有物理交互的应用中，可以用<b>力传感器 force sensor</b>：除了指示接触，还能给出力的大小和方向（模型必须能从给定状态推出预期的力）。</p>
+
+<h4>地标传感器</h4>
+<p>许多重要的传感模型可以用<b>地标 landmarks</b> 定义：状态空间中能被传感器以某种方式检测到的特殊点或区域。古老的例子是靠星星在海上导航：根据星星相对船的位置推断船的朝向。在陌生城市里你也许也用过地标：墨西哥城四周的山、巴黎的埃菲尔铁塔都能用来判断方向；巴黎的街道很复杂，但只要看得见埃菲尔铁塔，朝它走就能走到。这类模型在分析在线算法的<b>竞争比 competitive ratio</b> 框架中很常见。</p>
+<p>一般地，一组状态都可以作为地标，常见的模型是令 \(x_G\) 为唯一的地标。机器人学中地标可以看作世界 \(\mathcal{W}\) 中的点，也可以从点推广到地标区域，但这里保持简单。以下设 \(X=\mathbb{R}^2\)，状态 \(x=(x_1,x_2)\)，只有一个地标 \(l=(l_1,l_2)\)：</p>
+<ul>
+  <li><b>归航传感器 homing sensor</b>（图 11.13）：值在 \(Y=\mathbb{S}^1\) 中，\(h(x) = \operatorname{atan2}(l_1-x_1,l_2-x_2)\)<sup class="fn"><a href="#fn-10" id="fn-10-ref">10</a></sup>，atan2 给出正确象限的角度。</li>
+  <li><b>盖革计数器 Geiger counter</b>（辐射强度）：\(Y=[0,\infty)\)，\(h(x)=\|x-l\|\)，只报告到地标的距离，没有方向信息。</li>
+  <li>接触传感器与地标结合得到 <b>pebble</b>：「碰到」pebble 时报告 1，否则 0。推广到区域：有<b>地标区域</b> \(X_l\subset X\)，\(x\in X_l\) 时<b>地标区域检测器 landmark region detector</b> 报告 1，否则 0。</li>
+</ul>
+<p>用多个地标能表述很多有用的传感模型，例如用三个<b>不共线</b>的归航传感器就能重建确切状态（习题 12）。在状态空间里布满地标区域及其检测器，可以造出很多有趣的问题；移动机器人中可以通过在环境中放置固定相机或其它传感器来实现——它们告诉你哪些相机此刻看得见机器人，也许还给出离每个相机的距离。</p>
+
+<h4>深度映射传感器</h4>
+<p>许多机器人应用中，机器人可能没有障碍物地图，这时感知既用来学习环境，也用来确定自己在环境中的位置和朝向。设机器人被放进图 11.14a 那样的环境——状态同时表示机器人的位置和障碍物本身，12.3 节会详细说明。这里给出几个这类问题的传感模型，它们和图 11.12 的边界、接近传感器有关，但机器人不在边界上时给出更多信息。</p>
+<p>移动机器人中最古老的传感器之一是声学<b>声呐 sonar</b>：向某个方向发出高频声波，测量它从墙反射回来所需的时间（声呐常同时充当扬声器和麦克风）。根据声速和飞行时间可以估计到墙的距离。有时声波根本不回来，可以用自然建模；距离估计的误差也可以用自然建模。一般地，单个声呐的观测空间是 \([0,\infty]\)，\(\infty\) 表示声波没回来；\(Y\) 可以解释为飞行时间，也可以已经换算成估计距离。若有 \(k\) 个声呐、各指一个方向，\(Y=[0,\infty]^k\)，每个声呐给出一个读数（图 11.14b 有四个声呐，每个观测是 \(\mathbb{R}^4\) 中的一点）。</p>
+<p>现代激光扫描技术能以很高的角密度做非常精确的距离测量，例如 SICK LMS-200 至少每 1/2 度测一次距离，每秒扫描 360 度至少 30 次，室内的测量精度通常在几毫米量级。设想极限情形，相当于有连续统那么多声呐，\(\mathbb{S}^1\) 中每个角度一个，就得到<b>距离扫描仪 range scanner</b> 或<b>可见性传感器 visibility sensor</b>：对每个 \(s\in\mathbb{S}^1\) 给出一个距离（图 11.15）。更弱的传感器只指出深度扫描中出现不连续（<b>间隙 gap</b>）的那些 \(\mathbb{S}^1\) 中的点，称为<b>间隙传感器 gap sensor</b>（图 11.16）；甚至可能只给出这些间隙在 \(\mathbb{S}^1\) 上的循环顺序，而不知道它们之间的相对角度或到每个间隙的距离。12.3.4 节给出基于这个传感模型的规划器。</p>
+
+<h4>里程计传感器</h4>
+<p>最后一类给出了 11.1.1 节定义的<b>基于历史</b>的传感器映射的有趣例子。移动机器人常有<b>里程计 odometry sensors</b>，根据车轮转了多少来指示机器人走了多远。这种测量常不准确：车轮打滑、表面缺陷、小的建模误差。给定状态历史 \(\tilde x_t\)，传感器可以估计走过的总距离：\(Y=[0,\infty)\)，\(y = h(\tilde x_t)\)，\(h\) 的参数是到时刻 \(t\) 为止的整个状态历史。另一种建模方式是让传感器报告自上一阶段以来走过的估计距离——避免依赖整个历史，但距离估计的误差可能更难建模。有些文献把动作历史 \(\tilde u_k\) 称为里程计（例如每个动作对应自行车踏板转一整圈，踏板转过的圈数就是里程读数）；这些信息已经在 \(\eta_k\) 中，本书不把它当作感知过程的一部分。对自行车的例子，若里程计的测量基于踏板运动以外的因素，就适合建模成基于历史的传感器。另一种基于历史的传感器是<b>墙钟 wall clock</b>，告诉你从初始阶段以来过了多少时间；与其它信息（比如机器人的速度）结合，可以对状态做出强有力的推断。</p>
+
+<div class="widget wide" data-widget="sensor-catalog"></div>
+<div class="box intuition"><div class="box-title">试一试（补充：房间与容差 δ 是我们设计的）</div><ul>
+  <li>「距离扫描仪」+「朝向已知」：原像几乎就是机器人所在的一小块。切到「朝向未知」：另一块出现在关于房间中心对称的位置——这个房间中心对称，转 180° 之后的扫描完全一样。这正是 12.2 节「定位」问题的难处。</li>
+  <li>依次试「盖革计数器」（一个圆环）、「归航传感器」（一条射线）、「三个归航信标」（一个点）：两个原像的交集就是同时用两个传感器时的原像。</li>
+  <li>「4 个声呐」比距离扫描仪信息少得多，原像散成很多小块；「间隙传感器」更少。把容差 δ 调大，所有原像都变大——相当于更大的自然传感误差。</li>
+</ul></div>
+
+<h3 id="s11-5-2">11.5.2 简单投影的例子 <span class="en">Simple Projection Examples</span></h3>
+<p>这一节给出传感器映射为 \(y=h(x)\)、\(h\) 是一个投影（暴露部分状态变量、隐藏其余）时的 I-空间例子。例子都是连续时间的，重点主要在不确定 I-空间 \(\mathcal{I}_{ndet}\)。假设没有动作（\(U=\emptyset\)），但允许影响状态转移的自然动作 \(\Theta(x)\)。既没有机器人动作，也没有自然传感动作，所有不确定性都来自「\(h\) 是投影」以及「影响状态转移的自然动作未知」。这本身就是一类非常重要、有趣的问题；允许控制动作集 \(U\) 可以让例子更复杂，但这里的目的是说明 I-空间的概念，所以不需要。</p>
+<p><b>例 11.20（在正弦曲线上移动）</b>：状态空间是平面上位于正弦曲线上的点：</p>
+<div class="eq">$$X = \{(x_1,x_2)\in\mathbb{R}^2\mid x_2 = \sin x_1\}. \tag{11.72}$$</div>
+<p>令 \(U=\emptyset\)，于是没有动作历史。观测空间 \(Y=[-1,1]\)，传感器映射 \(y=h(x)=x_2\)：点在正弦曲线上的高度（图 11.17）。自然动作空间 \(\Theta=\{-1,1\}\)：\(-1\) 表示沿曲线以单位速率向 \(-x_1\) 方向移动，\(1\) 表示向 \(x_1\) 方向。于是对任何自然动作历史 \(\tilde\theta_t\)，积分可以确定一条沿曲线移动的状态轨迹 \(\tilde x_t\)。</p>
+<p>历史 I-state 形如 \(\eta_t = (X_0,\tilde y_t)\)，含初始条件 \(X_0\subseteq X\) 和到时刻 \(t\) 的观测历史。这个问题的不确定 I-state 非常有意思。对每个观测 \(y\)，原像 \(H(y)\) 是可数无穷个点——\(X\) 与高度 \(y\) 的水平线的交点（图 11.18）。这个问题的不确定性总可以用「真实状态可能在其中哪些交点上」来刻画。设 \(X_0=X\)：没有任何状态轨迹能减少不确定性；点沿 \(X\) 移动时，靠传感器总知道高度，但 \(x_1\) 坐标只能缩小到某个交点。</p>
+<p>反之设 \(X_0=\{x_0\}\)，\(x_0\) 是 \(X\) 上某个特定点。如果从 \(t=0\) 开始的一段时间里 \(y\) 一直在 \((-1,1)\) 内，那么 \(x(t)\) 是已知的，因为包含状态的那一段单调的正弦曲线是确切知道的。然而一旦点到达<b>极值</b>、即 \(y=-1\) 或 \(y=1\)<sup class="fn"><a href="#fn-11" id="fn-11-ref">11</a></sup>，就不知道它接下来往哪走：从这时起，传感器无法区分向 \(-x_1\) 和向 \(x_1\) 移动，不确定性增长（图 11.19）。观测到 \(y=1\) 之后，当前状态有两种可能，取决于 \(y=1\) 时自然采取了哪个动作，不确定 I-state 有两个状态；若继续运动到 \(y=-1\)，不确定 I-state 里就有四个状态。可惜在这个例子里不确定性只会增长，无法用传感器缩小不确定 I-state。</p>
+
+<div class="widget wide" data-widget="sine-curve"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>选「一直向右」，看候选点个数 1 → 2 → 4 → 6 → 8……（补充：书中只说到 4；往后每碰一个极值加 2，因为相邻分支在峰顶会合——参考代码第 11 项）。</li>
+  <li>「自然随机掉头」：如果在到达极值之前掉头，候选个数不变——y 还在 (−1, 1) 内时所在的单调段是确定的。</li>
+  <li>选「X₀ = X」：从一开始就是可数无穷个候选，永远不会减少。</li>
+</ul></div>
+
+<p>上一个例子可以推广到观测平面拓扑图上移动点的一个坐标（图 11.20a）。模型大部分与例 11.20 相同，只是状态空间变成图；自然动作集合 \(\Theta(x)\) 要扩展：若 \(x\) 是图的顶点，则每条关联边对应一个输入——这些是点可能移动的方向。</p>
+<p><b>例 11.21（观测图上的点）</b>：考虑图 11.20b 中有四条边的图（这个例子是与 Rob Ghrist 讨论之后大大改进的）。点在最右边那条边的内部移动时，状态可以从传感器推出：\(H(y)\) 只含最右边上的一个点。点在其它边的内部移动时，\(H(y)\) 含三个点，在 \(y\) 上方的每条边各一个。这导致不确定 I-state 有七种可能情形（图 11.21）：这些边的任何非空子集都可能是不确定 I-state。</p>
+<p>图 11.21 的八块 \(\mathcal{I}_{ndet}\) 以有趣的方式连在一起。设点在最右边那条边上并向左移动，越过顶点后，I-state 必然是图 11.21 右上角的情形——点可能在两条边之一上。若点从某个左边的 I-state 向右走，就总会到达右下角的 I-state；但不一定能回到左边原来的 I-state。所以一般地 \(\mathcal{I}_{ndet}\) 上有<b>方向性约束</b>。还要注意：从左下角的 I-state 出发，一直向右移动不可能到达右下角的 I-state<sup class="fn"><a href="#fn-12" id="fn-12-ref">12</a></sup>——从图的结构可以知道这是不可能的。</p>
+
+<div class="widget wide" data-widget="graph-point"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>选「已知在最右边」运行：越过交汇顶点向左之后，I-state 立刻是 {M,B}（右上角那块）；之后最多再变成 {T,M,B}，单元素的左边 I-state 再也回不去（参考代码第 12 项列出了全部转移）。</li>
+  <li>选「已知在 T」：T 的右端是死胡同，一直向右只会撞墙折返；必须先回到左端顶点、变成 {T,M}，才可能走到最右边。</li>
+  <li>右边 8 个小图的排列与图 11.21 相同，角上的数字记录每块来过几次——这就是在 I_ndet 这个「状态空间」里走出的路径。</li>
+</ul></div>
+<p>图上的例子可以大大推广，以反映机器人学等领域出现的各种问题。例如图 11.22 中点在多边形里移动，只观测一个坐标，得到的不确定 I-空间有类似例 11.21 的「层」。这些思想可以推广到任何维数；用 11.5.1 节的简单投影传感器（如位置传感器或指南针）能构造有趣的模型。12.4 节的追逃博弈会用可见性传感器寻找移动目标，那里也会出现这种层。</p>
+
+<h3 id="s11-5-3">11.5.3 有自然传感动作的例子 <span class="en">Examples with Nature Sensing Actions</span></h3>
+<p>这一节说明自然传感动作的影响，但只针对非确定情形；计算概率 I-state 的一般方法在 11.6 节。</p>
+<p><b>例 11.22（在圆盘上方还是下方？）</b>：连续时间。任务是收集信息，判断状态轨迹是从状态空间里某个指定区域的上方还是下方经过（图 11.23）。设 \(X=\mathbb{R}^2\)，运动由积分速度 \((\dot x,\dot y)\) 产生，\(\dot x = \cos(u(t)+\theta(t))\)、\(\dot y = \sin(u(t)+\theta(t))\)。为简单起见，设所有时间都施加 \(u(t)=0\)，即命令向右移动；自然动作 \(\theta(t)\in\Theta=[-\pi/4,\pi/4]\) 干扰结果。机器人想沿正 \(x_1\) 方向前进，但自然的干扰让它难以预测 \(x_2\) 方向：没有自然时 \(x_2\) 坐标不会变，有自然时 \(t\) 秒之后 \(x_2\) 方向的误差可能达到 \(t\)。图 11.24 画出了可能的运动（一个扇形）。</p>
+<p>传感器观测会减轻不断增长的不确定性锥。用图 11.11 的传感模型，设测量误差 \(r = 1\)。若圆盘半径大于 1（图 11.23a），由于真实状态离测得的状态从不超过 1，总能判断状态是从圆盘上方还是下方经过。图 11.23a 画了多条可能的观测历史（观测历史甚至不必连续，只是为了方便画成连续的）。圆盘半径小于 1 时，可能存在某些观测历史，无法判断真实状态从上方还是下方经过（图 11.23b）；对另一些观测历史仍然可能判断，例如图 11.23b 最上面那条轨迹，可以确定真实状态从上方经过。</p>
+
+<div class="widget wide" data-widget="above-below"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>圆盘半径 1.4、r = 1、ψ 对手式：真实轨迹从上方绕过时，绿色（上方）留下、棕色（下方）被观测排除——「可以断定」。</li>
+  <li>把圆盘半径调到 0.6（小于 r）：对手式的 ψ 把观测一直拉在中线附近，上下两类相容轨迹都活着——图 11.23b 的情形。</li>
+  <li>换成「ψ 随机」：同样小的圆盘，很多时候运气好也能分清；但「总能分清」的保证没有了。</li>
+</ul></div>
+
+<p><b>例 11.23（简单的移动机器人模型）</b>：机器人被建模成在 \(X=\mathbb{R}^2\) 中移动的点。传感模型与例 11.22 相同，但用离散阶段代替连续时间，可以想象每个阶段代表一段固定时长（比如 1 秒）。用动作 \(u_k\in U=\mathbb{S}^1\) 给出运动命令。自然以两种方式干扰运动：(1) 机器人想走距离 \(d\)，但有误差 \(\epsilon_d>0\)，已知真实走过的距离 \(d'\) 满足 \(|d'-d|<\epsilon_d\)；(2) 机器人想沿方向 \(u\) 移动，但有误差 \(\epsilon_u>0\)，已知真实方向 \(u'\) 满足 \(|u-u'|<\epsilon_u\)。这两个独立的误差可以用二维的自然动作集 \(\Theta(x)\) 建模。状态转移方程这样定义：前向投影 \(F(x,u)\) 如图 11.25 所示（环形的扇区）。</p>
+<p>现在构造一些不确定 I-state。设初始状态 \(x_1\) 已知，历史 I-state 形如</p>
+<div class="eq">$$\eta_k = (x_1,u_1,\ldots,u_{k-1},y_1,\ldots,y_k). \tag{11.73}$$</div>
+<p>第一个观测 \(y_1\) 没用，因为初始状态已知：由 (11.29) 得 \(H(y_1)\cap\{x_1\}=\{x_1\}\)。设施加 \(u_1 = 0\)（向右水平移动），由 (11.30) 得 \(X_2(\eta_1,u_1)\)，它和图 11.25 的 \(F(x,u)\) 一样。设收到图 11.26a 所示的观测 \(y_2\)，取 \(H(y_2)\) 与 \(X_2(\eta_1,u_1)\) 的交得到 \(X_2(\eta_2)\)（图 11.26b）。下一步复杂得多：设 \(u_2=0\)，用 (11.30) 从 \(X_2(\eta_2)\) 算 \(X_3(\eta_2,u_2)\)：对所有可能的 \(x_2\in X_2(\eta_2)\) 取 \(F(x_2,u_2)\) 的并，得到图 11.26c 的形状，由圆弧和直线段组成（习题 13）。得到 \(y_3\) 后再取交 \(X_3(\eta_3) = X_3(\eta_2,u_2)\cap H(y_3)\)（图 11.27）。按需要的阶段数重复这个过程。图 11.26c 中区域的复杂性正是 11.4.3 节近似方法的动机，例如不确定 I-state 可以很好地用椭球区域近似。（互动图在 11.4.3 节「简单移动机器人：不确定 I-state 与保守近似」。）</p>
+
+<h3 id="s11-5-4">11.5.4 不用传感器也能获得信息 <span class="en">Gaining Information Without Sensors</span></h3>
+<p>对某些问题，值得注意的是，甚至不用传感器就能减少不确定性。回忆例 11.17。这有违直觉，因为似乎关于状态的信息只能从传感中获得。但也可以从「执行了某些动作」以及它们在状态转移上应有的效果中获得信息。这一节的例子受<b>无传感器操作规划 sensorless manipulation planning</b> 工作的启发（12.5.2 节有更多内容）。这个话题强调了用 I-空间推理（而不是要求能做出准确的状态估计）的好处。</p>
+<p><b>例 11.24（托盘倾斜 tray tilting）</b>：状态空间 \(X\subset\mathbb{R}^2\) 表示一个在平面上滚动的球的位置（图 11.28），球被限制在图示多边形区域里滚动。可以想象球在一个托盘上滚，托盘上粘了几道挡板来限制它的运动（在家里试试这个实验！）。托盘倾斜时，假设球沿重力诱导的方向滚动（就像球滚到弹珠台底部一样）。托盘的倾斜看作机器人可以选择的动作。设球的初始位置（初始状态）未知，也没有传感器能估计状态。任务是找一些倾斜动作，<b>无论初始位置在哪</b>，都保证把球放到图 11.28 所示的位置。</p>
+<p>这个问题可以用连续时间建模，但会让设计复杂。若托盘按某个朝向倾斜，假设球沿某个方向滚（可能沿着边界），直到静止。这可以看作离散阶段的转移：球在某个静止状态，施加一个倾斜动作，然后进入另一个静止状态；所以用离散阶段的状态转移方程 \(x_{k+1} = f(x_k,u_k)\)。描述倾斜动作，可以正式地从 \(\mathbb{S}^2\) 的上半球选托盘向上的法向量方向；但只要球会滚到新的平衡状态，倾斜的陡峭程度并不重要，所以可以化为一维集合：动作集 \(U=\mathbb{S}^1\)，方向 \(u\in\mathbb{S}^1\) 表示球受重力滚动的方向。施加任何动作之前，托盘最初是水平的（法向量平行于重力方向）。实践中应该更仔细地建模托盘在两个动作之间的运动，这里因为例子只是示意而忽略了；可以引入表示托盘朝向的新状态变量，或使用连续时间的动作，来得到这一层细节——那样动作实质上提供了需要的状态信息，动作函数就必须是连续的。这里只假设施加了一串 \(\mathbb{S}^1\) 中的动作。初始条件是 \(X_1=X\)，历史 I-state 是</p>
+<div class="eq">$$\eta_k = (X_1,u_1,u_2,\ldots,u_{k-1}). \tag{11.74}$$</div>
+<p>没有观测，所以穿过 I-空间的路径是可预测的；对任何想要的 \(K\)，计划 \(\pi\) 就是一个动作序列 \(\pi = (u_1,u_2,\ldots,u_K)\)。用不确定 I-state（每个对应球可能所在的位置集合）来推理，解这个任务出奇地简单：图 11.29 所示的六个动作足以保证球最后停在目标位置，不论初始位置在哪。</p>
+
+<div class="widget wide" data-widget="tray"></div>
+<div class="box intuition"><div class="box-title">试一试（补充：托盘是我们画的栅格版本，滚动规则见图上方）</div><ul>
+  <li>先自己倾斜几次，看蓝点（球可能在的格子）怎样合并：每倾斜一次，很多格子滚到同一个角落。按「按最短计划执行」看规划器在 I_ndet 里广度优先搜索出的 6 步计划（参考代码第 13 项：从 X 出发可达的不确定 I-state 只有 135 个）。</li>
+  <li>点别的格子换目标：大多数格子<b>不能</b>作为目标——不管怎么倾斜，都无法让所有可能的球停在那里（比如长通道的中间）。能作为目标的都是某种「角落」。</li>
+  <li>勾上「显示真实的球」：执行过程中你可以看见它，但计划从来没用到它——这就是无传感器规划。</li>
+</ul></div>
+</section>
+
+<!-- ============================================================ 11.6 -->
+<section id="s11-6">
+<h2>11.6 计算概率信息状态 <span class="en">Computing Probabilistic Information States</span></h2>
+<p>实践中概率 I-state 可能相当复杂，因为 \(\mathcal{I}_{prob}\) 的每个元素都是概率分布或密度函数。因此人们投入了大量努力开发高效计算概率 I-state 的技术。这一节可以看作 11.2.3 节（以及连续状态空间的 11.4 节部分）的延续。11.6.1 节讲卡尔曼滤波，它对状态转移和传感器映射都是线性、所有自然动作都用多元高斯密度建模的问题，给出概率 I-state 的优雅计算。11.6.2 节讲一般的基于采样的方法：是近似的，但适用于更广的一类问题；其中一种叫<b>粒子滤波 particle filtering</b>，近年来在移动机器人定位中非常流行。</p>
+
+<h3 id="s11-6-1">11.6.1 卡尔曼滤波 <span class="en">Kalman Filtering</span></h3>
+<p>这一节讲派生 I-空间中最成功、应用最广的例子，它把历史 I-空间大大压缩。在 \(f\) 和 \(h\) 都是线性函数、\(p(\theta)\)、\(p(\psi)\)、\(p(x_1)\) 都是高斯的特殊情形下，<b>所有概率 I-state 都是高斯的</b>。于是概率 I-空间 \(\mathcal{I}_{prob}\) 不必表示每一种可能的概率密度函数：概率 I-state 总是被困在 \(\mathcal{I}_{prob}\) 中只对应高斯的那个子空间里，记作 \(\mathcal{I}_{gauss}\)。这说明可以施加 I-map \(\kappa_{mom}:\mathcal{I}_{prob}\to\mathcal{I}_{gauss}\) 而不丢任何信息。</p>
+<p>这个模型称为<b>线性-高斯 linear-Gaussian（LG）</b>。\(\mathbb{R}^n\) 上的每个高斯密度完全由 \(n\) 维均值向量 \(\mu\) 和 \(n\times n\) 对称协方差矩阵 \(\Sigma\) 确定，所以 \(\mathcal{I}_{gauss}\) 可以看作 \(\mathbb{R}^m\) 的子集，\(m = 2n+\binom{n}{2}\)。例如 \(X=\mathbb{R}^2\) 时 \(\mathcal{I}_{gauss}\subset\mathbb{R}^5\)：两个独立参数确定均值，三个确定协方差矩阵（不是四个，因为对称）。11.4.3 节说过一般可以用基于矩的近似；但对 LG 模型要记住，\(\mathcal{I}_{gauss}\) 是 \(\mathcal{I}_{prob}\) 的<b>精确</b>表示。</p>
+<p>除了 \(\mathcal{I}_{prob}\) 漂亮地塌缩之外，\(\kappa_{mom}\) 还是充分 I-map，并且有方便的表达式可以只用算出的均值和协方差增量地更新派生 I-state。这意味着可以直接在 \(\mathcal{I}_{gauss}\) 上工作，完全不用管原来的历史，甚至不用 11.4.1 节概率 I-state 的一般公式。下面只给出更新式，不给完整的推导——推导冗长但不难，几乎任何随机控制教科书都有。</p>
+<p>卡尔曼滤波中所需的空间都是欧氏的，但维数可能不同：设 \(X=\mathbb{R}^n\)，\(U=\Theta=\mathbb{R}^m\)，\(Y=\Psi=\mathbb{R}^r\)。由于卡尔曼滤波依赖线性模型，一切都可以用矩阵变换表示。设 \(A_k\)、\(B_k\)、\(C_k\)、\(G_k\)、\(H_k\) 都是常实数矩阵，可以奇异也可以不奇异；矩阵的维数由出现的方程推断（维数必须正确定义，才能让乘法有意义）。下标 \(k\) 表示每个阶段可以用不同的矩阵；很多应用中矩阵在每个阶段都一样，这时记作 \(A\)、\(B\)、\(C\)、\(G\)、\(H\)。卡尔曼滤波能处理更一般的情形，所以保留下标（尽管表达式会稍复杂）。一般地，状态转移方程 \(x_{k+1} = f_k(x_k,u_k,\theta_k)\) 定义为</p>
+<div class="eq">$$x_{k+1} = A_kx_k+B_ku_k+G_k\theta_k, \tag{11.75}$$</div>
+<p>其中 \(A_k\)、\(B_k\)、\(G_k\) 维数合适。用 \(f_k\) 而不是 \(f\)，是因为即使每个阶段 \(f\) 都不同，卡尔曼滤波也能工作。</p>
+<p><b>例 11.25（线性-高斯例子）</b>：(11.75) 的一个简单例子：\(X=\mathbb{R}^3\)，\(U=\Theta=\mathbb{R}^2\)，一个具体实例是</p>
+<div class="eq">$$x_{k+1} = \begin{pmatrix}0&\sqrt2&1\\1&-1&4\\2&0&1\end{pmatrix}x_k + \begin{pmatrix}1&0\\0&1\\1&1\end{pmatrix}u_k + \begin{pmatrix}1&1\\0&-1\\0&1\end{pmatrix}\theta_k. \tag{11.76}$$</div>
+<p>传感器映射 \(y_k = h_k(x_k,\psi_k)\) 的一般形式是</p>
+<div class="eq">$$y_k = C_kx_k+H_k\psi_k, \tag{11.77}$$</div>
+<p>\(C_k\)、\(H_k\) 维数合适；仍用 \(h_k\)，因为每个阶段可以用不同的传感器映射。到此为止给出的是模型的线性部分，下一步指定高斯部分：每个阶段的两种自然动作 \(\theta_k\)、\(\psi_k\) 都用<b>零均值</b>高斯建模，各有协方差矩阵 \(\Sigma_\theta\)、\(\Sigma_\psi\)。用这个模型、从 \(X\) 上的初始高斯密度出发，得到的所有概率 I-state 都是高斯的。</p>
+<p>\(\mathcal{I}_{gauss}\) 中每个派生 I-state 都能用均值和协方差表示。记 \(\mu_k\)、\(\Sigma_k\) 为 \(P(x_k|\eta_k)\) 的均值与协方差。本节其余的表达式定义了一个派生信息转移方程：给定 \(\mu_k\)、\(\Sigma_k\)、\(u_k\)、\(y_{k+1}\)，算出 \(\mu_{k+1}\)、\(\Sigma_{k+1}\)。过程从由初始条件算 \(\mu_1\)、\(\Sigma_1\) 开始。设初始条件是 \(\mathbb{R}^n\) 上的高斯密度，记为 \(\mu_0\)、\(\Sigma_0\)。第一个 I-state 纳入了第一个观测 \(y_1\)：\(\mu_1 = \mu_0+L_1(y_1-C_1\mu_0)\)，以及</p>
+<div class="eq">$$\Sigma_1 = (I-L_1C_1)\Sigma_0, \tag{11.78}$$</div>
+<p>其中 \(I\) 是单位矩阵，</p>
+<div class="eq">$$L_1 = \Sigma_0C_1^T\big(C_1\Sigma_0C_1^T+H_1\Sigma_\psi H_1^T\big)^{-1}. \tag{11.79}$$</div>
+<p>\(L_1\) 的表达式虽然复杂，但所有矩阵都在模型里给出了。唯一遗憾的是需要矩阵求逆，实践中有时导致数值不稳定（有缓解这个问题的替代形式）。</p>
+<p>有了 \(\mu_1\)、\(\Sigma_1\)，基础情形就完成了。下面是从第 \(k\) 阶段到第 \(k+1\) 阶段的迭代更新。用 \(\mu_k\)，下一阶段的均值是</p>
+<div class="eq">$$\mu_{k+1} = A_k\mu_k+B_ku_k+L_{k+1}\big(y_{k+1}-C_{k+1}(A_k\mu_k+B_ku_k)\big), \tag{11.80}$$</div>
+<p>\(L_{k+1}\) 马上定义。协方差分两步算：一步基于施加 \(u_k\)，另一步来自考虑 \(y_{k+1}\)。施加 \(u_k\) 后协方差变成</p>
+<div class="eq">$$\Sigma'_{k+1} = A_k\Sigma_kA_k^T+G_k\Sigma_\theta G_k^T. \tag{11.81}$$</div>
+<p>收到 \(y_{k+1}\) 后，由 \(\Sigma'_{k+1}\) 算出协方差 \(\Sigma_{k+1}\)：</p>
+<div class="eq">$$\Sigma_{k+1} = (I-L_{k+1}C_{k+1})\Sigma'_{k+1}. \tag{11.82}$$</div>
+<p>\(L_k\) 的表达式是</p>
+<div class="eq">$$L_k = \Sigma'_kC_k^T\big(C_k\Sigma'_kC_k^T+H_k\Sigma_\psi H_k^T\big)^{-1}. \tag{11.83}$$</div>
+<p>（原书印作 \(H_k\Sigma_\psi H_k\)，少了转置<sup class="fn"><a href="#fn-13" id="fn-13-ref">13</a></sup>。）要得到 \(L_{k+1}\)，把 (11.83) 中的 \(k\) 换成 \(k+1\)。注意：用 (11.80) 算 \(\mu_{k+1}\) 之前必须先算出 \(\Sigma'_{k+1}\)，因为 (11.80) 依赖 \(L_{k+1}\)，而 \(L_{k+1}\) 又依赖 \(\Sigma'_{k+1}\)。</p>
+<p>卡尔曼滤波最常见的用途是用 \(\mu_k\) 给出状态 \(x_k\) 的可靠估计。事实上，对二次型的代价泛函，LG 系统的最优期望代价反馈计划有闭式解（15.2.2 节），这个模型常称为 <b>LQG</b>，反映它是线性、二次代价、高斯的。最优反馈计划甚至可以<b>只</b>用 \(\mu_k\) 表示，不需要 \(\Sigma_k\)——这表明 I-空间可以塌缩到 \(X\)；但相应的 I-map 不充分：从 (11.80)、(11.83) 可以看出，算均值仍然需要协方差。所以最优计划可以写成 \(\pi:X\to U\)，但 \(\mathcal{I}_{gauss}\) 中的派生 I-state 必须被表示，I-map 才充分。</p>
+<p>卡尔曼滤波为线性高斯模型这一类问题给出了漂亮的解。它甚至经常成功地用在根本不满足这些条件的问题上，这称为<b>扩展卡尔曼滤波 extended Kalman filter</b>。它的成功可以这样解释：回忆概率 I-空间可以用均值和协方差做二阶的基于矩的近似。一般而言这种近似可能不合适，但在实践中仍被广泛使用。</p>
+
+<div class="widget wide" data-widget="kalman"></div>
+<div class="box intuition"><div class="box-title">试一试（补充：A = B = G = H = I 的平面机器人，即习题 19）</div><ul>
+  <li>交替点「预测」「修正」：预测时椭圆按 (11.81) 变大（虚线是上一步的椭圆），修正时按 (11.82) 缩小。多走几步，椭圆大小会稳定下来——Σ_k 收敛到一个稳态（参考代码第 14 项：q = 0.04、r = 0.25 时收敛到 0.082 I）。</li>
+  <li>切到「C = [1 0]」：只有 x 方向被修正，椭圆在 y 方向越拉越长。这就是 (11.71) 那样的奇异 C——秩 1 的传感器只能看到一个方向。</li>
+  <li>把 r 拖大，L_k 变小，滤波器更相信预测；把 q 拖大，L_k 变大，滤波器更相信观测。「不测量」时椭圆每步都长大：只做预测的 I-state。</li>
+</ul></div>
+
+<h3 id="s11-6-2">11.6.2 基于采样的方法 <span class="en">Sampling-Based Approaches</span></h3>
+<p>连续空间上的概率 I-空间计算涉及复杂的、可能高维的积分，所以很有动力使用基于采样的方法。若问题是非线性和 / 或非高斯的，这类方法可能是计算概率 I-state 唯一实际的办法。这里考虑两种：网格采样和粒子滤波。这些技术最常见的应用之一是移动机器人定位（12.2 节）。</p>
+<h4>基于网格的方法</h4>
+<p>数值计算概率 I-state 最直接的办法，也许是在网格上近似概率密度函数，用数值积分求 (11.57)、(11.58) 中的积分。可以用网格算一个近似连续概率密度的离散分布。例如用图 5.5a 的 Sukharev 网格（或适合状态空间的类似网格），用有限集 \(S\subset X\) 近似概率密度 \(p(x)\)：每个点周围的 Voronoi 区域可以看作装概率质量的「桶」，每个样本关联一个概率，定义为 \(p(x)\) 在该点的 Voronoi 区域上的积分。这样，样本 \(S\) 和它们的离散分布 \(P(s)\)（\(s\in S\)）近似了 \(X\) 上的 \(p(x)\)。记 \(P(s_k)\) 为第 \(k\) 阶段网格样本集 \(S_k\) 上的分布。</p>
+<p>初始步骤中，在每个样本的 Voronoi 区域上数值积分 \(p(x_1)\) 得到 \(P(s)\)；也可以从 \(p(x_1)\) 抽随机样本、记录落进每个桶（Voronoi 区域）的个数来估计，把计数归一化得到 \(P(s_1)\)。几乎没有点的桶可以视所需精度从后续计算中删掉。令 \(S_1\) 为有非零概率的样本。</p>
+<p>设已在 \(S_k\) 上算出 \(P(s_k|\eta_k)\)，要根据 \(u_k\)、\(y_{k+1}\) 算 \(P(s_{k+1}|\eta_{k+1})\)。可以用网格和桶按上面的方式算出 \(p(x_{k+1}|x_k,u_k)\) 的离散近似 \(P(s_{k+1}|s_k,u_k)\)。这时 (11.57) 需要的密度都已被离散分布近似，于是可以在 \(S_k\) 上施加 (11.38) 得到 \(S_{k+1}\) 上基于网格的分布（同样可以删掉概率质量不够的桶），即 \(P(s_{k+1}|\eta_k,u_k)\)。下一步考虑 \(y_{k+1}\)：同样可以算一个离散分布，用网格样本以 \(P(s_{k+1}|y_{k+1})\) 近似 \(p(x_{k+1}|y_{k+1})\)，于是 (11.58) 可以换成离散的对应物 (11.39)，施加在样本上。得到的分布 \(P(s_{k+1}|\eta_{k+1})\) 就是近似的概率 I-state。</p>
+<h4>粒子滤波</h4>
+<p>离散分布可以用样本估计。事实上，样本上的 Voronoi 区域甚至不需要仔细考虑：可以直接用从初始概率密度 \(p(x_1)\) 随机抽取的一组样本工作。这种一般方法称为<b>粒子滤波 particle filtering</b>，在实验移动机器人的应用中表现很好（回忆图 1.7，见 12.2.3 节）。</p>
+<p>设 \(S\subset X\) 是有限样本集，\(S\) 上定义了概率分布；样本集连同它的分布被看作 \(X\) 上概率密度的近似。由于 \(S\) 用来表示概率 I-state，记 \(P_k\) 为第 \(k\) 阶段用历史 I-state \(\eta_k\) 算出的 \(S_k\) 上的分布。于是每个阶段都有新的样本集 \(S_k\) 和概率分布 \(P_k\)。计算概率 I-state 更新的一般方法如下：对某个很大的数 \(m\)，迭代 \(m\) 次：</p>
+<ol>
+  <li>按分布 \(P_k\) 选一个状态 \(x_k\in S_k\)。</li>
+  <li>按密度 \(p(x_{k+1}|x_k,u_k)\) 抽一个样本，为 \(S_{k+1}\) 生成新样本 \(x_{k+1}\)。</li>
+  <li>赋予权重 \(w(x_{k+1}) = p(y_{k+1}|x_{k+1})\)。</li>
+</ol>
+<p>\(m\) 次迭代完成后，把 \(S_{k+1}\) 上的权重归一化，得到有效的概率分布 \(P_{k+1}\)。结果表明，当 \(m\) 趋于无穷时，这个方法给出的近似收敛到真正的概率 I-state；也有收敛更快的其它方法。使用粒子滤波的主要困难之一是：对某些问题，很难保证在最需要的地方有足够集中的样本。这是困扰许多基于采样的算法（包括第 5 章的运动规划算法）的普遍问题。</p>
+
+<div class="widget wide" data-widget="particles"></div>
+<div class="box intuition"><div class="box-title">试一试（补充：一维走廊、三扇门的例子是我们设计的）</div><ul>
+  <li>点几次「→ 前进」：第一次看到门时，精确后验（灰线）有三个峰——机器人不知道是哪扇门。高斯近似（红色虚线，只保留均值和方差）把三个峰抹成一个宽包，均值可能正好落在两扇门之间几乎不可能的地方：矩近似在多峰时会骗人。</li>
+  <li>把网格格数降到 5–10：每个桶 10–20 个单位宽，运动和门都被抹平，「网格 vs 精确」的距离明显变大。</li>
+  <li>粒子数调到 20 再「自动」走一阵：粒子可能全部聚到错误的峰上——「样本没有集中在最需要的地方」。调到 2000 后与精确后验非常接近（参考代码第 15 项）。</li>
+</ul></div>
+</section>
+
+<!-- ============================================================ 11.7 -->
+<section id="s11-7">
+<h2>11.7 博弈论中的信息空间 <span class="en">Information Spaces in Game Theory</span></h2>
+<p>这一节把 10.5 节的序贯博弈概念与本章的 I-空间概念统一起来。博弈论里非常重视<b>信息的建模</b>；问题因为每个玩家有自己的参照系、因而有自己的 I-空间而变得复杂。鞍点、Nash 均衡等博弈解概念严重依赖每个玩家做决策时可得的信息。仿照 10.5 节，这一节先讲博弈树中的 I-state，再讲状态空间上博弈的 I-state。只讨论状态空间和阶段都有限的情形；I-空间的表述可以自然地推广到可数无穷或连续的状态空间、动作空间和阶段。</p>
+
+<h3 id="s11-7-1">11.7.1 博弈树中的信息状态 <span class="en">Information States in Game Trees</span></h3>
+<p>回忆 10.5.1 节：在博弈树里表述序贯博弈，重要的一步是指定<b>信息模型</b>（Formulation 10.3 第 4 步）。10.5.1 节考虑了三种信息模型：交替行动、阶段式、开环。这些以及许多别的信息模型都可以用 I-空间描述。</p>
+<p>从 11.1 节应该清楚：I-空间总是相对于一个状态空间定义的。10.5.1 节虽然没有正式引入状态空间，但定义一个并不难：令状态空间 \(X\) 为 \(N\)——博弈树所有顶点的集合。设两个玩家进行序贯零和博弈。沿用 10.5.1 节的记号，\(N_1\)、\(N_2\) 分别是 \(\mathrm{P}_1\)、\(\mathrm{P}_2\) 的决策顶点。考虑 \(N\) 上的不确定 I-空间 \(\mathcal{I}_{ndet}\)，记 \(\eta\) 为不确定 I-state，于是每个 \(\eta\in\mathcal{I}_{ndet}\) 是 \(N\) 的子集。</p>
+<p>玩家做决策时可能出现许多困惑。例如某个 \(\eta\) 同时含 \(N_1\) 和 \(N_2\) 的顶点，玩家就不知道是不是轮到自己决策；若 \(\eta\) 还含叶子，博弈甚至可能已经结束而玩家浑然不觉。大多数博弈树表述避开这些奇怪的情形，通常假设玩家至少知道何时轮到自己决策，还常假设他们知道博弈进行到哪一阶段，这就从 \(\mathcal{I}_{ndet}\) 中去掉了许多集合。</p>
+<p>博弈进行时，每个玩家有自己的不确定 I-state，因为玩家可以对彼此隐藏决策。记 \(\eta_1\)、\(\eta_2\) 为 \(\mathrm{P}_1\)、\(\mathrm{P}_2\) 的不确定 I-state。对每个玩家，\(\mathcal{I}_{ndet}\) 中的许多集合被去掉：有的为了避免上面提到的困惑；我们还要求 \(\eta_i\subseteq N_i\)（\(i=1,2\)）——只关心玩家轮到自己决策时的 I-state，所以不确定 I-state 应该告诉我们 \(\mathrm{P}_i\) 面临决策时可能在 \(N_i\) 中的哪些决策顶点。令 \(\mathcal{I}_1\)、\(\mathcal{I}_2\) 为去掉所有不可能 I-state 之后 \(\mathrm{P}_1\)、\(\mathrm{P}_2\) 的不确定 I-空间。</p>
+<p>\(\mathcal{I}_1\)、\(\mathcal{I}_2\) 通常直接在博弈树上定义：把属于同一个 I-state 的顶点圈起来。它们构成树的每一层（叶子除外）顶点的划分；事实上 \(\mathcal{I}_i\) 甚至构成每个玩家的 \(N_i\) 的划分。图 11.30 对图 10.13 的例子画出了四种这样定义的信息模型。前三种直接对应 10.5.1 节允许的模型：交替行动模型里每个玩家总知道决策顶点，对应完美状态信息；阶段式模型里 \(\mathrm{P}_1\) 总知道决策顶点，\(\mathrm{P}_2\) 知道 \(\mathrm{P}_1\) 上一次在哪个顶点做决策，但不知道选了哪个分支；开环模型的信息最少：只有 \(\mathrm{P}_1\) 在博弈开始时知道自己的决策顶点，之后对选了什么动作一无所知——玩家甚至不记得自己以前的动作。图 11.30d 的信息模型不属于前三种，会出现非常奇怪的行为：若 \(\mathrm{P}_1\)、\(\mathrm{P}_2\) 一开始都选右分支，所得决策顶点是已知的；但若 \(\mathrm{P}_2\) 选了左分支，\(\mathrm{P}_1\) 就会忘记自己施加了哪个动作（就像 \(\mathrm{P}_2\) 的动作让 \(\mathrm{P}_1\) 失忆了！）。</p>
+<p><b>例 11.26（一个不寻常的信息模型）</b>：图 11.31 的博弈不符合 10.5.1 节的任何信息模型，它实际上是图 10.12 博弈的变体：部分像交替行动模型、部分像阶段式模型。这个问题可以照常自底向上求解：在 \(\mathrm{P}_2\) 决策那一层，为每个不确定 I-state 算一个值。左边 I-state 的值是 5，对应 \(\mathrm{P}_1\) 选 1、\(\mathrm{P}_2\) 回应 3；右边 I-state 的值是 4，来自 \(\mathrm{P}_1\)、\(\mathrm{P}_2\) 之间一个 \(2\times3\) 矩阵博弈的确定性鞍点。整个博弈有确定性鞍点：\(\mathrm{P}_1\) 选 3、\(\mathrm{P}_2\) 选 3，博弈值为 4。</p>
+<p>计划直接定义成 I-空间上的函数。\(\mathrm{P}_1\) 的<b>（确定性）计划</b>是 \(\mathcal{I}_1\) 上的函数 \(\pi_1\)：对每个 \(\eta_1\in\mathcal{I}_1\) 给出动作 \(u\in U(\eta_1)\)，\(U(\eta_1)\) 是从 I-state \(\eta_1\) 可以推断出的动作集合（假设 \(\eta_1\) 中所有决策顶点的这个集合都相同）。同理 \(\mathrm{P}_2\) 的（确定性）计划是 \(\mathcal{I}_2\) 上的函数 \(\pi_2\)，对每个 \(\eta_2\in\mathcal{I}_2\) 给出 \(v\in V(\eta_2)\)。</p>
+<p>用 I-空间定义随机化计划一般有两种选择。第一种是<b>全局随机化计划 globally randomized plan</b>：所有确定性计划集合上的概率分布；执行时，在开始前就按分布抽出一整个确定性计划。另一种是在每个 I-state 需要时才抽动作：记 \(W(\eta_1)\)、\(Z(\eta_2)\) 为 \(U(\eta_1)\)、\(V(\eta_2)\) 上所有概率分布的集合，\(\mathrm{P}_1\) 的<b>局部随机化计划 locally randomized plan</b> 是对每个 \(\eta_1\in\mathcal{I}_1\) 给出 \(w\in W(\eta_1)\) 的函数；同理 \(\mathrm{P}_2\) 的局部随机化计划是从 \(\mathcal{I}_2\) 到 \(Z(\eta_2)\) 的函数。表示成 I-state 函数的局部随机化计划在博弈论文献里常称为<b>行为策略 behavioral strategies</b>。</p>
+<p>在局部随机化计划空间上，并非所有序贯博弈都存在随机化鞍点。这很遗憾，因为这种随机化方式最符合执行时决策的方式。至少对阶段式模型，局部随机化计划空间上总存在随机化鞍点；对开环模型，随机化鞍点只保证在全局随机化计划下存在（10.5.1 节实际上就是这样做的）。为了理解这个问题，设博弈树是有 \(k\) 个阶段（因而 \(2k\) 层）的平衡二叉树。每个玩家有 \(2^k\) 个确定性计划，所以可以独立指定 \(2^k-1\) 个概率值（最后一个被和为 1 约束）来定义确定性计划空间上的全局随机化计划。定义局部随机化计划时，每个玩家有 \(k\) 个 I-state，每个搜索阶段一个；每个阶段在只含两个元素的动作集上定义概率分布，每个分布只有一个独立参数，所以这样指定的随机化计划只用 \(k\) 个独立参数<sup class="fn"><a href="#fn-14" id="fn-14-ref">14</a></sup>。由于 \(k\) 远小于 \(2^k-1\)，有许多全局随机化计划无法表示成局部随机化计划。可惜在某些博弈里，局部随机化的表示恰好丢掉了随机化鞍点。</p>
+<p>这个奇怪的结果主要是因为玩家会随时间<b>遗忘</b>信息。有<b>完美回忆 perfect recall</b> 的玩家记得自己的动作，也从不忘记以前知道的任何信息。Kuhn 证明：全局随机化计划空间等价于局部随机化计划空间，当且仅当玩家有完美记忆。因此只要坚持所有玩家都有完美回忆的博弈，随机化鞍点总存在于局部随机化计划空间中。Kuhn 的结果对更一般的情形（局部随机化计划空间上随机化 Nash 均衡的存在性）也成立。</p>
+<p>不确定 I-state 可以用在有更多玩家的博弈树里，相应地可以定义确定性、全局随机化、局部随机化计划。Kuhn 的结果适用于任意多个玩家：玩家有完美回忆当且仅当局部随机化策略空间上存在随机化 Nash 均衡。一般来说，最好利用这一点，把博弈树分解成更小的矩阵博弈（10.5.1 节）。允许这样做的精确条件是博弈树必须是 <b>ladder-nested</b>：存在（根以外的）决策顶点满足 (1) 要在那里决策的玩家知道自己在那个顶点（不确定 I-state 是单点）；(2) 不确定 I-state 不会离开以该顶点为根的子树（画博弈树时，子树之外的顶点不能被圈进来）。这时可以在这些特殊的决策顶点处分解博弈树，用博弈值代替子树。可惜多个 Nash 均衡的麻烦仍然存在。</p>
+<p>不确定 I-state 没有从历史 I-空间派生就直接定义了，这也许显得奇怪。其实不难定义一个传感模型，引出这一节使用的不确定 I-state。很多情况下 I-state 只用动作历史的一个子集就能表示：记 \(\tilde u_k\)、\(\tilde v_k\) 为 \(\mathrm{P}_1\)、\(\mathrm{P}_2\) 的动作历史，交替行动模型在第 \(k\) 阶段的历史 I-state 对 \(\mathrm{P}_1\) 是 \((\tilde u_{k-1},\tilde v_{k-1})\)，对 \(\mathrm{P}_2\) 是 \((\tilde u_k,\tilde v_{k-1})\)；阶段式模型对两个玩家都是 \((\tilde u_{k-1},\tilde v_{k-1})\)。这一节用的不确定 I-state 可以由这些历史推出。对其它模型（比如图 11.31），还需要一个传感模型，因为只出现关于某些动作的部分信息——这就引出下一节的表述：既有传感模型，又有状态空间。</p>
+
+<div class="widget wide" data-widget="game-tree"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>依次切换 (a)–(d)：交替行动和阶段式的值都是 1（有确定性鞍点），开环和 (d) 的上值 3、下值 1，随机化值 2——信息越少，P₁ 越吃亏（参考代码第 16 项，与第 10 章的 (10.105)(10.106) 一致）。</li>
+  <li>(d) 下看「完美回忆」：两个玩家都是「否」。P₁ 在 {LL, LR, RL} 这个 I-state 里分不清自己第一步走的是 L 还是 R——这就是书中说的「失忆」。</li>
+  <li>选「自定义」，点顶点之间的空隙把它们圈在一起或拆开：例如把第 2 层的两个 P₂ 顶点拆开，就从阶段式变成交替行动。选「例 11.26」核对值 4（P₁ 选 3、P₂ 选 3）。</li>
+</ul></div>
+
+<h3 id="s11-7-2">11.7.2 状态空间上博弈的信息空间 <span class="en">Information Spaces for Games on State Spaces</span></h3>
+<p>I-空间概念也可以纳入在状态空间上进行的序贯博弈，所得表述自然地把 11.1 节的 Formulation 11.1 推广到多个玩家。与其先讲两个玩家再推广，不如一开始就假设 \(n\) 个玩家的全部一般性。这一节的重点主要是<b>刻画</b>这类博弈的 I-空间，而不是求解；求解方法严重依赖具体的信息模型，这里不讲。</p>
+<p>和 11.7.1 节一样，每个玩家有自己的参照系，因而有自己的 I-空间。每个玩家的 I-state 表示它关于一个共同博弈状态的信息——这个状态就是 10.5 节引入的状态；但每个玩家可能有不同的观测，也可能不知道其他人的动作，所以每个决策者的 I-state 不同。完美状态感知时，这些 I-空间都塌缩成 \(X\)。</p>
+<p>设有 \(n\) 个玩家。如 10.5 节，每个玩家有自己的动作空间 \(U^i\)；但这里不允许它依赖 \(x\)，因为状态一般未知——它可以依赖 I-state。若自然动作可能干扰状态转移方程，就用 (10.120)（若有两个玩家）；否则用 (10.121)，在给定所有玩家的动作时得到可预测的未来状态。存在预测不确定性时，用单个自然动作 \(\theta\in\Theta(x,u^1,u^2,\ldots,u^n)\) 建模自然对所有玩家的影响。</p>
+<p>11.1.1 节的任何传感模型都可以在多玩家情形下定义：每个玩家有自己的观测空间 \(Y^i\) 和传感器映射 \(h^i\)；对每个玩家，自然可以通过自然传感动作 \(\Psi^i(x)\) 干扰观测。状态-动作传感器映射写作 \(y^i = h^i(x,\psi^i)\)；也可以定义状态传感器映射和基于历史的传感器映射。</p>
+<p>考虑博弈在第 \(k\) 阶段对单个玩家呈现的样子。做决策时可能有哪些信息？最一般的情形下，每个玩家有：(1) 初始条件 \(\eta_0^i\)；(2) 动作历史 \(\tilde u^i_{k-1}\)；(3) 观测历史 \(\tilde y^i_k\)。还要指定一个玩家是否知道其他玩家已施加的动作；甚至可能一个玩家收到其他玩家的观测。若 \(\mathrm{P}_i\) 收到所有这些信息，它在第 \(k\) 阶段的历史 I-state 是</p>
+<div class="eq">$$\eta^i_k = (\eta^i_0,\tilde u^1_{k-1},\tilde u^2_{k-1},\ldots,\tilde u^n_{k-1},\tilde y^1_k,\tilde y^2_k,\ldots,\tilde y^n_k). \tag{11.84}$$</div>
+<p>大多数情况下 \(\eta^i_k\) 只含 (11.84) 中历史的一个子集。典型的情形是</p>
+<div class="eq">$$\eta^i_k = (\eta^i_0,\tilde u^i_{k-1},\tilde y^i_k), \tag{11.85}$$</div>
+<p>即 \(\mathrm{P}_i\) 只知道自己的动作和观测。另一种可能是所有玩家知道已施加的所有动作，但收不到其他人的观测：</p>
+<div class="eq">$$\eta^i_k = (\eta^i_0,\tilde u^1_{k-1},\tilde u^2_{k-1},\ldots,\tilde u^n_{k-1},\tilde y^i_k). \tag{11.86}$$</div>
+<p>当然，把本章的许多例子推广可以定义许多特殊情形。例如可以定义一个有趣的<b>无传感器博弈</b>，历史 I-state 只含动作：</p>
+<div class="eq">$$\eta^i_k = (\eta^i_0,\tilde u^1_{k-1},\tilde u^2_{k-1},\ldots,\tilde u^n_{k-1}), \tag{11.87}$$</div>
+<p>或者更保密的博弈，连其他玩家的动作都不知道：</p>
+<div class="eq">$$\eta^i_k = (\eta^i_0,\tilde u^i_{k-1}). \tag{11.88}$$</div>
+<p>确定了 I-state 之后，每个玩家的历史 I-空间 \(\mathcal{I}^i_{hist}\) 定义为所有历史 I-state 的集合。一般地，可以定义 I-map 和派生 I-空间，得到每个历史 I-空间的其它简化。设所有空间都有限，到目前为止的概念可以组织成一个序贯博弈的表述，它是 Formulation 10.4 的不完美状态信息版本：</p>
+<div class="box def formulation">
+  <div class="box-title">Formulation 11.4（带 I-空间的序贯博弈 Sequential Game with I-Spaces）<sup class="fn"><a href="#fn-15" id="fn-15-ref">15</a></sup></div>
+  <ol>
+    <li>\(n\) 个玩家 \(\mathrm{P}_1,\mathrm{P}_2,\ldots,\mathrm{P}_n\)。</li>
+    <li>非空有限<b>状态空间</b> \(X\)。</li>
+    <li>每个 \(\mathrm{P}_i\) 有有限<b>动作空间</b> \(U^i\)；也允许更一般的定义：可选的动作依赖历史 I-state，写作 \(U^i(\eta^i)\)。</li>
+    <li>对每个 \(x\in X\) 和 \(1\le i\le n\) 的 \(u^i\in U^i\)，有限的<b>自然动作空间</b> \(\Theta(x,u^1,\ldots,u^n)\)。</li>
+    <li><b>状态转移函数</b> \(f\)：对每个 \(x\in X\)、\(\theta\in\Theta(x,u^1,\ldots,u^n)\)、\(1\le i\le n\) 的 \(u^i\in U^i\)，给出状态 \(f(x,u^1,\ldots,u^n,\theta)\)。</li>
+    <li>每个 \(\mathrm{P}_i\) 有有限<b>观测空间</b> \(Y^i\)。</li>
+    <li>每个 \(\mathrm{P}_i\) 对每个 \(x\in X\) 有有限的<b>自然传感动作空间</b> \(\Psi^i(x)\)。</li>
+    <li>每个 \(\mathrm{P}_i\) 有<b>传感器映射</b> \(h^i\)：对每个 \(x\in X\)、\(\psi^i\in\Psi^i(x)\) 给出观测 \(y = h^i(x,\psi^i)\)。（这里假设状态-自然传感器映射；也可以换成 11.1.1 节的状态传感器映射或基于历史的映射。）</li>
+    <li>\(K\) 个<b>阶段</b>，从 \(k=1\) 开始、在 \(k=K\) 结束；令 \(F = K+1\)。</li>
+    <li>每个 \(\mathrm{P}_i\) 有<b>初始条件</b> \(\eta^i_0\)，是<b>初始条件空间</b> \(\mathcal{I}^i_0\) 的元素。</li>
+    <li>每个 \(\mathrm{P}_i\) 有<b>历史 I-空间</b> \(\mathcal{I}^i_{hist}\)：由动作历史和观测历史组成的所有历史 I-state 的集合，可以含其他玩家的历史。</li>
+    <li>每个 \(\mathrm{P}_i\) 有阶段可加的代价泛函
+      <div class="eq">$$L^i(\tilde x_F,\tilde u^1_K,\ldots,\tilde u^n_K) = \sum_{k=1}^{K}l^i(x_k,u^1_k,\ldots,u^n_k)+l^i_F(x_F). \tag{11.89}$$</div></li>
+  </ol>
+</div>
+<p>存在一个或多个连续空间时的推广见博弈论文献；加入目标集合和终止条件、让阶段无限进行也不难。Formulation 11.4 一个有趣的特例是所有玩家的代价函数相同。这<b>不</b>等价于只有一个玩家，因为玩家的 I-state 不同。例如一个任务可能要几个机器人去找宝藏，但它们之间通信有限，于是 I-state 不同：它们都想合作，却在不知道状态的情况下无法合作。这类问题属于<b>团队理论 team theory</b>。</p>
+<p>和 Formulation 10.4 的博弈一样，每个玩家有自己的计划。由于玩家不一定知道状态，决策基于 I-state。确定性计划、全局随机化计划、局部随机化计划的定义与 11.7.1 节基本相同，唯一的区别是这里定义了更一般的 I-空间。可以为 Formulation 11.4 的一般博弈定义鞍点、Nash 均衡等各种解概念；局部随机化鞍点和 Nash 均衡的存在性一般依赖具体的信息模型。</p>
+<p><b>例 11.27（战舰 Battleship）</b>：许多有趣的 I-空间来自经典棋盘游戏。这里简要说明战舰：交替轮流模型下的序贯博弈。两个玩家 \(\mathrm{P}_1\)、\(\mathrm{P}_2\) 各有一组战舰，秘密地布在 \(10\times10\) 的网格上（图 11.32）。状态指定双方网格上所有战舰的确切位置，状态空间给出两个玩家所有可能的战舰布局。每个玩家总知道自己战舰的位置；战舰一旦布好就不能移动。玩家轮流猜一个网格（用行和列表示），猜它是否有船。可能的观测是「中 hit」和「不中 miss」，取决于那个位置是否有船。每回合猜一次，双方轮流进行，直到某个玩家对每个被船占据的格子都观测到「中」。这个游戏有意思的地方在于：一旦发现「中」，就应该在附近继续找，因为同一艘船占着几个相邻的格子；唯一的问题是船的精确位置和朝向未知。好的玩家实质上是在用不确定 I-state 来提高下一次命中的机会。</p>
+<p><b>例 11.28（公主与怪物 The Princess and the Monster）</b>：博弈论里一个不涉及感知的经典例子。公主和怪物在一个二维环境里移动，假设简单的运动模型，例如在网格上走单步。公主想不被怪物发现，游戏在完全的黑暗中进行；怪物和公主处在同一个网格点时游戏结束。游戏中没有任何可用的反馈，但可以为玩家构造不确定 I-state。对大多数环境，怪物不可能保证获胜；但对某些环境，它能保证成功。这个例子可以看作一种特殊的<b>追逃博弈 pursuit-evasion game</b>；12.4 节讲一个涉及 I-空间的连续时间追逃博弈。</p>
+
+<div class="widget wide" data-widget="battleship"></div>
+<div class="box intuition"><div class="box-title">试一试（补充：7×7 小棋盘，船长 4、3、2，只玩一方猜）</div><ul>
+  <li>开局 I-state 有 205 692 个布局，格子的颜色是「多少比例的相容布局在这里有船」——中间格子最深。打中一格后，四周立刻变深：这就是书中说的「在附近继续找」。</li>
+  <li>连点「替我选」：它总挑 I-state 里最常有船的格子（习题 21 的一种简单策略），通常 20 发左右打完。</li>
+  <li>注意「I-state 只剩一个布局」的提示：有时你已经知道了所有船的位置，却还没把它们全打中——这就是习题 17 的答案。</li>
+</ul></div>
+</section>
+
+<!-- ============================================================ 延伸阅读 -->
+<section id="further">
+<h2>延伸阅读</h2>
+<p>信息空间的基本概念可以追溯到 Kuhn 在博弈树方面的工作，在那里不确定 I-state 称为<b>信息集 information set</b>。这个概念在博弈论里传开之后，又被借用到随机控制理论中。「信息空间」一词在序贯博弈与微分博弈中被大量使用。人工智能文献里，I-state 称为<b>信念状态 belief states</b>，在 POMDP 的研究中特别重要。控制理论中的<b>可观测性问题 observability problem</b> 也产生了 I-空间：<b>观测器 observers</b> 用来从历史 I-state 重建当前状态。机器人学文献中它们被称为<b>超状态 hyperstates</b> 和<b>知识状态 knowledge states</b>；与 I-空间密切相关的概念还有<b>感知等价类 perceptual equivalence classes</b> 和 Donald 的<b>信息不变量 information invariants</b> 框架。I-空间曾被提议作为表示感知不确定下规划的一般方式。卡尔曼滤波在许多教材中有详细介绍，原始文献是 Kalman 1960 年的论文；粒子滤波另有专门的教程与专著。</p>
+</section>
+
+<!-- ============================================================ 末尾 -->
+<section id="cheatsheet">
+<h2>本章速查表</h2>
+<div class="table-wrap">
+<table class="data">
+  <thead><tr><th style="width:9em">概念</th><th>要点</th></tr></thead>
+  <tbody>
+    <tr><td>三种传感器映射</td><td>\(h(x)\)；\(h(x,\psi)\)，\(\psi\in\Psi(x)\)；基于历史 \(h_k(x_1..x_k,\psi_k)\) (11.1)。</td></tr>
+    <tr><td>原像</td><td>(11.6) \(H(y)=\{x\mid y=h(x)\}\) 构成划分；(11.11) 有 \(\psi\) 时可重叠、不是划分。</td></tr>
+    <tr><td>历史 I-state</td><td>(11.14) \(\eta_k=(\eta_0,\tilde u_{k-1},\tilde y_k)\)；(11.15) 递推；\(\mathcal{I}_k=\mathcal{I}_0\times\tilde U_{k-1}\times\tilde Y_k\)，\(\mathcal{I}_{hist}\) 是<b>并</b> (11.19)。</td></tr>
+    <tr><td>初始条件</td><td>已知 \(x_1\)；集合 \(X_1\)（\(\mathcal{I}_0\subseteq\operatorname{pow}(X)\)）；分布 \(P(x_1)\)（\(\mathcal{I}_0\subseteq\mathcal{P}(X)\)）。</td></tr>
+    <tr><td>计划与代价</td><td>\(\pi:\mathcal{I}_{hist}\to U\) (11.20)；最坏情况 (11.22)，期望 (11.23)。</td></tr>
+    <tr><td>I-空间 = 状态空间</td><td>I-state 总是已知的；\(\eta_{k+1}=f_{\mathcal{I}}(\eta_k,u_k,y_{k+1})\) (11.25)，\(y_{k+1}\) 扮演 \(\theta_k\) 的角色。</td></tr>
+    <tr><td>I-map 与充分性</td><td>\(\kappa:\mathcal{I}_{hist}\to\mathcal{I}_{der}\)；充分 ⇔ \(\kappa(\eta_{k+1})\) 只由 \(\kappa(\eta_k),u_k,y_{k+1}\) 决定 (11.27)；充分性是相对的。</td></tr>
+    <tr><td>不确定 I-state</td><td>(11.28) \(F\)；(11.29) \(X_1\cap H(y_1)\)；(11.30) \(\cup F\)；(11.31) \(\cap H(y_{k+1})\)；\(\mathcal{I}_{ndet}=\operatorname{pow}(X)\)，充分。</td></tr>
+    <tr><td>概率 I-state</td><td>(11.35)(11.36) 贝叶斯；(11.38) 边缘化（预测）；(11.39) 贝叶斯（修正）；\(\mathcal{I}_{prob}\) = \((n-1)\)-单纯形，充分。</td></tr>
+    <tr><td>有限记忆</td><td>(11.41) 前 \(i\) 阶段；传感器反馈 \(\pi:Y\to U\)（反应式），充分但短视。</td></tr>
+    <tr><td>例 11.15–11.17</td><td>符号传感器 (11.43)；目标可识别性（区间宽 11）；L 形走廊：\(\kappa_{stage}\)、\(\kappa_3\)（不充分）、\(\kappa_{19}\)（充分）。</td></tr>
+    <tr><td>NFA</td><td>输入串 = 无反馈计划；\(\mathcal{I}_{ndet}\) 上规划；接受 ⇔ \(X\cap X_G\ne\emptyset\)；子集构造 = DFA（\(2^n\) 个状态）。</td></tr>
+    <tr><td>连续情形</td><td>(11.56)–(11.58) 用密度和积分；连续时间 (11.53)–(11.55)、(11.66)。</td></tr>
+    <tr><td>近似</td><td>保守近似 (11.60)(11.61)，必须 \(\hat X'\subseteq\hat X\)；球 \(n+1\)、椭球 \(\binom n2+2n\) 个参数；矩近似 = 高斯，\(\kappa_{mom}\) 一般不充分。</td></tr>
+    <tr><td>传感器目录</td><td>线性 \(y=Cx+W\psi\) (11.70)；投影（位置、指南针）；边界（接触、接近）；地标（归航、盖革、区域）；深度（声呐、扫描、间隙）；里程计（基于历史）。</td></tr>
+    <tr><td>卡尔曼滤波</td><td>LG 模型：\(\mathcal{I}_{gauss}\) 精确、充分；(11.80) 均值，(11.81) 预测协方差，(11.82) 修正协方差，(11.83) 增益（\(H\Sigma_\psi H^T\)）。</td></tr>
+    <tr><td>采样方法</td><td>网格：Voronoi 桶 + 离散 (11.38)(11.39)；粒子：按 \(P_k\) 选 → 按运动模型采样 → 权重 \(p(y|x)\) → 归一化。</td></tr>
+    <tr><td>博弈中的 I-空间</td><td>圈顶点 = 不确定 I-state；全局 vs 局部随机化（行为策略）；完美回忆 ⇔ 两者等价（Kuhn）；Formulation 11.4、(11.84)–(11.88)。</td></tr>
+  </tbody>
+</table>
+</div>
+</section>
+
+<section id="pitfalls">
+<h2>常见陷阱</h2>
+<ol>
+  <li><b>把 \(\mathcal{I}_{hist}\) 当成笛卡儿积</b>：它是不同长度历史的<b>并</b> (11.18)(11.19)。</li>
+  <li><b>以为状态未知 = 什么都不知道</b>：I-state 永远已知。把问题搬进 I-空间，就是在一个更大的空间里做完美信息规划。</li>
+  <li><b>(11.30) 与 (11.31) 的顺序</b>：先对所有可能的 \(x_k\) 取 \(F\) 的并（预测），再与 \(H(y_{k+1})\) 求交（修正）。漏掉并，会把自然的干扰忘掉。</li>
+  <li><b>把「充分」理解成「够用」</b>：充分只是说派生 I-state 能自我更新。只记阶段号的 \(\kappa_{stage}\) 也充分，但只能表示开环计划；反过来，不充分的 \(\kappa_3\) 却能写出更小的计划。</li>
+  <li><b>估计状态就够了</b>：例 11.11——估计相同的历史可能需要不同的动作（比如协方差不同）。LQG 里最优计划只用 \(\mu_k\)，但更新 \(\mu_k\) 仍需要 \(\Sigma_k\)。</li>
+  <li><b>原像只看一个观测</b>：\(X_k(\eta_k)\subseteq H(y_k)\) 只是粗略的界；把动作和以前的观测考虑进来，集合可能小得多（例 11.17 甚至没有观测）。</li>
+  <li><b>保守近似不保守</b>：(11.60) 之后选的 \(\hat X_{k+1}\) 必须包含 \(\hat X'_{k+1}\)，否则真实状态可能被近似「排除」——比如机器人以为自己不可能碰撞。</li>
+  <li><b>多峰分布用高斯近似</b>：均值可能落在概率几乎为零的地方（粒子滤波互动图）。</li>
+  <li><b>NFA 的接受条件</b>：只要求「至少一个可能状态在 \(X_G\)」，比最坏情况分析的「所有可能状态都在 \(X_G\)」弱得多。</li>
+  <li><b>卡尔曼增益里漏掉转置</b>：照抄原书 (11.83) 的 \(H_k\Sigma_\psi H_k\)，\(H\) 不对称时结果是错的。</li>
+  <li><b>博弈里以为随机化总能写成每个 I-state 上的分布</b>：没有完美回忆时，局部随机化（行为策略）可能达不到全局随机化的值。</li>
+</ol>
+</section>
+
+<section id="exercises">
+<h2>习题导引</h2>
+<p class="small muted">只给思路，不给完整解答。标「互动」的可以先在本页对应的图里做实验。</p>
+<ol>
+  <li><b>\(\mathcal{I}_{ndet}\) 中的前向投影</b>：一阶段的就是 (11.30) 再加上对所有可能 \(y_{k+1}\) 的考虑（参照 10.1.2 节的写法）；两阶段的把 (11.30) 嵌套两次。</li>
+  <li><b>\(\mathcal{I}_{prob}\) 中的前向投影</b>：一阶段的就是 (11.38)；两阶段的对中间状态再边缘化一次。互动：「概率 I-state 在单纯形上」里只点动作不点观测。</li>
+  <li><b>\(\mathcal{I}_{hist}\) 上的强 / 弱反向投影</b>：给定 \(\eta_k\)，所有满足 \(f_{\mathcal{I}}(\eta_{k-1},u,y) = \eta_k\) 的 \(\eta_{k-1}\)——历史只是在末尾接东西，所以反向投影几乎是平凡的（去掉最后的 \(u_{k-1}\)、\(y_k\)）。想想「强」「弱」在这里有没有区别。</li>
+  <li><b>NFA → DFA</b>：(a) 用子集构造（互动：「NFA」右图就是答案的可达部分）；(b) 把 DFA 的状态当作 Formulation 2.1 的状态，接受状态当目标。</li>
+  <li><b>例 11.14 的概率 I-state</b>：先按脚注 16 更正数据（行 = 当前状态、(11.92) 的 5/5 改成 4/5、下标减 1），然后交替用 (11.39) 和 (11.38)。互动：「回放习题 5 的历史」。</li>
+  <li><b>例 11.7 的可达性</b>：不确定 I-state 总是 \(\{y-1,y,y+1\}\) 的子集，而且是连续整数段；比如 {0, 2} 永远到不了。想想没有动作时 I-state 怎样随观测变化。</li>
+  <li><b>图 11.33a 的图</b>：仿照例 11.21，按观测坐标的区间把 I-state 分「层」，再在两个竖直对齐的顶点处讨论转移；利用上下对称性减少情形。互动：「图上的点」的转移规则是模板。</li>
+  <li><b>例 11.17 的三个派生 I-state</b>：\(\kappa_3\) 就是答案（不充分但能写出计划）。</li>
+  <li><b>图 11.33b</b>：仿照 \(\kappa_{19}\)：每条分支走廊各一组「l」型标签，用「离死胡同还有几格」作下标；(b) 仿照 \(\kappa_3\)。</li>
+  <li><b>\(\kappa_2\circ\kappa_1\) 是否相对 \(\mathcal{I}_1\) 充分</b>：把两个派生信息转移方程复合起来看。提示：\(\kappa_2(\kappa_1(\eta_{k+1})) = \kappa_2(f_{\mathcal{I}_2}(\kappa_1(\eta_k),u_k,y_{k+1}))\)，再用 \(\kappa_2\) 的充分性。</li>
+  <li><b>例 11.16 用更少的不确定 I-state</b>：I-state 是长度 ≤ 11 的区间；只需要记「区间相对目标的位置」，或者干脆找一个传感器反馈计划（互动：「整数线」里看计划只用了什么信息）。</li>
+  <li><b>三个归航信标</b>：(a) 两个方向确定两条直线，交于一点；不共线保证第三条用来排除退化情形。(b) 两个信标时，位于两信标连线上的点无法确定（两条线重合）。互动：「传感器目录」的「三个归航信标」。</li>
+  <li><b>例 11.23 的不确定 I-state</b>：(a) 归纳：凸区域与环形扇区的闵可夫斯基并、再与圆盘求交，边界只会产生圆弧和线段；连通性来自 \(F\) 的连通与交集的形状。(b) 用圆弧和线段的边界表示做增量计算。互动：「简单移动机器人」。</li>
+  <li><b>托盘倾斜的规划算法</b>：在 \(\mathcal{I}_{ndet}\) 上做广度优先搜索（互动：「托盘倾斜」就是这样做的）；对单连通直角多边形，想想哪些位置能作为目标、为什么所有可能的球会合并。</li>
+  <li><b>把 11.7.2 节推广到连续时间</b>：仿照 (11.53)(11.54) 为每个玩家定义 \(\eta^i_t\)，代价用 (11.55) 的积分形式。</li>
+  <li><b>「我从哪里来？」</b>：(a) 反向使用 (11.30)(11.31)：从 \(X_k(\eta_k)\) 往回推，求所有与整段历史相容的 \(x_1\)；(b) 概率情形用平滑（前向-后向）思想：\(P(x_1|\eta_k)\propto P(x_1)\,P(\tilde y_k\mid x_1,\tilde u_{k-1})\)。</li>
+  <li><b>战舰</b>：可能——当不确定 I-state 只剩一个布局时（互动：「战舰」会提示）。</li>
+  <li><b>21 点算牌</b>：历史 I-state 是已出的全部牌；I-map 把它压成计数（如高低牌之差与剩余牌数），计划依赖这个计数。</li>
+  <li>–21. <b>实现题</b>：19 → 「卡尔曼滤波」；20 → 「网格法、粒子滤波与矩近似」（推广到二维多边形）；21 → 「战舰」的「替我选」就是一个基于不确定 I-state 的简单策略。</li>
+</ol>
+</section>
+
+<section id="notes">
+<h2>脚注：原书笔误</h2>
+<div class="box small">
+  <p id="fn-ux" style="margin:0 0 6px"><b>注</b>　原书脚注：这样的问题可能很有意思，但书中不考虑。<a href="#fn-ux-ref">↩</a></p>
+  <p id="fn-nfa0" style="margin:0 0 6px"><b>注</b>　原书脚注：一个值得注意的例外是非确定有限自动机理论——所有机器的副本都可能死掉，没有任何可能的当前状态（11.3.2 节）。<a href="#fn-nfa0-ref">↩</a></p>
+  <p id="fn-1" style="margin:0 0 6px"><sup>1</sup> 第 567 页：原书写「a typical situation is \(\mathcal{I}_0=\operatorname{pow}(x)\)」和「in which \(\mathcal{P}(x)\) is the set of all probability distributions over \(X\)」，括号里应是大写的 \(X\)（小写 \(x\) 是单个状态）。<a href="#fn-1-ref">↩</a></p>
+  <p id="fn-misc" style="margin:0 0 6px"><b>注</b>　几处小笔误：第 573 页例 11.12「refereed to as an open-loop plan」应为 referred；第 595 页「followed by applying \(\mathcal{I}_{app}\) to yield a bounding region」「\(\mathcal{I}_{app}\) is usually not a sufficient I-map」中的 \(\mathcal{I}_{app}\) 是派生 I-空间，施加的应是 I-map \(\kappa_{app}\)。<a href="#fn-misc-ref">↩</a> <a href="#fn-misc2-ref">↩</a></p>
+  <p id="fn-2" style="margin:0 0 6px"><sup>2</sup> 第 581 页 (11.41) 之后：原书写「for any integer \(i>0\) and \(k>i\). If \(i\le k\), then the derived I-state is the full history I-state」。这与前半句的 \(k>i\) 矛盾；记忆长度 \(i\) 不短于已有的历史时才保留了完整历史，应为 \(i\ge k\)。<a href="#fn-2-ref">↩</a></p>
+  <p id="fn-3" style="margin:0 0 6px"><sup>3</sup> 第 582 页例 11.15：按 (11.42)，\(\eta_5=(X,-1,1,1,-1,1,1,1,1,0)\) 的动作是 \((-1,1,1,-1)\)，观测是 \((1,1,1,1,0)\)。动作之和为 0，所以 \(x_5=x_1\)；而 \(y_1=1\) 说明 \(x_1>0\)，\(y_5=0\) 却说 \(x_5=0\)——矛盾。它是 \(\mathcal{I}_{hist}\) 的元素，但执行中不可能出现。换成动作 \((-1,-1,-1,-1)\) 就可以：只有 \(x_1=4\) 能产生它（参考代码第 6 项枚举了 \(x_1\in[-50,50]\)）。<a href="#fn-3-ref">↩</a></p>
+  <p id="fn-4" style="margin:0 0 6px"><sup>4</sup> 第 584 页例 11.17：(11.46) 左边印作 \(X(\eta)\)，按上下文是 I-map 的值，应为 \(\kappa_3(X(\eta))\)。同页「after nine or more stages, it is known that \(\eta_k=\{(1,1)\}\)」也是记号混用：\(\eta_k\) 是历史，等于 \(\{(1,1)\}\) 的是不确定 I-state \(X(\eta_k)\)。<a href="#fn-4-ref">↩</a> <a href="#fn-4b-ref">↩</a></p>
+  <p id="fn-5" style="margin:0 0 6px"><sup>5</sup> 第 588–589 页例 11.19：原书写「can be expressed using Formulation 11.2. The components are … \(x_0=a\), and \(F=\{a\}\)」。这里讨论的是规划版本 Formulation 11.3，而 \(F\) 是状态转移函数（紧接着就给出 \(F(x,u)\) 的表），目标集合应写 \(X_G=\{a\}\)。(11.51) 的左边印作 \(X(\eta)\)，它列出的是整个不确定 I-空间，应为 \(\mathcal{I}_{ndet}\)。<a href="#fn-5-ref">↩</a></p>
+  <p id="fn-6" style="margin:0 0 6px"><sup>6</sup> 第 590 页：原书写「specifying a point in \(\mathbb{R}^{n-1}\) for which \(p_1+\cdots+p_{n-2}\le1\) and then choosing the final coordinate as \(p_{n-1}=1-p_1+\cdots+p_{n-2}\)」。坐标从 \(p_0\) 开始，而且减号要作用在整个和上，应为 \(p_0+\cdots+p_{n-2}\le1\)、\(p_{n-1}=1-p_0-\cdots-p_{n-2}\)（\(n=3\) 时就是例 11.14 的 \(p_2=1-p_0-p_1\)）。<a href="#fn-6-ref">↩</a></p>
+  <p id="fn-7" style="margin:0 0 6px"><sup>7</sup> 第 591 页：原书写「a subset \(X_1\in X\) is given」，应为 \(X_1\subseteq X\)。紧接着「if \(X=[0,1]\) and any subset is possible …, then \(\mathcal{I}_0=\operatorname{pow}(\mathbb{R})\)」严格说应是 \(\operatorname{pow}([0,1])\)（两者基数相同，结论「基数比 \(\mathbb{R}\) 高」不受影响）。<a href="#fn-7-ref">↩</a></p>
+  <p id="fn-8" style="margin:0 0 6px"><sup>8</sup> 第 597 页 (11.63)（严格说）：\(\int x_ix_jp(x|\eta)dx\) 是<b>原点</b>二阶矩 \(E[x_ix_j]\)；协方差通常指中心二阶矩 \(\int(x_i-\bar x_i)(x_j-\bar x_j)p(x|\eta)dx = E[x_ix_j]-\bar x_i\bar x_j\)。两者只差由均值决定的一项，所以「用一阶、二阶矩」得到的 \(\mathcal{I}_{mom}\) 维数和信息量都不变，但 (11.64) 的 \(\Sigma\) 若要当作高斯 (11.68) 的协方差，必须用中心矩。<a href="#fn-8-ref">↩</a></p>
+  <p id="fn-9" style="margin:0 0 6px"><sup>9</sup> 第 600 页 (11.68)：原书指数是 \(-\tfrac12\psi^T\Sigma\psi\)。多元高斯的指数应含协方差的<b>逆</b>：\(-\tfrac12\psi^T\Sigma^{-1}\psi\)（\(n=1\) 时就是 \(e^{-\psi^2/(2\sigma^2)}\)，而不是 \(e^{-\sigma^2\psi^2/2}\)）。(11.69) 只是一般二次型的展开，用于 \(\Sigma^{-1}\) 时 \(\sigma_{i,j}\) 应理解为 \(\Sigma^{-1}\) 的元素。本页已按正确形式写出 (11.68)。<a href="#fn-9-ref">↩</a></p>
+  <p id="fn-10" style="margin:0 0 6px"><sup>10</sup> 第 603 页：原书 \(h(x)=\operatorname{atan2}(l_1-x_1,l_2-x_2)\)。第 3 章 (3.47) 用的约定是 \(\operatorname{atan2}(\text{纵},\text{横})\)（如 \(\alpha=\operatorname{atan2}(r_{21},r_{11})\)），按这个约定，从 \(x_1\) 轴逆时针量起的方向角应是 \(\operatorname{atan2}(l_2-x_2,l_1-x_1)\)。书中写法给出的是从 \(x_2\) 轴量起、顺时针方向的角，两者差一个固定的双射，作为 \(\mathbb{S}^1\) 上的读数信息量相同，所以只是约定不一致。<a href="#fn-10-ref">↩</a></p>
+  <p id="fn-11" style="margin:0 0 6px"><sup>11</sup> 第 608 页例 11.20：原书写「If \(y\) remains within \((0,1)\)」和「reaches an extremum, which results in \(y=0\) or \(y=1\)」。正弦曲线的极值是 \(\pm1\)（同一段稍后就说「continues until \(y=-1\)」，图 11.19 的图注也是「\(y=1\) or \(y=-1\)」），应为 \((-1,1)\) 与 \(y=-1\) 或 \(y=1\)。<a href="#fn-11-ref">↩</a></p>
+  <p id="fn-12" style="margin:0 0 6px"><sup>12</sup> 第 609 页例 11.21：原书两次写「the I-state shown in the bottom right of Figure 11.20」「from the I-state on the lower left of Figure 11.20」。I-state 的八块画在图 11.21 里（图 11.20 是图本身），应为图 11.21。<a href="#fn-12-ref">↩</a></p>
+  <p id="fn-13" style="margin:0 0 6px"><sup>13</sup> 第 618 页 (11.83)：原书印作 \(\big(C_k\Sigma'_kC_k^T+H_k\Sigma_\psi H_k\big)^{-1}\)，最后的 \(H_k\) 少了转置。观测噪声 \(H_k\psi_k\) 的协方差是 \(H_k\Sigma_\psi H_k^T\)，与 (11.79) 的 \(H_1\Sigma_\psi H_1^T\) 一致。参考代码第 14 项用例 11.25 的矩阵和一个不对称的 \(H\) 核对：带转置时与直接做高斯条件化的差为 \(10^{-15}\) 量级，照印的写法差约 0.09。<a href="#fn-13-ref">↩</a></p>
+  <p id="fn-14" style="margin:0 0 6px"><sup>14</sup> 第 623 页：原书写「A randomized plan is specified in this way using \(k-1\) independent parameters. Since \(k-1\) is much less than \(2^k-1\) …」。前一句刚说每个玩家有 \(k\) 个 I-state、每个 I-state 上的分布有一个独立参数，所以应是 \(k\) 个参数（结论「远小于 \(2^k-1\)」不变）。<a href="#fn-14-ref">↩</a></p>
+  <p id="fn-15" style="margin:0 0 6px"><sup>15</sup> 第 626 页 Formulation 11.4：第 4 条「for each \(i\) such that \(1\le i\le m\)」应为 \(1\le i\le n\)（\(n\) 是玩家数）；第 5 条「\(\theta\in\Theta(x,u)\)」应为 \(\Theta(x,u^1,\ldots,u^n)\)；(11.89) 左边「\(\tilde u^1_K,\ldots,\tilde u^2_K\)」应到 \(\tilde u^n_K\)，右边的 \(l\)、\(l_F\) 应带上标 \(i\)——否则所有玩家的代价相同，就成了下文专门讨论的「团队」特例。本页已按更正后的形式写出。<a href="#fn-15-ref">↩</a></p>
+  <p id="fn-16" style="margin:0"><sup>16</sup> 第 629–630 页习题 5：(a)「the \(i\)th entry in the vector indicates \(P(x_1=i+1)\)」——状态是 0、1、2，第 \(i\) 个分量应是 \(P(x_1=i-1)\)；观测向量「the \(i\)th component yields \(P(y_k=i\mid x_k)\)」同理应为 \(y_k=i-1\)。(b)「The \(j\)th entry of the \(i\)th row yields \(P(x_{k+1}=i\mid x_k=j,u_k=0)\)」：但 (11.91) 每<b>行</b>的和为 1，每列的和却是 9/10、6/5、9/10，所以行对应<b>当前</b>状态 \(x_k\)、列对应 \(x_{k+1}\)。(c) (11.92) 第一行印作 \((1/10,\ 5/5,\ 1/10)\)，和为 6/5；应为 \(4/5\)。按这些更正，参考代码第 5 项算出 \(P(x_3|\eta_3)=(172,650,347)/1169\approx(0.147,0.556,0.297)\)。<a href="#fn-16-ref">↩</a></p>
+</div>
+</section>
+
+<nav class="pager">
+  <a href="ch10-sequential-decision-theory.html"><span class="dir">← 上一章</span>第 10 章 序贯决策论</a>
+  <a class="next" href="../index.html"><span class="dir">回到首页 →</span>全书路线图与进度</a>
+</nav>
+
+<footer class="page-foot">
+  内容依据 Steven M. LaValle《Planning Algorithms》（Cambridge University Press, 2006）Part III 第 11 章整理与讲解，原书可在 <a href="https://lavalle.pl/planning/ch11.pdf" target="_blank" rel="noopener">lavalle.pl/planning/ch11.pdf</a> 免费阅读。互动图为学习辅助，标「补充」的内容不是书中原文；数值例子由 <a href="code/ch11_information_spaces.py">part3/code/ch11_information_spaces.py</a> 核对。
+</footer>
+
+</main>
+</div>
+</body>
+</html>

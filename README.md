@@ -35,6 +35,7 @@ Planning Algorithm/
 | 8 | 反馈运动规划 Feedback Motion Planning | [part2/ch8-feedback-motion-planning.html](part2/ch8-feedback-motion-planning.html) |
 | 9 | 基本决策论 Basic Decision Theory | [part3/ch9-basic-decision-theory.html](part3/ch9-basic-decision-theory.html) |
 | 10 | 序贯决策论 Sequential Decision Theory | [part3/ch10-sequential-decision-theory.html](part3/ch10-sequential-decision-theory.html) |
+| 11 | 传感器与信息空间 Sensors and Information Spaces | [part3/ch11-sensors-and-information-spaces.html](part3/ch11-sensors-and-information-spaces.html) |
 
 ## 新增一章
 
