@@ -21,6 +21,8 @@
  14. 8.5.2：(8.58) 的 α：原书写法在 x = s_{i+1} 处不为 0；多线性插值 vs 单纯形插值
  15. 8.5.2：带插值的值迭代（无障碍时与欧氏距离对照；Δt 太小时点目标让所有值保持 ∞）
  16. 8.5.2：教程「带插值的值迭代」互动图的默认场景：值迭代 vs 类 Dijkstra 的求值次数与结果差异
+ 17. 8.4.4：教程「加速度控制模型」互动图：拐弯过渡宽度 w、a_max 与能否到达
+ 18. 8.4.4：教程「调和势函数」互动图的 64×40 网格：两种边界条件下 Gauss–Seidel 的轮数
 """
 import heapq
 import math
@@ -726,7 +728,7 @@ def section12():
             if dist[i] < INF and visible(x, P[i], P):
                 best = min(best, dist[i] + math.dist(x, P[i]))
         return best
-    for x in ((0.3, 0.2), (0.8, 0.3), (0.8, 0.7), (0.3, 0.85)):
+    for x in ((0.3, 0.2), (0.8, 0.3), (0.8, 0.7), (0.3, 0.85), (0.82, 0.66)):
         print(f"    φ{x} = {phi(x):.4f}")
 
 
@@ -1095,6 +1097,107 @@ def section16():
     print("    （偏高的样本：最优动作落点的插值邻居比它自己更晚出队，它出队时用的还是邻居的临时值）")
 
 
+# ====================================================================== 17 加速度控制模型
+L_REGION = [(0.05, 0.1), (0.75, 0.1), (0.75, 0.92), (0.55, 0.92), (0.55, 0.3), (0.05, 0.3)]
+
+
+def accel_sim(w, v, amax, K=8.0, start=(0.1, 0.2), xc=0.62, yG=0.86):
+    """与 ch8-dynamics.js 的 AccelControl 相同：ẍ = u，u = K(f(x) − ẋ) + ∇_ẋ f(x)，‖u‖ 截断到 a_max。"""
+    def psi(x):
+        if w <= 0:
+            return math.pi / 2 if x >= xc else 0.0
+        t = min(1.0, max(0.0, (x - (xc - w / 2)) / w))
+        return math.pi / 2 * t * t * (3 - 2 * t)
+
+    def dpsi(x):
+        if w <= 0:
+            return 0.0
+        t = (x - (xc - w / 2)) / w
+        return 0.0 if t <= 0 or t >= 1 else math.pi / 2 * 6 * t * (1 - t) / w
+    g = lambda y: min(1.0, max(0.0, (yG - y) / 0.18))
+    dg = lambda y: -1 / 0.18 if yG - 0.18 < y < yG else 0.0
+
+    def f(p):
+        sp, a = v * g(p[1]), psi(p[0])
+        return (sp * math.cos(a), sp * math.sin(a))
+    x = start
+    xd = f(x)
+    t = 0.0
+    dt = 0.002
+    while True:
+        fx = f(x)
+        a = psi(x[0])
+        t1 = v * dg(x[1]) * xd[1]
+        t2 = v * g(x[1]) * dpsi(x[0]) * xd[0]
+        gr = (t1 * math.cos(a) - t2 * math.sin(a), t1 * math.sin(a) + t2 * math.cos(a))
+        u = (K * (fx[0] - xd[0]) + gr[0], K * (fx[1] - xd[1]) + gr[1])
+        nu = math.hypot(*u)
+        if nu > amax:
+            u = (u[0] / nu * amax, u[1] / nu * amax)
+        xd = (xd[0] + u[0] * dt, xd[1] + u[1] * dt)
+        x = (x[0] + xd[0] * dt, x[1] + xd[1] * dt)
+        t += dt
+        if not in_poly_js(x, L_REGION):
+            return "撞墙", t
+        if x[1] > yG - 0.02 and math.hypot(*xd) < 0.01:
+            return "到达", t
+        if t > 30:
+            return "超时", t
+
+
+def section17():
+    print("\n17. 加速度控制模型（教程互动图）：|f| = 0.35，K = 8")
+    for (w, amax) in ((0, 0.5), (0.06, 0.5), (0.12, 0.5), (0.18, 0.5), (0.24, 0.5), (0, 0.6), (0, 0.7)):
+        res, t = accel_sim(w, 0.35, amax)
+        C = 0.35 * math.pi / 2 * 1.5 / w if w > 0 else INF
+        print(f"    w = {w:.2f}（C = {C:.2f}，C·|f| = {C*0.35:.2f}），a_max = {amax}: {res}（t = {t:.1f}）")
+    print("    （C·|f| 都大于 a_max：加速度会饱和，但过渡越平缓，偏离越小；不连续的场需要无穷大的加速度）")
+
+
+# ====================================================================== 18 调和势函数（互动图的网格）
+def section18():
+    print("\n18. 调和势函数（教程互动图）：64×40 网格，目标格 (58, 8)")
+    NX, NY = 64, 40
+    rects = [(0.3, 0.15, 0.4, 0.75), (0.72, 0, 0.82, 0.55), (1.05, 0.35, 1.4, 0.45), (1.05, 0.45, 1.15, 0.85)]
+    obs = [0] * (NX * NY)
+    for j in range(NY):
+        for i in range(NX):
+            x, y = (i + 0.5) * 1.6 / NX, (j + 0.5) / NY
+            if any(x0 <= x <= x1 and y0 <= y <= y1 for (x0, y0, x1, y1) in rects):
+                obs[j * NX + i] = 1
+    g = 8 * NX + 58
+    for mode in ("dir", "neu"):
+        P = [1.0] * (NX * NY)
+        P[g] = 0.0
+        sweeps = 0
+        while True:
+            d = 0.0
+            for j in range(1, NY - 1):
+                for i in range(1, NX - 1):
+                    k = j * NX + i
+                    if obs[k] or k == g:
+                        continue
+                    s_ = 0.0
+                    n = 0
+                    for q in (k + 1, k - 1, k + NX, k - NX):
+                        if obs[q]:
+                            if mode == "neu":
+                                continue
+                            s_ += 1
+                        else:
+                            s_ += P[q]
+                        n += 1
+                    v_ = s_ / n
+                    d = max(d, abs(v_ - P[k]))
+                    P[k] = v_
+            sweeps += 1
+            if d <= 1e-12 or sweeps >= 40000:
+                break
+        far = 1 - P[(NY - 3) * NX + 2]
+        name = "障碍 Dirichlet φ=1" if mode == "dir" else "障碍 Neumann"
+        print(f"    {name}：{sweeps} 轮后最大改变量 ≤ 1e-12；左上角 1 − φ = {far:.1e}")
+
+
 def main():
     phi = section1()
     section2(phi)
@@ -1112,6 +1215,8 @@ def main():
     section14()
     section15()
     section16()
+    section17()
+    section18()
 
 
 if __name__ == "__main__":

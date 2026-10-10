@@ -1,0 +1,862 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>反馈运动规划 · 第 8 章</title>
+<meta name="description" content="LaValle《Planning Algorithms》第 8 章的中文互动教程：开环与反馈、离散反馈计划与导航函数、wavefront 与 Dial 算法、NF2 最大间隙、向量场与积分曲线、Filippov 解、光滑流形与切空间、单元复形上的向量场、最优导航函数、加速度约束、Rimon–Koditschek 与调和势函数、漏斗组合、带插值的值迭代。">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<link rel="stylesheet" href="../assets/style.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+<script src="../assets/common.js"></script>
+<script defer src="js/ch8-lib.js"></script>
+<script defer src="js/ch8-discrete.js"></script>
+<script defer src="js/ch8-fields.js"></script>
+<script defer src="js/ch8-manifold.js"></script>
+<script defer src="js/ch8-complete.js"></script>
+<script defer src="js/ch8-dynamics.js"></script>
+<script defer src="js/ch8-sampling.js"></script>
+<style>
+  .ch8-stage { width: 100%; }
+  .ch8-stage canvas { margin: 0 auto; border-radius: 6px; }
+  .pseudo.ch8-wrap .ln { white-space: normal; }
+  .box.intuition ul { margin: 0; padding-left: 1.2em; }
+  .fig81 td, .fig81 th { text-align: center; }
+  .fig81 td.hl { background: var(--accent-soft); color: var(--accent-text); font-weight: 650; }
+  .fn { font-size: .8em; }
+  .funnels { max-width: 560px; margin: 0 auto; display: block; }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <a class="brand" href="../index.html">Planning Algorithms 学习站</a>
+  <span class="crumbs"><a href="../index.html">首页</a> › Part II › 第 8 章 反馈运动规划</span>
+  <button class="icon-btn" id="theme-toggle" type="button" aria-label="切换深浅色">☾</button>
+</header>
+
+<div class="layout">
+<nav class="toc" aria-label="目录">
+  <p class="toc-title">本章目录</p>
+  <ol>
+    <li><a href="#overview">本章导读</a></li>
+    <li><a href="#s8-1">8.1 动机</a></li>
+    <li><a href="#s8-2">8.2 离散状态空间</a>
+      <ol>
+        <li><a href="#s8-2-1">定义反馈计划</a></li>
+        <li><a href="#s8-2-2">反馈计划即导航函数</a></li>
+        <li><a href="#s8-2-3">网格上的导航函数</a></li>
+      </ol>
+    </li>
+    <li><a href="#s8-3">8.3 向量场与积分曲线</a>
+      <ol>
+        <li><a href="#s8-3-1">ℝⁿ 上的向量场</a></li>
+        <li><a href="#s8-3-1b">分段光滑与 Filippov 解</a></li>
+        <li><a href="#s8-3-2">光滑流形</a></li>
+      </ol>
+    </li>
+    <li><a href="#s8-4">8.4 连续空间的完备方法</a>
+      <ol>
+        <li><a href="#s8-4-1">反馈运动规划的定义</a></li>
+        <li><a href="#s8-4-2">单元复形上的向量场</a></li>
+        <li><a href="#s8-4-3">最优导航函数</a></li>
+        <li><a href="#s8-4-4">迈向动力学</a></li>
+      </ol>
+    </li>
+    <li><a href="#s8-5">8.5 连续空间的采样方法</a>
+      <ol>
+        <li><a href="#s8-5-1">漏斗的组合</a></li>
+        <li><a href="#s8-5-2">带插值的动态规划</a></li>
+      </ol>
+    </li>
+    <li><a href="#cheatsheet">本章速查表</a></li>
+    <li><a href="#pitfalls">常见陷阱</a></li>
+    <li><a href="#exercises">习题导引</a></li>
+    <li><a href="#further">延伸阅读</a></li>
+    <li><a href="#notes">脚注</a></li>
+  </ol>
+</nav>
+
+<main class="content">
+
+<p class="kicker">Part II · 第 8 章</p>
+<h1>反馈运动规划 <span class="en">Feedback Motion Planning</span></h1>
+<p class="lede">到目前为止，Part II 一直假设「算出一条连续路径」就解决了运动规划问题。在动画、虚拟样机里这没问题——虚拟世界里的模型会照着设计的样子运动。可一旦和物理世界打交道，<b>未来的位形可能无法预测</b>。这一章把<b>反馈 feedback</b>引入运动规划：计划不再是一条路径，而是告诉机器人「无论你现在在哪里，都该往哪里走」。</p>
+
+<section id="overview">
+<h2 style="border-top:0;margin-top:1em">本章导读</h2>
+
+<p>机器人学里传统的做法是图 1.19 那样的<b>精化方案</b>：先规划一条路径，再设计一个反馈控制律尽量跟住它。有时这就够用，但它是<b>高度解耦</b>的——规划路径时既不管反馈也不管动力学，算出来的路径执行起来可能根本没法用。本章换一种思路：把反馈直接放进规划里，但仍然<b>忽略微分约束</b>（动力学留给 Part IV）。</p>
+
+<div class="table-wrap">
+<table class="data fig81">
+  <tr><th></th><th>开环 Open Loop</th><th>反馈 Feedback</th></tr>
+  <tr><th>自由运动 Free motions</th><td>传统运动规划（第 4–7 章）</td><td class="hl">第 8 章</td></tr>
+  <tr><th>有动力学 Dynamics</th><td>第 14、15 章</td><td>传统控制理论</td></tr>
+</table>
+</div>
+<p class="small muted" style="text-align:center">图 8.1：把「动力学」和「反馈」两件事分开，就出现了两个较少被研究的话题——右上角就是这一章。</p>
+
+<div class="box">
+  <div class="box-title">本章地图与读法</div>
+  <ul style="margin:0">
+    <li><b>8.1 动机</b>：为什么要反馈；「隐式」处理不确定性；开环与闭环。</li>
+    <li><b>8.2 离散状态空间</b>：数学最少的地方先把概念讲清楚——反馈计划 \(\pi: X\to U\)、导航函数 \(\phi\)、wavefront、NF2、Dial 算法。<b>这是全章的骨架，建议精读。</b></li>
+    <li><b>8.3 向量场与积分曲线</b>：把「网格上的箭头」推广到连续空间需要的数学：向量空间、向量场、积分曲线、Lipschitz 条件、Filippov 解；8.3.2 讲光滑流形与切空间。初读可以「假装 \(X = \mathcal{C} = \mathbb{R}^n\)」。</li>
+    <li><b>8.4 完备方法</b>：第 6 章组合方法的反馈版——单元复形上的向量场、平面里的最优导航函数，以及向动力学迈出的一步（加速度界、Rimon–Koditschek 导航函数、调和势函数）。</li>
+    <li><b>8.5 采样方法</b>：第 5 章的反馈版——漏斗组合与近似覆盖、带插值的值迭代（Part II 以它收尾）。</li>
+  </ul>
+  <p style="margin:.6em 0 0">前置知识：2.3 节的值迭代与 Dijkstra（见 <a href="../part1/ch2-discrete-planning.html">第 2 章教程</a>）、4.1–4.3 节的流形与 C-space（<a href="ch4-configuration-space.html">第 4 章</a>）、5.4.3 节的势函数（<a href="ch5-sampling-based-planning.html">第 5 章</a>），以及第 6 章的单元分解与最大间隙路线图、7.7 节的近似最优规划。</p>
+</div>
+<p class="small muted">颜色约定（沿用第 5 章）：深灰 = 障碍 / \(\mathcal{C}_{obs}\)，粉 = 目标 \(x_G\)，蓝 = 起点、针状图（向量场），绿 = 积分曲线 / 执行轨迹，蓝色由浅到深 = cost-to-go 或势函数由小到大。参考代码 <a href="code/ch8_feedback.py"><code>part2/code/ch8_feedback.py</code></a> 用来核对页面上出现的数值。</p>
+</section>
+
+<!-- ============================================================ 8.1 -->
+<section id="s8-1">
+<h2>8.1 动机 <span class="en">Motivation</span></h2>
+<p>只要和物理世界打交道，就需要某种形式的反馈：计划的动作要依赖执行过程中收集到的信息。需要反馈的根本原因是<b>未来状态不可预测</b>。本章的状态空间要么是离散的，要么就是第 4 章的配置空间 \(X = \mathcal{C}\)。对「未来状态不可预测」有两种建模方式：</p>
+<ol>
+  <li><b>显式 Explicitly</b>：建立明确描述「实际未来状态可能如何偏离计划」的模型，规划算法直接把这种不确定性考虑进去。这是 Part III 的主题。</li>
+  <li><b>隐式 Implicitly</b>：状态转移模型声称没有不确定性；但我们构造一个反馈计划，保证机器人<b>万一</b>处在某个意想不到的状态，也知道该做什么。<b>这一章用的是这种方式。</b></li>
+</ol>
+<p>隐式方式乍看奇怪，书中给了理由：Part III 会看到显式建模不确定性极具挑战——可靠模型的要求高得多，问题复杂度上升，算法更难设计，也给建模错误留下更多空间。而隐式处理在控制理论里早有传统：人们早就知道要用反馈控制律才能获得可靠的性能，可大多数场合下动力学的表述并不显式考虑不确定性；只有在<b>随机控制 stochastic control</b>、<b>鲁棒控制 robust control</b> 这些较新的分支里才显式建模。既然「用状态反馈隐式应对不可预测」在上个世纪的控制应用中如此成功，在运动规划里也值得借用。（书中还加了一句：如果你还是不喜欢，就直接跳到第 10 章。）</p>
+<p>由于历史原因，反馈和动力学常被看成密不可分——控制理论本来就是为了可靠地改变动力系统的行为而发展的。传统运动规划两者都不考虑：解路径是<b>开环 open loop</b> 的，执行时没有信息反馈回来去<b>闭合 close</b> 这个环；动力学也不考虑，因为微分约束和更高维的相空间会带来额外麻烦（Part IV）。把两件事拆开，就得到图 8.1 的四种组合：</p>
+<ul>
+  <li><b>开环 + 动力学</b>：近年来越来越受关注，是 Part IV 大部分内容。熟悉经典控制理论的人可能会批评它不考虑反馈，但这种开环轨迹（相空间里的路径）在仿真等应用里很有用；而且「考虑了动力学的轨迹」比「忽略动力学的路径」更有价值——后者却被接受了几十年。</li>
+  <li><b>反馈 + 无微分约束</b>：本章。既然忽略微分约束来解经典运动规划可以接受，那么设计同样忽略微分约束的反馈运动计划也不该更内疚。（8.4.4 节会考虑加速度界这类简单的微分约束；完整处理见 Part IV。）</li>
+</ul>
+<p>反馈计划的另一个重要用途：即使没有不可预测的问题，<b>初始状态也可能未知</b>。反馈计划指明了从<b>每个</b>状态该采取的动作，所以初始条件无关紧要。图算法里的对应物是<b>单终点最短路问题 single-destination shortest-path problem</b>：从任何其它顶点最优地到达某个顶点。作为机器人学里解耦方法的一个模块，反馈运动计划<b>至少和一条路径一样有用</b>；而在开环路径不可靠的场合，可以期待反馈计划更可靠。</p>
+
+<div class="widget" data-widget="ch8-openloop"></div>
+<div class="box intuition"><div class="box-title">试一试 <span class="tag">补充演示</span></div><ul>
+  <li>把扰动 σ 拉到 0 再执行：两条轨迹完全重合——模型完美时开环和反馈没有区别。</li>
+  <li>σ 调到 0.006 左右、多换几串扰动：开环执行越走越偏，常常撞墙或停在离目标很远的地方（「动作用完」）；反馈执行每一步都看当前状态，几乎总能到达。点「推一下 ↯」更明显。</li>
+  <li>把「实际初态偏离 x_I」拉大：开环计划是为 x_I 算的，从别处出发照样执行同一串动作，结果南辕北辙；反馈计划根本不关心从哪里出发——这就是「初始状态未知」的动机。</li>
+</ul></div>
+</section>
+
+<!-- ============================================================ 8.2 -->
+<section id="s8-2">
+<h2>8.2 离散状态空间 <span class="en">Discrete State Spaces</span></h2>
+<p>这一节主要是为后面几节作铺垫：只讨论离散空间，表述和理解都简单得多；之后再推广到配置空间和其它连续状态空间。书中说这里的讨论也是第 8.4.1 节反馈规划概念的背景，并称「那时会显式建模不确定性」<sup class="fn"><a href="#fn-sec" id="fn-sec-ref">1</a></sup>。</p>
+
+<h3 id="s8-2-1">8.2.1 定义反馈计划 <span class="en">Defining a Feedback Plan</span></h3>
+<p>考虑类似 Formulation 2.1、2.3 的离散规划问题，只是<b>不给初始状态</b>。于是代价泛函不能再只写成计划的函数，而要用<b>状态历史 state history</b> 和<b>动作历史 action history</b> 定义。在第 \(k\) 阶段：</p>
+<div class="eq">$$\tilde x_k = (x_1, x_2, \ldots, x_k) \tag{8.1}$$</div>
+<div class="eq">$$\tilde u_k = (u_1, u_2, \ldots, u_k). \tag{8.2}$$</div>
+<p>有时也把 \(\tilde x_k\) 称为<b>状态轨迹 state trajectory</b>。</p>
+<div class="box def formulation">
+  <div class="box-title">Formulation 8.1（离散最优反馈规划 Discrete Optimal Feedback Planning）</div>
+  <ol>
+    <li>有限、非空的<b>状态空间</b> \(X\)。</li>
+    <li>对每个状态 \(x\in X\)，有限的<b>动作空间</b> \(U(x)\)。</li>
+    <li><b>状态转移函数</b> \(f\)：对每个 \(x\in X\)、\(u\in U(x)\) 给出状态 \(f(x,u)\in X\)。记 \(U\) 为所有 \(U(x)\) 的并。</li>
+    <li>一组<b>阶段</b>，记为 \(k\)，从 \(k = 1\) 开始无限地继续下去。</li>
+    <li><b>目标集</b> \(X_G\subset X\)。</li>
+    <li>阶段可加的<b>代价泛函</b> \(L\)：
+      <div class="eq">$$L(\tilde x_F, \tilde u_K) = \sum_{k=1}^{K} l(x_k, u_k) + l_F(x_F), \tag{8.3}$$</div>
+      其中 \(F = K + 1\)。</li>
+  </ol>
+</div>
+<p>与第 2 章相比还有一个区别：这里假设状态空间<b>有限</b>，这方便构造反馈计划，但一般并非必需。</p>
+<p>怎样定义解决 Formulation 8.1 的计划？若给了初始条件，可以像第 2 章那样指定一个动作序列。没有初始条件时，一种办法是<b>为每个可能的初始状态</b> \(x_1\in X\) 各存一个动作序列——但这很浪费。设从 \(x\) 出发、施加第一个动作后到达 \(x'\)：在 \(x'\) 该做什么？可以用 \(x\) 的序列里的第二个动作，但也可以把 \(x'\) 看成新的初始状态，用它自己序列的第一个动作。所以<b>每个状态只需存第一个动作</b>：执行时从某个状态出发，施加那里存的动作，到达下一个状态，再施加那里存的动作……直到到达目标。</p>
+<div class="box def">
+  <div class="box-title">定义：反馈计划 feedback plan</div>
+  <p>函数 \(\pi : X \to U\)，对每个状态 \(x\) 指出该施加的动作。若到达目标就施加终止动作：\(\pi(x) = u_T\)，\(x \in X_G\)。若从<b>每个</b>能到达目标的状态出发执行 \(\pi\) 都能到达目标，则称 \(\pi\) 是问题的<b>解 solution</b>。</p>
+</div>
+<p>给定初始状态 \(x_1\) 和计划 \(\pi\)，状态历史和动作历史就都确定了，于是执行代价 (8.3) 也可写成 \(L(\pi, x_1)\)。这依赖于未来状态总是可预测的；第 10 章由于不确定性，就做不到这种直接对应（10.1.3 节）。</p>
+
+<h4>可行性与最优性 <span class="en">Feasibility and optimality</span></h4>
+<p>因为没有给初始状态，可行与最优都要重新定义。若从<b>每个</b>能到达 \(X_G\) 的 \(x\) 执行 \(\pi\) 确实到达 \(X_G\)，就称 \(\pi\) 是<b>可行 feasible</b> 规划问题的解（此时忽略代价泛函，也可以定义一个去掉代价泛函的 Formulation 8.1）。简便起见，称这样的 \(\pi\) 为<b>可行反馈计划</b>。</p>
+<p>再看最优性。对给定的 \(x\)，用 2.3 节的概念显然存在最优计划。问题是：会不会不同的 \(x\) 需要不同的最优计划？答案是<b>不需要</b>，<b>一个计划就够编码从每个初态到 \(X_G\) 的最优路径</b>。理由：用 Dijkstra 或值迭代（2.3 节）在 \(X\) 上算出最优 cost-to-go。每个 \(x\) 处的 cost-to-go 值就是从 \(x\) 出发执行最优开环计划的代价；最优计划的第一步由 (2.19) 决定，到达 \(x' = f(x,u)\)。在 \(x'\) 再用一次 (2.19) 得到下一个最优动作。\(x'\) 处的代价<b>既是</b>以 \(x'\) 为初态的最优 cost-to-go，<b>也是</b>从 \(x\) 出发的最优路径继续走下去的代价——由动态规划原理两者必然相等。既然所有这些代价都一致，一个反馈计划就能给出所有初态的最优 cost-to-go。于是：若对<b>每个</b> \(x\in X\)，执行 \(\pi\) 得到的总代价 \(L(\pi,x)\) 都是所有计划中最低的，就称 \(\pi\) 为<b>最优 optimal</b> 反馈计划。</p>
+<p><b>例 8.1（2D 网格上的反馈计划）</b>：用例 2.1 的 2D 网格模型。机器人在网格上移动，动作为上 (↑)、下 (↓)、左 (←)、右 (→) 和终止 (\(u_T\))；有些方向在某些状态不可用。图 8.2 给出一个解反馈计划，恰好在「到目标的步数」意义下最优；还有别的最优反馈计划（找出哪些箭头可以换）。执行时，从任何初态出发，顺着箭头走到目标：每个阶段施加箭头表示的动作到达下一个状态，在目标处施加 \(u_T\) 结束。下面的互动图里勾选「显示：哪些箭头可以换」就是这道小题的答案。</p>
+
+<h3 id="s8-2-2">8.2.2 反馈计划即导航函数 <span class="en">Feedback Plans as Navigation Functions</span></h3>
+<p>巧的是，计算反馈计划的工具第 2 章已经给过了：Dijkstra 和值迭代的副产品就能表示反馈计划。为此，把反馈计划改写成状态空间上的<b>势函数 potential function</b>（回忆 5.4.3 节）。规划算法算出势值，执行时用它恢复出合适的动作；有时甚至可以用势函数表示<b>最优</b>反馈计划。</p>
+<h4>导航函数 <span class="en">Navigation functions</span></h4>
+<p>考虑一个（离散）势函数 \(\phi : X\to[0,\infty]\)。它通过<b>局部算子 local operator</b> 定义反馈计划：在 \(x\) 处选择让势下降最多的动作。先看可行规划问题：</p>
+<div class="eq">$$u^* = \operatorname*{argmin}_{u\in U(x)} \Big\{\phi(f(x,u))\Big\}, \tag{8.4}$$</div>
+<p>即选 \(u^*\in U(x)\) 让 \(\phi\) 尽量下降——一种<b>贪心</b>的下降，\(u^*\) 不一定唯一。连续空间里对应的局部算子就是沿负梯度下降，常称<b>梯度下降 gradient descent</b>。最优规划时，局部算子定义为</p>
+<div class="eq">$$u^* = \operatorname*{argmin}_{u\in U(x)} \Big\{l(x,u) + \phi(f(x,u))\Big\}, \tag{8.5}$$</div>
+<p>它很像动态规划条件 (2.19)：若把 \(\phi\) 理解为最优 cost-to-go，两者就完全相同。若规划问题是<b>各向同性 isotropic</b> 的——每个方向代价一样：对所有 \(u,u'\in U(x)\setminus\{u_T\}\) 有 \(l(x,u) = l(x,u')\)——那么 \(l(x,u)\) 不影响 (8.5) 的最小化，(8.5) 化简回 (8.4)。典型例子是代价泛函数「到目标的阶段数」：沿途选哪个动作的代价都无所谓。</p>
+<p>势函数什么时候有用？很多势函数是无用的：到不了目标，或者让状态无限循环。最理想的是：从任何能到达 \(X_G\) 的初态出发都能到达 \(X_G\)。满足这一点只需要几条简单性质。设代价泛函是各向同性的，\(x' = f(x,u^*)\) 是施加 (8.4) 选出的 \(u^*\) 后到达的状态。</p>
+<div class="box def">
+  <div class="box-title">定义：（可行）导航函数 navigation function<sup class="fn"><a href="#fn-nf" id="fn-nf-ref">2</a></sup></div>
+  <ol style="margin:0">
+    <li>对所有 \(x\in X_G\)，\(\phi(x) = 0\)。</li>
+    <li>\(\phi(x) = \infty\) 当且仅当从 \(x\) 到达不了 \(X_G\) 中的任何点。</li>
+    <li>对每个可达的 \(x\in X\setminus X_G\)，局部算子给出的 \(x'\) 满足 \(\phi(x') &lt; \phi(x)\)。</li>
+  </ol>
+</div>
+<p>第一条要求目标处势为零（其实不必要，只为方便）；第二条用 \(\infty\) 作为「到不了目标」的特殊标记；第三条说除目标外<b>没有局部极小</b>——执行结果计划时不会循环，最终一定到达目标。<b>最优导航函数 optimal navigation function</b> 定义为最优 cost-to-go \(G^*\)：除了上面三条，还要满足最优性原理</p>
+<div class="eq">$$\phi(x) = \min_{u\in U(x)} \Big\{l(x,u) + \phi(f(x,u))\Big\}, \tag{8.6}$$</div>
+<p>这就是把 (2.18) 里的 \(G^*\) 换成 \(\phi\)（更多联系见 15.2.1 节）。</p>
+<p><b>例 8.2（2D 网格上的导航函数）</b>：回到例 8.1，用各向同性代价：\(u\ne u_T\) 时 \(l(x,u) = 1\)。图 8.3 是一个导航函数，格子里的数就是 \(\phi\)；可以验证它满足三条性质。在任何状态施加一个让势下降的动作，对应于用 (8.4) 选动作；从任何状态重复下去，直到到达 \(X_G\)。这个例子清楚地说明了导航函数怎样作为反馈计划的另一种定义。</p>
+<p><b>例 8.3（机场航站楼）</b>：你可能在陌生机场用过导航函数找出口：很多航站楼是树状的，登机口编号随离出口的距离增加；想离开航站楼，通常朝编号更小的登机口走就行。</p>
+
+<div class="widget" data-widget="ch8-grid-navfn"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>默认就是图 8.2a 的网格与图 8.3 的数：实线箭头取自图 8.2b，每个箭头都指向 φ 小 1 的格子。勾选「哪些箭头可以换」：共有 34 个格子存在两个同样最优的动作，所以最优反馈计划一共有 2³⁴ 个（参考代码第 2 项）。</li>
+  <li>切到「曼哈顿距离（无视障碍）」：性质 3 立刻失败，(0,2)、(4,2)、(8,7) 三处出现局部极小（红 ✕）——比如 (4,2)，下面是障碍，左、右、上都更大。点 (2,0) 一带的格子执行：会卡在 ✕ 上。</li>
+  <li>切到「加/去障碍」，把目标所在的区域封死：被隔开的格子 φ = ∞（性质 2），计划在那里什么也不做；再看性质 2 在曼哈顿距离下为什么失败。</li>
+</ul></div>
+
+<h4>计算导航函数 <span class="en">Computing navigation functions</span></h4>
+<p>算导航函数的办法很多。从 \(X_G\) <b>反向</b>运行 Dijkstra 得到的 cost-to-go 就是<b>最优导航函数</b>；在各向异性情形，导航函数的第三条性质恰好就是平稳动态规划方程 (2.18)（\(\phi\) 取作 \(G^*\)）。前面说过可以只用 cost-to-go 恢复最优动作——这其实就是在用导航函数，那个过程也可以看成一个反馈计划。</p>
+<p>如果不在乎最优性，2.2 节的几乎任何<b>反向搜索</b>算法都行，只要记下每个到达状态到目标的距离——不必最优，只要等于「从当前顶点沿搜索树回溯到根（或到 \(X_G\) 中任意顶点）」的代价。若问题本来就没有代价泛函（Formulation 2.1），也可以为构造导航函数发明一个：对每个能到达 \(X_G\) 的 \(x\)，记下从 \(x\) 到 \(X_G\) 要经过的搜索图边数；用 Dijkstra 构造时，执行结果计划的阶段数最少。</p>
+<p>导航函数本身就是反馈计划的一种表示——由局部算子恢复动作。所以 \(\pi\) 可以由 \(\phi\) 得到；反过来也能由 \(\pi\) 构造 \(\phi\)。<b>\(\pi\) 与 \(\phi\) 是可以互换的反馈计划表示。</b></p>
+
+<h3 id="s8-2-3">8.2.3 网格上的导航函数用于运动规划 <span class="en">Grid-Based Navigation Functions for Motion Planning</span></h3>
+<p>要在连续空间里讨论反馈计划，需要向量场等微分几何的基本定义（8.3 节）。在那之前，先把 8.2 节的思想当作反馈运动规划的离散近似来用。例 8.1、8.2 已经在带障碍的 2D 网格上定义了反馈计划和导航函数；把这个模型看作 \(\mathcal{C}\subset\mathbb{R}^2\) 的运动规划问题的近似。5.4.2 节用样本网格构造拓扑图来近似运动规划；例 8.1 的运动对应其中的 <b>1-邻域</b> (5.37)；7.7.1 节进一步用网格近似最优运动规划（Formulation 7.4）；选曼哈顿运动模型（例 7.4）就得到例 8.1 的那种网格。</p>
+<p>要构造在移动机器人上实用的导航函数，通常需要<b>高分辨率</b>网格（每轴 50–100 个点）。5.4.2 节并不假设反馈，有时只看每轴几个点就能找到无碰路径；而执行反馈计划时，机器人的未来状态不一定可预测——不管它最后跑到哪里，导航函数加局部算子都必须给出合适的动作。若用网格近似当前状态，就要尽量减小近似误差，所以分辨率要高。反馈情形下网格可以看作「覆盖」了整个配置空间，而 5.4.2 节的网格只是表示了一个穿越空间的拓扑图<sup class="fn"><a href="#fn-grid" id="fn-grid-ref">3</a></sup>。</p>
+
+<h4>Wavefront 传播算法 <span class="en">Wavefront propagation algorithms</span></h4>
+<p>近似做好以后，8.2.2 节的任何方法都能算导航函数。最优导航函数用从目标出发的 Dijkstra 很容易算。若每个动作都是单位代价，还能简化：图 8.4 的 <b>wavefront 传播算法</b>算出最优导航函数，它是 Dijkstra 的特例，<b>不需要显式的优先队列</b>。Dijkstra 执行过程中，队列里最小的代价单调不减；单位代价时队列里很多状态代价相同，可以把所有同为最小值 \(i\) 的状态<b>并行</b>移出——它们组成一个<b>波前 wavefront</b> \(W_i\)。初始波前 \(W_0\) 就是 \(X_G\)；从 \(W_0\) 一步能到的状态立即得到最优 cost-to-go 1（不可能有别的代价），组成 \(W_1\)；\(W_1\) 的未探索邻居得到 2，也一定最优……如此归纳下去直到所有可达状态。最终最优 cost-to-go 在 \(O(n)\) 时间内算出（\(n\) 为可达网格状态数），没到达的状态赋 \(\phi(x) = \infty\)。图 8.3 的导航函数就可以用 wavefront 算出来（参考代码第 1 项逐格核对过）。</p>
+<div class="box algo">
+  <div class="box-title">图 8.4　WAVEFRONT PROPAGATION ALGORITHM</div>
+  <div class="pseudo ch8-wrap">
+    <span class="ln">初始化 \(W_0 = X_G\)；\(i = 0\)。</span>
+    <span class="ln">初始化 \(W_{i+1} = \emptyset\)。</span>
+    <span class="ln">对每个 \(x\in W_i\)：赋 \(\phi(x) = i\)，并把 \(x\) 的所有未探索邻居插入 \(W_{i+1}\)。</span>
+    <span class="ln">若 \(W_{i+1} = \emptyset\) 则结束；否则 \(i := i+1\)，回到第 2 步。</span>
+  </div>
+</div>
+
+<div class="widget wide" data-widget="ch8-wavefront"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>「下一步」逐层看：黄色是正在处理的 \(W_i\)，紫色是正在填的 \(W_{i+1}\)。单位代价时任何时刻只需要两层——这就是「不需要优先队列」。</li>
+  <li>跑完后点左上角一个格子：1-邻域的执行路径是<b>楼梯</b>状（图 7.40 那种）。切到 2-邻域 · 代价 5/7（Dial）再点同一个格子：路径明显更短、更直。</li>
+  <li>Dial 模式下看右边的桶：同时非空的桶不会超过 8 个（直走 5、斜走 7，最大边代价加 1），参考代码第 4 项还核对了 Dial 与 Dijkstra 的结果逐格相同。</li>
+</ul></div>
+
+<h4>最大间隙 <span class="en">Maximum clearance</span></h4>
+<p>移动机器人里常见的问题是：最优运动计划让机器人离障碍<b>太近</b>。回忆 6.2.4 节：多边形环境里的欧氏最短路径必须允许碰到障碍顶点，这正是 6.2.3 节<b>最大间隙路线图</b>的动机。可以做一个网格近似版的最大间隙路线图，并定义一个导航函数：先把机器人引到路线图上，沿路线图走，最后送到目标。[63] 称它为 <b>NF2</b>。设只有一个目标状态 \(x_G\in X\)，计算最大间隙导航函数的步骤：</p>
+<ol>
+  <li>不用 \(X_G\)，而让 \(W_0\) 是所有「至少一个方向的运动被挡住」的状态——离散化自由空间的边界。</li>
+  <li>做 wavefront 迭代，让代价从障碍边界向外一波一波地传播。</li>
+  <li>波前传播时，大约会在原连续问题的最大间隙路线图处相遇。把两个波前从相反方向到达的状态标为<b>骨架状态 skeleton state</b>；也可能两个波前只是相接而没有到达同一状态，这时取两个相接状态之一。记 \(S\) 为所有骨架状态。</li>
+  <li>wavefront 结束后，把 \(x_G\) 连到骨架：把 \(x_G\) 和它到骨架的路径上的所有状态加进 \(S\)（任何搜索算法都可以找这条路径）。</li>
+  <li>在 \(S\) 上算导航函数 \(\phi_1\)：把其它状态都当成障碍，用 wavefront。它把 \(S\) 上任一点引到目标。</li>
+  <li>把 \(S\) 当成目标区域，用 wavefront 算导航函数 \(\phi_2\)，它把状态引到骨架上最近的点。</li>
+  <li>合并：对 \(x\in S\)，\(\phi(x) = \phi_1(x)\)；其余状态 \(\phi(x) = \phi_1(x') + \phi_2(x)\)，\(x'\) 是离 \(x\) 最近的 \(S\) 中的状态（算 \(\phi_2\) 时顺便记下即可）。</li>
+</ol>
+<p>若 \(\mathcal{C}_{free}\) 是多连通的，到 \(x_G\) 可能有好几条绕过不同障碍的路线（不同伦）。上面的方法不考虑「某条路线间隙更窄」的问题：它只优化沿骨架走的距离，有多条路线时并不最大化最近接近距离（习题 3）。</p>
+
+<div class="widget wide" data-widget="ch8-nf2"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>依次点 1 → 7，对照上面的七个步骤。第 3 步的蓝色骨架就是网格版的最大间隙路线图；我们给每个障碍连通块、外墙的每条边各编一个号，<b>来自不同编号的波前相遇处</b>算骨架（这是我们对「从相反方向到达」的具体实现）。</li>
+  <li>第 7 步默认起点 (2,2)、目标 (20,33)：NF2 路径 42 步，途中离障碍至少 2 格；虚线的最短路径 34 步，但擦着障碍走（最小间隙 0）。参考代码第 5 项核对过这两组数。</li>
+  <li>拖动起点到右上角那块区域：NF2 先「下到」骨架，沿两障碍正中间走——代价是绕远。第 5 步里只有与 x_G 连通的骨架才保留（我们的实现细节）。</li>
+</ul></div>
+
+<h4>Dial 算法 <span class="en">Dial's algorithm</span></h4>
+<p>wavefront 传播可以用于任何 \(l(x,u) = 1\)（\(u\ne u_T\)）的离散规划问题，在状态转移图<b>稀疏</b>时最有用（想想用邻接矩阵表示转移图会多浪费）——网格问题就是典型。更一般地，若代价取整数值，就得到 <b>Dial 算法</b> [33]：它是 wavefront 传播的推广、Dijkstra 的特化。思想是用一组对应不同 cost-to-go 值的<b>桶 bucket</b> 代替优先队列，活着的顶点放进对应的桶。wavefront 的情形任何时候最多只需要两个桶。Dial 算法让最小代价桶里的所有状态并行处理；[88] 进一步改进成线性时间算法。</p>
+<h4>其它扩展 <span class="en">Other extensions</span></h4>
+<p>前面方法的一个缺点是会产生不受欢迎的<b>楼梯状运动 staircase motions</b>（图 7.40）。若用 (5.38) 的 2-邻域定义动作空间，运动一般会更短；这时 Dial 算法可以高效地算出最优导航函数。网格近似也可以推广到高维配置空间，但因为需要高分辨率，只对少数几维（如 3 或 4）实用；用 1-邻域时 wavefront 很容易套用，Dial 算法可以推广到一般的 \(k\)-邻域。</p>
+<p>在网格上构造导航函数在很多应用中可能就够了；但有时楼梯运动无法接受，有时甚至来不及算出导航函数。影响因素有：1) 需要非常高的精度，因而要高分辨率网格；2) 配置空间维数高；3) 环境频繁变化，需要实时响应。为了解决这些问题，自然想放弃网格近似，<b>直接在配置空间上定义势函数和速度</b>——下一节给出所需的数学背景。</p>
+</section>
+
+<!-- ============================================================ 8.3 -->
+<section id="s8-3">
+<h2>8.3 向量场与积分曲线 <span class="en">Vector Fields and Integral Curves</span></h2>
+<p>要在连续状态空间（包括配置空间）上考虑反馈运动计划，需要定义<b>向量场 vector field</b>，以及从初始点对向量场积分得到的轨迹。向量场最适合刻画连续状态空间上的反馈计划，它是图 8.2b 网格反馈计划的连续类比。</p>
+<p>本节给出背景数学的两种表述：8.3.1 节假设 \(X = \mathbb{R}^n\)，定义看起来和微积分、微分方程课上学的很像；8.3.2 节讲流形上的向量场，需要更多技术概念，建立在 4.1.2 节流形定义之上。第一次接触微分流形可能难以一次读懂。书中建议：先学章末推荐的背景材料；或者在后面各节里<b>假装 \(X = \mathcal{C} = \mathbb{R}^n\)</b>——几乎所有内容不用额外的技术细节也说得通。可以把流形想成某些面被粘合的立方体 \([0,1]^n\)（4.1.2 节）：\(\mathbb{R}^n\) 的概念在立方体内部处处适用，只有边界上要小心。例如 \(\mathbb{S}^1 = [0,1]/\sim\)，函数 \(f\) 定义在 \(\mathbb{S}^1\) 上，在 \(f(0)\) 处的导数怎么定义？8.3.2 节的技术定义解决了这个问题；实践中有时可以巧妙处理粘合点来回避。</p>
+
+<h3 id="s8-3-1">8.3.1 ℝⁿ 上的向量场 <span class="en">Vector Fields on ℝⁿ</span></h3>
+<h4>向量空间 <span class="en">Vector spaces</span></h4>
+<p>定义向量场之前，先弄清「向量」是什么。<b>向量空间 vector space</b>（或<b>线性空间 linear space</b>）是一个集合 \(V\)，对两种代数运算——<b>向量加法</b> \(+\) 和<b>数乘</b> \(\cdot\)——封闭，并满足若干公理。本节用的向量空间是 \(\mathbb{R}^n\)，标量是实数，向量是 \(n\) 个实数的序列；数乘把每个分量乘以标量，向量加法把对应分量相加。一般地，向量空间可以定义在任何<b>域 field</b> \(\mathbb{F}\) 上（4.4.1 节），\(\mathbb{F}\) 表示标量、\(V\) 表示向量；对 \(\mathbb{R}^n\) 取 \(V=\mathbb{R}^n\)、\(\mathbb{F}=\mathbb{R}\)。公理如下（不妨验证 \(\mathbb{R}^n\) 满足它们）：</p>
+<ol>
+  <li><b>向量加法构成交换群</b>：\(V\) 对 \(+\) 是交换群。</li>
+  <li><b>数乘结合律</b>：对任何 \(v\in V\)、\(\alpha,\beta\in\mathbb{F}\)，\(\alpha(\beta v) = (\alpha\beta)v\)。</li>
+  <li><b>标量和的分配律</b>：\((\alpha+\beta)v = \alpha v + \beta v\)。</li>
+  <li><b>向量和的分配律</b>：对任何 \(v,w\in V\)、\(\alpha\in\mathbb{F}\)，\(\alpha(v+w) = \alpha v + \alpha w\)。</li>
+  <li><b>数乘单位元</b>：对任何 \(v\in V\)，\(1v = v\)，\(1\) 是 \(\mathbb{F}\) 的乘法单位元。</li>
+</ol>
+<p>向量空间 \(V\) 的<b>基 basis</b> 是一组向量 \(v_1,\ldots,v_n\)，使每个 \(v\in V\) 都能<b>唯一</b>写成<b>线性组合 linear combination</b></p>
+<div class="eq">$$v = \alpha_1 v_1 + \alpha_2 v_2 + \cdots + \alpha_n v_n, \tag{8.7}$$</div>
+<p>\(\alpha_1,\ldots,\alpha_n\in\mathbb{F}\)。\(\mathbb{R}^3\) 中熟悉的基是 \([0\ 0\ 1]\)、\([0\ 1\ 0]\)、\([1\ 0\ 0]\)。基不唯一（任何三个线性无关的向量都是 \(\mathbb{R}^3\) 的基），但同一个向量空间的任何基所含向量个数相同，这个数 \(n\) 叫<b>维数 dimension</b>。<b>例 8.4（\(\mathbb{R}\) 上的向量空间 \(\mathbb{R}^n\)）</b>：自然的基是 \(n\) 个单位向量（第 \(i\) 个只有 \(x_i = 1\)）；任何 \(n\) 个线性无关的向量都可以作基，基之间用非奇异 \(n\times n\) 矩阵变换。</p>
+<p><b>例 8.5（函数构成的向量空间）</b>：所有连续实值函数 \(f:[0,1]\to\mathbb{R}\)，只要</p>
+<div class="eq">$$\int_0^1 f(x)\,dx \tag{8.8}$$</div>
+<p>有限，就构成 \(\mathbb{R}\) 上的向量空间：两个函数相加积分仍有限，\(f_1+f_2 = f_2+f_1\)，数乘后积分仍有限。这个向量空间是<b>无穷维</b>的：只看 Taylor 级数存在且收敛的那些函数（<b>解析函数 analytic functions</b>），每个都可以写成可能有无穷多项的多项式，单项式 \(x, x^2, x^3,\ldots\) 构成一组基——每个函数都是一个无穷长的系数「向量」。这是<b>函数空间 function space</b> 的简单例子；再加些定义就得到泛函分析中至关重要的 <b>Hilbert 空间</b> [82, 83]。本章其余部分只考虑 \(\mathbb{R}\) 上的有限维向量空间，但要记住向量空间的这些基本性质。</p>
+
+<h4>向量场 <span class="en">Vector fields</span></h4>
+<p>向量场看起来就是 \(\mathbb{R}^n\) 上的「<b>针状图 needle diagram</b>」（图 8.5）：在每个点 \(p\in\mathbb{R}^n\) 指定一个方向。用来表示反馈计划时，它告诉机器人：如果发现自己在 \(p\)，该往哪个方向走。对每个 \(p\in\mathbb{R}^n\)，关联一个 \(n\) 维向量空间，叫 \(p\) 处的<b>切空间 tangent space</b>，记作 \(T_p(\mathbb{R}^n)\)。为什么叫「切」？这来自对流形的推广——那时切空间真的与流形上的点相切。</p>
+<p>\(\mathbb{R}^n\) 上的<b>向量场</b> \(\vec V\)<sup class="fn"><a href="#fn-field" id="fn-field-ref">4</a></sup>是一个函数，给每个 \(p\in\mathbb{R}^n\) 指定一个 \(v\in T_p(\mathbb{R}^n)\)。它的值域是什么？每个 \(p\) 处的向量 \(\vec V(p)\) 属于不同的切空间，所以值域是并集</p>
+<div class="eq">$$T(\mathbb{R}^n) = \bigcup_{p\in\mathbb{R}^n} T_p(\mathbb{R}^n), \tag{8.9}$$</div>
+<p>称为 \(\mathbb{R}^n\) 上的<b>切丛 tangent bundle</b>。虽然来自不同 \(T_p(\mathbb{R}^n)\) 的向量写出来一样，每个切空间被认为产生不同的向量；为了区分，切丛中的点可以用 \(2n\) 个坐标表示，把 \(p\) 和 \(v\) 放在一起——这对 Part IV 定义相空间很重要。目前只要把 \(\vec V\) 的值域看成 \(\mathbb{R}^n\) 就够了，因为对每个 \(p\)，\(T_p(\mathbb{R}^n) = \mathbb{R}^n\)。于是向量场可以用 \(\mathbb{R}^n\) 上的 \(n\) 个实值函数 \(f_i(x_1,\ldots,x_n)\) 表示：</p>
+<div class="eq">$$f(x) = [f_1(x_1,\ldots,x_n)\ \ f_2(x_1,\ldots,x_n)\ \ \cdots\ \ f_n(x_1,\ldots,x_n)]. \tag{8.10}$$</div>
+<p>这样看，向量场就是一个从 \(\mathbb{R}^n\) 到 \(\mathbb{R}^n\) 的函数 \(f\)，此后就用普通的函数记号。在 \(\mathbb{R}^2\) 上记点为 \(p = (x,y)\)，向量场常写作 \([f_1(x,y)\ \ f_2(x,y)]\)。</p>
+<ul>
+  <li><b>例 8.6（常值向量场）</b>：图 8.5a 是<b>常值向量场 constant vector field</b>，给每个 \((x,y)\in\mathbb{R}^2\) 同一个向量。图注写的是 \(f(x,y) = [1\ \ 1]\)，正文写的是 \([1\ \ 2]\)<sup class="fn"><a href="#fn-86" id="fn-86-ref">5</a></sup>。</li>
+  <li><b>例 8.7（向内流 Inward Flow）</b>：图 8.5b 给每个 \((x,y)\) 指定 \([-x\ \ -y]\)，所有向量都指向原点。</li>
+  <li><b>例 8.8（漩涡 Swirl）</b>：图 8.6 给每个 \((x,y)\) 指定 \([(y-x)\ \ (-x-y)]\)。</li>
+</ul>
+<p>由于规划问题里有障碍，有时方便把向量场的定义域限制在 \(\mathbb{R}^n\) 的一个开子集 \(O\) 上：\(f: O\to\mathbb{R}^n\)。</p>
+<h4>光滑性 <span class="en">Smoothness</span></h4>
+<p>从 \(\mathbb{R}^n\) 的子集到 \(\mathbb{R}\) 的函数 \(f_i\)，若在定义域每一点对任意变量都能求任意阶导数，就称为<b>光滑函数 smooth function</b>；若定义向量场的 \(n\) 个函数都光滑，向量场就是光滑的。光滑函数也叫 \(C^\infty\) 函数，上标表示可以求导的阶数；\(C^k\) 函数至少能求到 \(k\) 阶导数，\(C^0\) 就是连续函数。同胚的概念可以推广成<b>微分同胚 diffeomorphism</b>：本身光滑的同胚。两个拓扑空间之间若存在微分同胚，就称它们<b>微分同胚 diffeomorphic</b>。</p>
+<h4>把向量场看成速度场 <span class="en">Vector fields as velocity fields</span></h4>
+<p>给向量场一个具体的解释。用 (8.10) 表示的向量场可以定义一组一阶微分方程：</p>
+<div class="eq">$$\frac{dx_1}{dt} = f_1(x_1,\ldots,x_n),\quad \frac{dx_2}{dt} = f_2(x_1,\ldots,x_n),\quad \ldots,\quad \frac{dx_n}{dt} = f_n(x_1,\ldots,x_n). \tag{8.11}$$</div>
+<p>每个方程表示一个坐标对时间的导数。对任何点 \(x\in\mathbb{R}^n\)，<b>速度向量 velocity vector</b> 定义为</p>
+<div class="eq">$$\frac{dx}{dt} = \left[\frac{dx_1}{dt}\ \ \frac{dx_2}{dt}\ \ \cdots\ \ \frac{dx_n}{dt}\right], \tag{8.12}$$</div>
+<p>于是 \(f\) 可以解释为<b>速度场 velocity field</b>。习惯上简写 \(\dot x = dx/dt\)，\(\dot x_i = dx_i/dt\)；用 \(f\) 表示 \(f_1,\ldots,f_n\) 构成的向量，(8.11) 简写成</p>
+<div class="eq">$$\dot x = f(x). \tag{8.13}$$</div>
+<p>这里的 \(f\) 有意和状态转移函数用同一个字母：Part IV 会让向量场由动作参数化，得到连续时间状态转移方程 \(\dot x = f(x,u)\)，和第 2 章离散阶段上的状态转移方程很像。(8.11) 这样的方程常称为<b>自治的 autonomous</b> 或<b>平稳的 stationary</b>，因为 \(f\) 不依赖时间；也可以定义时变向量场 \(\dot x = f(x(t),t)\)，但本章不讨论。</p>
+
+<h4>积分曲线 <span class="en">An integral curve</span></h4>
+<p>给定向量场 \(f\)，每点都有速度向量。设一个点在 \(t=0\) 时从 \(x_0\in\mathbb{R}^n\) 出发，按 \(f\) 给的速度运动——它该怎么走？从 \(x_0\) 出发的<b>轨迹 trajectory</b> 可以写成函数 \(\tau:[0,\infty)\to\mathbb{R}^n\)。若对每个 \(t\in[0,\infty)\)</p>
+<div class="eq">$$\frac{d\tau}{dt}(t) = f(\tau(t)), \tag{8.14}$$</div>
+<p>就称这条轨迹是微分方程在初始条件 \(\tau(0) = x_0\) 下的<b>积分曲线 integral curve</b>（或<b>解轨迹 solution trajectory</b>）。它有时也写成积分形式</p>
+<div class="eq">$$\tau(t) = x_0 + \int_0^t f(\tau(s))\,ds, \tag{8.15}$$</div>
+<p>称为 <b>Carathéodory 意义下</b>的解。直观上，积分曲线从 \(x_0\) 出发，顺着速度向量指的方向流动——这就是图 8.2b「顺着箭头走」的连续版本。</p>
+<p><b>例 8.9（常值速度场的积分曲线）</b>：最简单的情形是常值向量场。设 \(\mathbb{R}^2\) 上定义了常值场 \(\dot x_1 = 1\)、\(\dot x_2 = 2\)<sup class="fn"><a href="#fn-89" id="fn-89-ref">6</a></sup>，从 \((0,0)\) 出发的积分曲线是 \(\tau(t) = (t, 2t)\)，显然对所有 \(t\ge 0\) 满足 (8.14)。</p>
+<p><b>例 8.10（线性速度场的积分曲线）</b>：\(\mathbb{R}^2\) 上 \(\dot x_1 = -2x_1\)、\(\dot x_2 = -x_2\)。函数 \(\tau(t) = (e^{-2t}, e^{-t})\) 是从 \((1,1)\) 出发的积分曲线：\(t=0\) 时 \(\tau(0) = (1,1)\)，对所有 \(t > 0\) 满足 (8.14)。这是<b>线性速度场</b>的简单例子：每个 \(f_i\) 都是坐标的线性函数。一般地，把速度场写成 \(\dot x = Ax\) 后，积分曲线通常通过求矩阵 \(A\) 的特征值得到（见 [23]）。</p>
+<p>微分方程的一个基本结论：若 \(f\) 光滑，\(\dot x = f(x)\) 存在唯一的积分曲线。另一个保证唯一解的条件是 \(f\) 满足 <b>Lipschitz 条件</b>：存在常数 \(c\in(0,\infty)\) 使</p>
+<div class="eq">$$\|f(x) - f(x')\| \le c\,\|x - x'\| \tag{8.16}$$</div>
+<p>对所有 \(x, x'\in X\) 成立，\(\|\cdot\|\) 是欧氏范数。常数 \(c\) 称为 <b>Lipschitz 常数</b>。满足 Lipschitz 条件的 \(f\) 一定连续；若 \(f\) 的所有偏导数在整个 \(X\) 上有界，\(f\) 就是 Lipschitz 的。(8.16) 更一般——它甚至不要求 \(f\) 处处可微。</p>
+
+<div class="widget" data-widget="ch8-vfields"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>选「例 8.10」，把积分时间调到 1、步长 0.05：从 (1,1) 出发的 RK4 误差约 2.5×10⁻⁷，换成 Euler 约 1.7×10⁻²（参考代码第 6 项）。步长拉到 0.5，Euler 的折线明显偏离虚线解析解。</li>
+  <li>选「线性场 ẋ = Ax」：调 A 让特征值变成复数（螺旋）、一正一负（鞍点）、实部为 0（中心，闭合轨道）——对照右上角的分类。漩涡 (例 8.8) 的特征值是 −1 ± i。</li>
+  <li>选「补充：不满足 Lipschitz 的场」，在 x₂ = 0 上点一下：数值积分沿 x₂ = 0 走，但橙色虚线 x₂ = ±((t−c)/2)² 也都是解——没有 Lipschitz 条件，(8.14) 的解可以不唯一。</li>
+</ul></div>
+
+<h3 id="s8-3-1b">分段光滑向量场与 Filippov 解 <span class="en">Piecewise-smooth vector fields</span></h3>
+<p>以后要允许只在有限个片 patch 上光滑的向量场：两片之间的<b>切换边界 switching boundary</b> 上可能发生不连续的跳变。例如定义 \((n-1)\) 维切换边界 \(S\subset\mathbb{R}^n\)：</p>
+<div class="eq">$$S = \{x\in\mathbb{R}^n \mid s(x) = 0\}, \tag{8.17}$$</div>
+<p>\(s:\mathbb{R}^n\to\mathbb{R}\)。若 \(\mathbb{R}^n\) 维数为 \(n\) 且 \(s\) 非奇异，\(S\) 的维数为 \(n-1\)。再定义</p>
+<div class="eq">$$S_+ = \{x\in\mathbb{R}^n \mid s(x) > 0\} \tag{8.18}$$</div>
+<div class="eq">$$S_- = \{x\in\mathbb{R}^n \mid s(x) &lt; 0\}. \tag{8.19}$$</div>
+<p>这和 3.1.2 节用几何基元构造隐式模型类似。设 \(f\) 在 \(S_+\)、\(S_-\) 上光滑，但在 \(S\) 处跳变。这样的微分方程描述<b>混合系统 hybrid systems</b> [18, 47, 65]，相应的任务是设计<b>混合控制系统 hybrid control system</b>。这时还能定义解轨迹吗？在一定条件下可以得到 <b>Filippov 意义下的解</b>（书中拼作 Filipov）[45, 84]。</p>
+<p>记 \(B(x,\delta)\) 为以 \(x\) 为中心、半径 \(\delta\) 的开球，</p>
+<div class="eq">$$f(B(x,\delta)) = \{x'\in X \mid \exists x''\in B(x,\delta) \text{ 使 } x' = f(x'')\}. \tag{8.20}$$</div>
+<p>记 \(X_0\) 为 \(\mathbb{R}^n\) 中任意零测子集（\(\mu(X_0) = 0\)），\(\mathrm{hull}(A)\) 为点集 \(A\) 的凸包。路径 \(\tau:[0,t_f]\to\mathbb{R}^n\) 若对<b>几乎所有</b> \(t\in[0,t_f]\) 满足</p>
+<div class="eq">$$\frac{d\tau}{dt}(t) \in \bigcap_{\delta>0}\left\{\bigcap_{X_0}\mathrm{hull}\big(f(B(\tau(t),\delta)\setminus X_0)\big)\right\}, \tag{8.21}$$</div>
+<p>就称为 <b>Filippov 意义下的解</b>，交集取遍所有 \(\delta>0\) 和所有零测集 \(X_0\)。(8.21) 实际上是一个<b>微分包含 differential inclusion</b> [7]，因为 \(\dot x\) 可以有一组选择。「几乎所有」允许条件在 \([0,t_f]\) 的一个零测集上不成立。直观地说：\(\tau\) 产生的几乎所有速度向量必须指在 \(\tau(t)\) 附近 \(f\) 给出的那些向量「之间」——「之间」来自凸包。Filippov 的解概念是 Carathéodory 解的惊人推广：后者要求每个速度向量都与 \(f(x(t))\) 一致 (8.14)，而 (8.21) 允许各种「马虎」，甚至允许 \(f\) 不连续。</p>
+<p>很多奇怪的向量场都有 Filippov 意义下的解，切换边界模型在其中算相对简单的。图 8.7 列出切换边界处可能出现的几种情形：</p>
+<ul>
+  <li><b>一致流 consistent flow</b>：解和直觉一致。(8.21) 要求在 \(S\) 上速度在穿越前后的两个向量之间（例如两个方向的平均），大小也在两者之间。</li>
+  <li><b>向内流 inward flow</b>：设 \(S\) 上的向量（在凸包意义下）与两侧向量方向一致，积分曲线就<b>沿 \(S\) 运动</b>。物理系统里这可能造成在 \(S\) 附近来回振荡；可以通过<b>正则化 regularization</b>——把边界加厚 [84]——来缓解（这是<b>滑模控制 sliding-mode control</b> 的主题 [40]）。</li>
+  <li><b>向外流 outward flow</b>：若初态在 \(S\) 上可能导致解不唯一；但从 \(S\) 外出发的轨迹不会穿过 \(S\)，就没有麻烦。</li>
+  <li><b>切向流 tangent flow</b>：两侧都平行于边界，会出现其它形式的不唯一。本章避免这种情形。</li>
+</ul>
+
+<div class="widget wide" data-widget="ch8-filippov"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>「向内流」：绿线到达 S 后以速度 (0.45, 0) 沿 S 滑动——这是 hull{f₊, f₋}（紫色线段）中唯一与 S 相切的速度。橙线是「按区域直接 Euler 积分」：在 S 两侧来回抖动，Δt 越大抖得越厉害。</li>
+  <li>把「正则化 ε」调到 0.1：在加厚的带子里用 f₊、f₋ 的线性混合，蓝线变得光滑，最后贴着 S 滑动——这就是书中说的「加厚边界」。</li>
+  <li>切到「向外流」、在 S 上点一下（起点会吸附到 S）：往上、往下、沿 S 滑动三条虚线都满足 (8.21)。在右边拖动 f₊ 的尖端，看情形如何在几种之间转换。</li>
+</ul></div>
+
+<h3 id="s8-3-2">8.3.2 光滑流形 <span class="en">Smooth Manifolds</span></h3>
+<p>4.1.2 节的流形定义常被称为<b>拓扑流形 topological manifold</b>，它的公理不一定足以支持微分、积分等微积分运算。我们想讨论配置空间 \(\mathcal{C}\)（或一般连续状态空间 \(X\)）上的速度；第 4 章说过 \(\mathcal{C}\) 可能是 \(\mathbb{RP}^3\) 这样的流形，所以流形还要有更多性质才能做微积分——这引出<b>光滑流形 smooth manifold</b>。</p>
+<p>设 \(M\) 是拓扑流形，例如表示 \(\mathbb{R}^3\) 中所有旋转矩阵的 \(SO(3)\)；更简单好记的例子是 \(M = \mathbb{S}^2\)。要把 8.3.1 节的概念从 \(\mathbb{R}^n\) 推广到流形，首先要定义点 \(p\in M\) 处的切空间 \(T_p(M)\)：直觉上切向量与曲面相切（图 8.8：切空间是流形在 \(p\) 邻域内的线性近似），表示从 \(p\) 出发沿流形运动的可能速度。这比 \(\mathbb{R}^n\) 难：\(\mathbb{R}^n\) 的任何点都能用 \(n\) 个坐标表示，所有切空间的局部坐标系完全对齐；而对 \(\mathbb{S}^2\) 这样的流形，切空间的定义必须与坐标无关，并且处理「绕 \(\mathbb{S}^2\) 走一圈时切平面跟着转」的事实。</p>
+<p>先仔细想想给流形赋坐标是什么意思。设 \(M\) 的维数为 \(n\)、嵌在 \(\mathbb{R}^m\) 中：\(SO(3)\) 有 \(n = 3\)、\(m = 9\)；\(\mathbb{S}^2\) 有 \(n=2\)、\(m=3\)。坐标个数应该是 \(n\)，但嵌在 \(\mathbb{R}^m\) 中的流形常表示为满足若干等式约束的 \(\mathbb{R}^m\) 子集。我们想用 \(\mathbb{R}^n\) 的坐标表示 \(M\) 的一部分。</p>
+<h4>坐标与参数化 <span class="en">Coordinates and parameterizations</span></h4>
+<p>对任何开集 \(U\subseteq M\) 和函数 \(\phi: U\to\mathbb{R}^n\)，若 \(\phi\) 是到 \(\mathbb{R}^n\) 某子集的同胚，则称 \((U,\phi)\) 为<b>坐标邻域 coordinate neighborhood</b>（有些文献叫<b>图 chart</b>）。值 \(\phi(p)\) 称为 \(p\in U\) 的<b>坐标 coordinates</b>。</p>
+<p><b>例 8.11（\(\mathbb{S}^1\) 上的坐标邻域）</b>：把 \(M = \mathbb{S}^1\) 表示为嵌在 \(\mathbb{R}^2\) 中的单位圆（\(x^2+y^2=1\) 的解集）。令 \(U\) 为 \(\mathbb{S}^1\) 中 \(x>0\) 的子集，坐标函数 \(\phi: U\to(-\pi/2,\pi/2)\) 定义为 \(\phi(x,y) = \tan^{-1}(y/x)\)。记 \(W = \phi(U)\)。因为 \(U\) 与 \(W\) 经 \(\phi\) 同胚，也能定义逆函数 \(\phi^{-1}\)——它就是熟悉的<b>参数化 parameterization</b>：\(\theta\mapsto(\cos\theta,\sin\theta)\)，只是限制在 \(\theta\in(-\pi/2,\pi/2)\)。</p>
+<p>要在点 \(p\in M\) 处求导，需要定义在包含 \(p\) 的开子集上的坐标邻域——因为在一点定义函数的导数需要它周围有一个开集；坐标看起来没有边界时就没问题。可惜，除非 \(M = \mathbb{R}^n\)（或至少与 \(\mathbb{R}^n\) 同胚），<b>一个坐标邻域盖不住整个 \(M\)</b>。于是要定义多个邻域，让它们的定义域覆盖 \(M\)；每个定义域都是开集，所以有些必然<b>重叠</b>。这时同一个点可能有两组或更多坐标，从一组换到另一组就是微积分里熟悉的<b>坐标变换 change of coordinates</b>。设 \((U,\phi)\)、\((V,\psi)\) 是某个流形上的坐标邻域，\(U\cap V\neq\emptyset\)。图 8.9 说明了从 \(\phi\) 换到 \(\psi\)：用函数复合 \(\psi\circ\phi^{-1}:\mathbb{R}^n\to\mathbb{R}^n\)（\(\phi^{-1}\) 从 \(\mathbb{R}^n\) 映到 \(M\)，\(\psi\) 从 \(M\) 的子集映到 \(\mathbb{R}^n\)）。</p>
+<p><b>例 8.12（坐标变换）</b>：在 \(M = SO(3)\) 上从欧拉角换到四元数。\(SO(3)\) 是 3 维流形，坐标邻域要把 \(SO(3)\) 的点映到 \(\mathbb{R}^3\)。可以由旋转矩阵算欧拉角，构造坐标函数 \(\phi:SO(3)\to\mathbb{R}^3\)，具体见 (3.47)–(3.49)；要成为坐标邻域，还得指定 \(M\) 的开子集 \(U\)。另一个坐标函数 \(\psi:SO(3)\to\mathbb{R}^3\) 用四元数：四元数有四个分量，看似是问题，但第四个可以由另外三个决定，用 (4.24)–(4.26) 求出 \(a,b,c\)。在重叠区域 \(U\cap V\) 上从欧拉角换到四元数：先在 \(U\) 上求 \(\phi\) 的逆，即用欧拉角参数化 \(M\)，由 (3.42) 给出旋转矩阵 \(\phi^{-1}(\alpha,\beta,\gamma)\in SO(3)\)；再对它施加 \(\psi\) 得到四元数参数——这样就得到三个实值函数 \(a = f_1(\alpha,\beta,\gamma)\)、\(b = f_2(\alpha,\beta,\gamma)\)、\(c = f_3(\alpha,\beta,\gamma)\)，合起来就是 \(\psi\circ\phi^{-1}\)。</p>
+<p>做坐标变换的理由很多。例 8.12 来自运动规划里常见的情形：图形软件用四元数显示物体，碰撞检测却用欧拉角，于是要频繁换坐标；微积分里也常换元来简化积分。光滑流形的定义里还有另一个动机：坐标邻域基于开集上的同胚，可能需要好几个才能覆盖 \(M\)；即使 \(SO(3)\) 决定用四元数，也可能需要好几个映到四元数的坐标邻域，在它们定义域的交上就需要坐标变换。</p>
+<div class="box def">
+  <div class="box-title">定义：光滑结构 smooth structure 与光滑流形</div>
+  <p>（拓扑）流形 \(M\) 上的<b>光滑结构</b>（也叫 differentiable structure、\(C^\infty\) structure）是一族（也叫 atlas）坐标邻域 \(\mathcal{U} = \{U_\alpha,\phi_\alpha\}\)，满足：</p>
+  <ol style="margin:0">
+    <li>所有 \(U_\alpha\) 的并包含 \(M\)：\(M\) 中任何点都能在 \(\mathbb{R}^n\) 中取得坐标。</li>
+    <li>对 \(\mathcal{U}\) 中任意 \((U,\phi)\)、\((V,\psi)\)，若 \(U\cap V\neq\emptyset\)，则坐标变换 \(\psi\circ\phi^{-1}\) 和 \(\phi\circ\psi^{-1}\) 都是 \(U\cap V\) 上的光滑函数（在交上给出微分同胚）。此时称这些坐标邻域<b>相容 compatible</b>。</li>
+    <li>\(\mathcal{U}\) 是<b>极大</b>的：若某个 \((U,\phi)\) 与 \(\mathcal{U}\) 中每个坐标邻域都相容，它就必须属于 \(\mathcal{U}\)。</li>
+  </ol>
+  <p style="margin-top:.4em">一个著名定理（[17] 第 54 页）：若一组相容的坐标邻域覆盖了整个 \(M\)，则存在唯一包含它们的光滑结构（假设 \(M\) 是 Hausdorff 的且有可数基——这里考虑的流形都满足）。所以光滑结构常常只需少数几个邻域来指定，其余都是隐含的。4.1.2 节定义的流形加上光滑结构，称为<b>光滑流形 smooth manifold</b>（也叫 differentiable manifold、\(C^\infty\) manifold）。</p>
+</div>
+<p><b>例 8.13（\(\mathbb{R}^n\) 作为光滑流形）</b>：前面的概念理应适用于最直接的一族流形 \(\mathbb{R}^n\)：用单个坐标邻域 \(\mathbb{R}^n\to\mathbb{R}^n\)（恒等映射）即可。对整数 \(n\in\{1,2,3\}\) 和 \(n>4\)，这是 \(\mathbb{R}^n\) 上唯一的光滑结构。真正令人惊讶的是，\(\mathbb{R}^4\) 上有不可数多个互不相容的光滑结构，称为<b>奇异 \(\mathbb{R}^4\) exotic \(\mathbb{R}^4\)</b> [38]。不过不用担心，用恒等映射给出的那个就好。</p>
+<p><b>例 8.14（\(\mathbb{S}^n\) 作为光滑流形）</b>：把 \(\mathbb{S}^n\) 定义成光滑流形的一种办法用 \(2(n+1)\) 个坐标邻域，表达式很简单。设</p>
+<div class="eq">$$\mathbb{S}^n = \{(x_1,\ldots,x_{n+1})\in\mathbb{R}^{n+1} \mid x_1^2+\cdots+x_{n+1}^2 = 1\}. \tag{8.22}$$</div>
+<p>对每个 \(i\) 从 1 到 \(n+1\)，有两个邻域：</p>
+<div class="eq">$$U_i^+ = \{(x_1,\ldots,x_{n+1})\in\mathbb{R}^{n+1} \mid x_i > 0\} \tag{8.23}$$</div>
+<div class="eq">$$U_i^- = \{(x_1,\ldots,x_{n+1})\in\mathbb{R}^{n+1} \mid x_i &lt; 0\}. \tag{8.24}$$</div>
+<p>每个邻域都是覆盖半个 \(\mathbb{S}^n\) 的开集，漏掉 \(x_i = 0\) 的大圆。坐标函数是向包含该大圆的超平面作投影：去掉第 \(i\) 个坐标，</p>
+<div class="eq">$$\phi_i^+(x_1,\ldots,x_{n+1}) = (x_1,\ldots,x_{i-1},x_{i+1},\ldots,x_{n+1}) \tag{8.25}$$</div>
+<p>定义在 \(U_i^+\) 上；\(\phi_i^-\) 同样定义，只是在 \(U_i^-\) 上。每个坐标函数都是从 \(\mathbb{S}^n\) 的开子集到 \(\mathbb{R}^n\) 的开子集的同胚。在邻域重叠的子集上，坐标变换是光滑的。例如从 \(\phi_i^+\) 换到 \(\phi_j^-\)（\(i\ne j\)），坐标变换是 \(\phi_j^-\circ(\phi_i^+)^{-1}\)，其中</p>
+<div class="eq">$$\begin{aligned}&(\phi_i^+)^{-1}(x_1,\ldots,x_{i-1},x_{i+1},\ldots,x_{n+1}) = \\ &\qquad\Big(x_1,\ldots,x_{i-1},\sqrt{1-x_1^2-\cdots-x_{i-1}^2-x_{i+1}^2-\cdots-x_{n+1}^2},\,x_{i+1},\ldots,x_{n+1}\Big).\end{aligned} \tag{8.26}$$</div>
+<p>再与 \(\phi_j^-\) 复合就去掉第 \(j\) 个坐标：</p>
+<div class="eq">$$\begin{aligned}&\phi_j^-\circ(\phi_i^+)^{-1}(x_1,\ldots,x_{i-1},x_{i+1},\ldots,x_{n+1}) = \\ &\qquad\Big(x_1,\ldots,x_{i-1},\sqrt{1-x_1^2-\cdots-x_{i-1}^2-x_{i+1}^2-\cdots-x_{n+1}^2},\\ &\qquad\ \ x_{i+1},\ldots,x_{j-1},x_{j+1},\ldots,x_{n+1}\Big),\end{aligned} \tag{8.27}$$</div>
+<p>它在 \(U_i^+\)（与 \(U_j^-\) 的交）上光滑。上面三个式子按改正后的写法给出，原书 (8.25)–(8.27) 有几处笔误：根号前多了「\(1-\)」、\(\phi_k^-\) 应为 \(\phi_j^-\)、下标 \(x_n\) 应到 \(x_{n+1}\)<sup class="fn"><a href="#fn-826" id="fn-826-ref">7</a></sup>。不妨想象一下圆 \(\mathbb{S}^1\) 和球面 \(\mathbb{S}^2\) 上的坐标变换（下面的互动图就是 \(\mathbb{S}^1\) 的情形）。也可以只用<b>两个</b>坐标邻域定义光滑结构——<b>球极投影 stereographic projection</b>：对 \(\mathbb{S}^2\)，一个坐标函数从北极向 \(x\) 画射线，把 \(x\) 映到射线穿过 \(x_3 = 0\) 平面的那一点，只排除北极本身；从南极可以构造类似的映射。</p>
+<p><b>例 8.15（\(\mathbb{RP}^n\) 作为光滑流形）</b>：这个例子特别重要，因为 \(\mathbb{RP}^3\) 与 \(SO(3)\) 是同一个流形（4.2.2 节）。回忆 \(\mathbb{RP}^n\) 是 \(\mathbb{R}^{n+1}\) 中所有过原点的直线：对任何 \(\alpha\ne 0\) 和 \(x\in\mathbb{R}^{n+1}\)，\(x\) 与 \(\alpha x\) 被等同——投影空间里尺度无关紧要。只需 \(n+1\) 个坐标邻域：对 \(i\) 从 1 到 \(n+1\)，在 \(x_i\ne 0\) 的开集上</p>
+<div class="eq">$$\phi_i(x_1,\ldots,x_{n+1}) = (x_1/x_i,\ldots,x_{i-1}/x_i,x_{i+1}/x_i,\ldots,x_{n+1}/x_i), \tag{8.28}$$</div>
+<div class="eq">$$\phi_i^{-1}(z_1,\ldots,z_n) = (z_1,\ldots,z_{i-1},1,z_i,\ldots,z_n). \tag{8.29}$$</div>
+<p>（原书两式最后一项的下标也有同样的笔误，见脚注 7。）不难验证这些简单变换在重叠的邻域上光滑。\(SO(3)\) 上的光滑结构可以作为特例：\(SO(3)\) 与 \(\mathbb{RP}^3\) 拓扑等价。用单位四元数表示 \(SO(3)\) 的元素，每个 \((a,b,c,d)\) 看成 \(\mathbb{S}^3\) 上一点；有四个坐标邻域，例如</p>
+<div class="eq">$$\phi_b(a,b,c,d) = (a/b,\ c/b,\ d/b), \tag{8.30}$$</div>
+<p>定义在 \(\mathbb{R}^4\) 中 \(b\ne 0\) 的子集上。\(\phi_b\) 的逆要定义成把 \(SO(3)\) 中的点映到 \(\mathbb{R}^4\) 中<b>单位长度</b>的点。</p>
+
+<div class="widget" data-widget="ch8-charts"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>「例 8.14」：沿圆拖 p。除了四个「轴点」，p 总在恰好两个邻域里；在 x₁ = 0 或 x₂ = 0 的点上只剩一个——四个开的半圆刚好覆盖 S¹，缺一个都不行。右图是 U₂⁺ → U₁⁻ 的坐标变换 u ↦ √(1−u²)，u ∈ (−1, 0)：光滑。</li>
+  <li>勾选「按原书 (8.26) 求逆」：红 ✕ 是用原书公式重建出的点。例如坐标 0.6 会被映到 (0.6, 0.2)，模长 0.632，不在圆上；改正后是 (0.6, 0.8)（参考代码第 7 项）。</li>
+  <li>「球极投影」：两个邻域就够了，各只漏掉一个极点；重叠部分 σ_S = 1/σ_N，在 u ≠ 0 时光滑。「例 8.11」只有一个邻域，只能盖住右半圆。</li>
+</ul></div>
+
+<h4>流形上的切空间 <span class="en">Tangent spaces on manifolds</span></h4>
+<p>直观上，\(n\) 维流形 \(M\) 在 \(p\) 处的切空间 \(T_p(M)\)，是 \(\mathbb{R}^m\) 中在 \(p\) 附近最好地近似 \(M\) 的 \(n\) 维超平面（把超平面的原点平移到 \(p\)，图 8.8）。7.4.1 节描述闭链的局部运动时就用过切线的概念（图 7.22）。</p>
+<p>要在流形上定义切空间，先比 8.3.1 节更复杂地定义 \(\mathbb{R}^n\) 中一点的切空间。设 \(M = \mathbb{R}^2\)，考虑光滑函数 \(f:\mathbb{R}^2\to\mathbb{R}\) 在 \(p\in\mathbb{R}^2\) 处的方向导数。对某个（未归一化的）方向向量 \(v\in\mathbb{R}^2\)，\(f\) 在 \(p\) 处的方向导数是</p>
+<div class="eq">$$\nabla_v(f)\Big|_p = v_1\frac{\partial f}{\partial x_1}\Big|_p + v_2\frac{\partial f}{\partial x_2}\Big|_p. \tag{8.31}$$</div>
+<p>这里的方向导数<b>不</b>归一化方向向量（与基础微积分不同），所以 \(\nabla_v(f) = \nabla(f)\cdot v\)，\(\cdot\) 是内积，\(\nabla(f)\) 是梯度。所有能用来构造方向导数的方向向量构成一个二维向量空间，恰好就是前面定义的切空间 \(T_p(\mathbb{R}^2)\)。推广到 \(n\) 维：</p>
+<div class="eq">$$\nabla_v(f)\Big|_p = \sum_{i=1}^n v_i\frac{\partial f}{\partial x_i}\Big|_p, \tag{8.32}$$</div>
+<p>所有可能的方向向量构成切空间 \(T_p(\mathbb{R}^n)\)；就我们的目的，方向的集合可以理解为可能的速度向量的集合。</p>
+<p>现在考虑流形上光滑函数 \(f:M\to\mathbb{R}\) 的（未归一化）方向导数。对 \(n\) 维流形，\(p\in M\) 处的切空间 \(T_p(M)\) 同样可以看成所有未归一化方向的集合——直觉上这些方向必须与流形相切（图 8.8）。有一个巧妙的办法可以不借助具体坐标邻域来定义它们，得到流形<b>内蕴</b>的 \(T_p(M)\) 定义。你可以只接受「\(T_p(M)\) 是附着在 \(p\) 处、如图 8.8 那样定向的 \(n\) 维向量空间」；为了完整，书中给出微分几何的技术定义（细节见 [17, 86]）：它刻画所有可能的方向导数算子。记 \(C^\infty(p)\) 为定义域包含 \(p\) 的所有光滑函数，并作等同：若存在开集 \(U\subset M\) 使对任何 \(p\in U\) 有 \(f(p) = g(p)\)，就称 \(f,g\in C^\infty(p)\) <b>等价</b>（等价函数的导数在 \(p\) 处必然相同，不必区分）。记等同后的集合为 \(\tilde C^\infty(p)\)。\(p\) 处的方向导数算子可以看成从 \(\tilde C^\infty(p)\) 到 \(\mathbb{R}\) 的函数（对 \(\mathbb{R}^n\) 就是 \(\nabla_v\)）。设 \(\nabla_v\) 是 \(p\in M\) 处的方向导数算子（小心：这里 \(v\) 并没有显式表示，因为没有坐标），它必须满足两条公理：</p>
+<ol>
+  <li><b>线性</b>：对任何 \(\alpha,\beta\in\mathbb{R}\)、\(f,g\in\tilde C^\infty(p)\)，
+    <div class="eq">$$\nabla_v(\alpha f + \beta g) = \alpha\nabla_v f + \beta\nabla_v g. \tag{8.33}$$</div></li>
+  <li><b>Leibniz 法则（导子 Derivation）</b>：对任何 \(f,g\in\tilde C^\infty(p)\)，
+    <div class="eq">$$\nabla_v(fg) = \nabla_v f\, g(p) + f(p)\,\nabla_v g. \tag{8.34}$$</div></li>
+</ol>
+<p>这些公理在标准向量微积分里就是方向导数的性质。可以证明，满足这些公理的所有算子构成一个 \(n\) 维向量空间 [17]，它就是 \(p\) 处的<b>切空间</b> \(T_p(M)\)——一个不引用坐标的定义。</p>
+<p>不过显式表示 \(T_p(M)\) 中的向量还是有用的：用坐标邻域可以得到切空间的基。微分几何的一个重要定理：若 \(F: M\to N\) 是到开集 \(U\subset N\) 的微分同胚，则切空间 \(T_p(M)\) 与 \(T_{F(p)}(N)\) 同构。这意味着通过参数化（坐标邻域的逆），\(T_p(M)\) 中的速度向量与 \(T_{F(p)}(N)\) 中的速度向量一一对应：参数的微小扰动造成流形 \(N\) 上沿切向的运动。比如想象对表示 \(SO(3)\) 的三个四元数参数做微小扰动：扰动足够小时，得到的运动与 \(SO(3)\) 相切——扰动后的矩阵非常接近 \(SO(3)\)（它们不在 \(SO(3)\) 里，因为 \(SO(3)\) 由 \(\mathbb{R}^9\) 中的非线性约束定义，见 4.1.2 节）。</p>
+<p><b>例 8.16（\(\mathbb{S}^2\) 的切空间）</b>：把 \(\mathbb{S}^2\) 嵌在 \(\mathbb{R}^3\) 中，为满足 \(x^2+y^2+z^2=1\) 的点。用标准球坐标可以定义覆盖 \(\mathbb{S}^2\) 大部分的坐标邻域：坐标函数 \(f\) 把 \((x,y,z)\) 映到角度 \((\theta,\phi)\)，定义域是 \(\theta\in(0,2\pi)\)、\(\phi\in(0,\pi)\) 的开集（不含两极）。标准公式是 \(\theta = \mathrm{atan2}(y,x)\)、\(\phi = \cos^{-1} z\)；逆 \(f^{-1}\) 给出参数化 \(x = \cos\theta\sin\phi\)、\(y = \sin\theta\sin\phi\)、\(z = \cos\phi\)。考虑在 \(\mathbb{S}^2\) 上除两极以外的某点 \(p\) 表达切空间的不同方式（两极需要换坐标才能覆盖）。用坐标 \((\theta,\phi)\)，速度就是 \(\mathbb{R}^2\) 中的向量：可以想象在 \(\theta\)、\(\phi\) 定义的平面里运动，只要遵守 \(\theta\in(0,2\pi)\)、\(\phi\in(0,\pi)\) 的限制。也可以用参数化推出切空间在 \(\mathbb{R}^3\) 中的基向量：切空间只有两维，必须得到一个与球在 \(p\) 处「相切」的平面，对参数化求导即可。把 \(f^{-1}\) 记为 \(x(\theta,\phi)\)、\(y(\theta,\phi)\)、\(z(\theta,\phi)\)，\(p\) 处切平面的两个基向量是</p>
+<div class="eq">$$\left[\frac{dx(\theta,\phi)}{d\theta}\ \ \frac{dy(\theta,\phi)}{d\theta}\ \ \frac{dz(\theta,\phi)}{d\theta}\right] \tag{8.35}$$</div>
+<div class="eq">$$\left[\frac{dx(\theta,\phi)}{d\phi}\ \ \frac{dy(\theta,\phi)}{d\phi}\ \ \frac{dz(\theta,\phi)}{d\phi}\right]. \tag{8.36}$$</div>
+<p>求导并归一化得到 \([-\sin\theta\ \ \cos\theta\ \ 0]\) 和 \([\cos\theta\cos\phi\ \ \sin\theta\cos\phi\ \ -\sin\phi]\)，可以想象成在 \(p\) 处对 \(\theta\) 和 \(\phi\) 做微小扰动的结果。它们所有线性组合构成的向量空间就是 \(p\) 处的切空间<sup class="fn"><a href="#fn-816" id="fn-816-ref">8</a></sup>。注意基向量的方向随 \(p\in\mathbb{S}^2\) 变化，这正如所料。切向量可以想象成位于与曲面相切的平面内（图 8.8）。由 \(g(x,y,z) = 0\) 给出的曲面的法向量是 \(\nabla g\)，归一化后得到 \([x\ \ y\ \ z]\)；也可以对上面两个向量作叉积，再用参数化 \(f^{-1}\) 用 \(x,y,z\) 表示出来。对点 \(p = (x_0,y_0,z_0)\)，切平面方程为</p>
+<div class="eq">$$x_0(x-x_0) + y_0(y-y_0) + z_0(z-z_0) = 0. \tag{8.37}$$</div>
+
+<div class="widget" data-widget="ch8-tangent-s2"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>把 φ 拖向 0（北极）：右边 ∂/∂θ 的长度 sinφ 趋于 0——这个坐标邻域在极点退化，这正是例 8.16 要求 φ ∈ (0, π) 的原因（参考代码第 8 项）。</li>
+  <li>e_θ·p、e_φ·p、e_θ·e_φ 始终是 0：两个基向量都与法向量 [x y z] 垂直，而且彼此垂直。</li>
+  <li>调「沿切向量直走 Δt」：红点 p + Δt·v 离开了球面（|p + Δt·v| > 1）——参数的小扰动只在一阶意义下沿流形运动，就像书中说扰动四元数得到的矩阵「非常接近但不在」SO(3) 里。绿色虚线是坐标 (θ, φ) 按 (θ̇, φ̇) 匀速变化时在球面上画出的曲线。</li>
+</ul></div>
+
+<h4>流形上的向量场与速度场 <span class="en">Vector fields and velocity fields on manifolds</span></h4>
+<p>流形上切空间的记号与 \(\mathbb{R}^n\) 的一样，于是向量场的定义和记号可以自然地从 \(\mathbb{R}^n\) 推广到光滑流形：流形 \(M\) 上的<b>向量场</b>给每个 \(p\in M\) 指定一个 \(T_p(M)\) 中的向量。它仍然可以想象成针状图，只不过现在针状图铺在流形上，而不是 \(\mathbb{R}^n\) 中。速度场的解释也能推广到光滑流形：\(\dot x = f(x)\) 现在定义 \(M\) 上的 \(n\) 个微分方程，通常用光滑结构的某个坐标邻域来表达。若 \(f\) 是光滑向量场，就能从任何 \(x_0\in M\) 出发定义<b>解轨迹</b> \(\tau:[0,\infty)\to M\)；对分段光滑向量场，也能定义 Filippov 意义下的解轨迹。</p>
+</section>
+
+<!-- ============================================================ 8.4 -->
+<section id="s8-4">
+<h2>8.4 连续空间的完备方法 <span class="en">Complete Methods for Continuous Spaces</span></h2>
+<p><b>完备</b>的反馈规划算法：有解就必须算出一个反馈解，否则报告失败。8.4.1 节仿照 8.2 节，定义连续状态空间里的反馈计划和导航函数；8.4.2 节说明怎样由单元分解得到的单元复形定义可行反馈计划；8.4.3 节给出在 \(\mathbb{R}^2\) 中计算最优导航函数和反馈计划的组合方法。8.4.2、8.4.3 节都允许反馈计划是<b>不连续</b>的向量场。在许多应用中（尤其动力学占主导时），要对导航函数和它们导出的向量场施加一些条件，所以 8.4.4 节考虑对允许的向量场和导航函数加约束，包括 Rimon–Koditschek [79] 意义下的导航函数——「导航函数」这个词就是从那里来的。</p>
+
+<h3 id="s8-4-1">8.4.1 反馈运动规划的定义 <span class="en">Feedback Motion Planning Definitions</span></h3>
+<p>用 8.3 节的概念，现在可以在配置空间或其它连续状态空间上定义反馈运动规划了。回忆 Formulation 4.1 用配置空间定义了基本运动规划问题；这里的区别是<b>没有初始条件</b>，而且「解路径」换成了「<b>解向量场</b>」。这里的表述可以看成 Formulation 8.1 的连续时间版本。</p>
+<div class="box def formulation">
+  <div class="box-title">Formulation 8.2（反馈运动规划 Feedback Motion Planning）</div>
+  <ol>
+    <li><b>状态空间</b> \(X\)，是一个光滑流形，最常见的是 4.3.1 节定义的 \(\mathcal{C}_{free}\)（\(X\) 已经去掉了障碍区域；Part IV 的某些问题里状态空间是包含障碍区域的 \(X = \mathcal{C}\)）。</li>
+    <li>对每个状态 \(x\in X\)，<b>动作空间</b> \(U(x) = T_x(X)\)。零速度 \(0\in T_x(X)\) 被指定为终止动作 \(u_T\)。按这个模型，机器人能在任何状态选择自己的速度（这允许速度不连续地变化，在很多应用中不现实；后面会讨论加速度界等额外约束，完整的微分约束见 Part IV）。</li>
+    <li>无界的<b>时间区间</b> \(T = [0,\infty)\)。</li>
+    <li><b>状态转移（微分）方程</b>
+      <div class="eq">$$\dot x = u, \tag{8.38}$$</div>
+      用某个坐标邻域表达，给出由动作 \(u\) 直接指定的速度 \(\dot x\)。\(u_T\) 产生的速度是 \(0\in T_x(X)\)（意思是「停下」）。</li>
+    <li><b>目标集</b> \(X_G\subset X\)。</li>
+  </ol>
+</div>
+<p>Formulation 8.2 的<b>反馈计划</b> \(\pi\) 是一个函数，对每个 \(x\in X\) 给出一个动作 \(u\in U(x)\)。由于每个 \(u\in U(x)\) 指定 \(T_x(X)\) 中的一个速度向量（\(u_T\) 指定零速度），反馈计划也可以等价地看成 \(X\) 上的<b>向量场</b>。因为初态不固定，说清楚「计划是问题的解」就稍微复杂一点。记 \(X_r\subset X\) 为能到达 \(X_G\) 的所有状态：\(x_I\in X_r\) 当且仅当存在连续路径 \(\tau:[0,1]\to X\) 使 \(\tau(0) = x_I\)、\(\tau(1) = x_G\) 对某个 \(x_G\in X_G\) 成立——也就是第 4 章「开环」运动规划问题从 \(x_I\) 有解。</p>
+<h4>解的概念 <span class="en">Solution concepts</span></h4>
+<p>若从所有 \(x_I\in X_r\) 出发，\(\pi\)（看作向量场）的积分曲线都到达 \(X_G\)，并在那里施加终止动作，就称 \(\pi\) 为 Formulation 8.2 的<b>解</b>。「到达」\(X_G\) 是什么意思要小心。控制理论的稳定性概念 [51, 84] 可以区分各种情形（15.1 节）。若 \(X_G\) 是以 \(x_G\) 为中心的小球，用图 8.5b 的向内场，有限时间内就能到达这个球。但若 \(X_G\) 是单点 \(x_G\)：向内场让状态越来越近，可什么时候真正到达？这种情形下收敛到原点只是<b>渐近的 asymptotic</b>——时间趋于无穷时在极限意义下到达。光滑向量场常产生这种稳定性；若向量场光滑而目标是一个点，这是不可避免的。我们可以允许这种渐近收敛：若积分曲线只是渐近收敛到 \(X_G\)，就称为<b>渐近解计划 asymptotic solution plan</b>。注意一般不可能要求 \(\pi\) 是光滑（甚至连续）的非零向量场——例如由<b>毛球定理 hairy ball theorem</b> [81]，对任何偶数 \(n\)，\(\mathbb{S}^n\) 上不存在这样的向量场。所以最强的可能要求是 \(\pi\) 除零测集外光滑（见 8.4.4 节）。也可以允许<b>几乎所有</b>积分曲线到达 \(X_G\) 的 \(\pi\)。</p>
+<p>不过本章默认解计划在<b>有限时间</b>内收敛到 \(x_G\)。例如把向内场归一化，使除原点外速度处处为 1，原点就能在有限时间内到达。可以对允许的向量场集合加一个约束而不影响解的存在性：和基本运动规划一样，沿路径的速率并不重要。称向量场为<b>归一化向量场 normalized vector field</b>：若对所有 \(x\in X\)，\(\|f(x)\| = 1\) 或 \(f(x) = 0\)——所有速度向量要么是单位向量要么是零，速率不再是因素，归一化向量场给出的只是运动方向或「不动」。任何向量场 \(f\) 都可以把每个 \(f(x)\) 除以它的模长（模长为零时除外）来归一化。</p>
+<p>很多时候单位速率在物理意义上并不意味着恒速。例如机器人是浮动刚体时，位置和姿态有很多种参数化方式，刚体的速度对参数化很敏感。所以有时别的约束比 \(\|f(x)\| = 1\) 更好；但要记住，施加这个约束是为了让 \(f(x)\) 在 \(x\) 处给出一个<b>方向</b>，具体大小被认为不重要。</p>
+<p>以上只考虑了<b>可行</b>反馈运动规划问题。引入代价泛函就可以定义<b>最优</b>反馈运动规划问题。记 \(\tilde x_t\) 为函数 \(\tilde x_t:[0,t]\to X\)，称为<b>状态轨迹</b>（或状态历史），是前面离散阶段状态历史的连续时间版本；类似地记 \(\tilde u_t:[0,t]\to U\) 为<b>动作轨迹</b>（或动作历史）。代价泛函 \(L\) 可以从任何 \(x_I\) 出发计算：</p>
+<div class="eq">$$L(\tilde x_{t_F}, \tilde u_{t_F}) = \int_0^{t_F} l(x(t),u(t))\,dt + l_F(x(t_F)), \tag{8.39}$$</div>
+<p>\(t_F\) 是施加终止动作的时刻。用状态转移方程 (8.38)，\(l(x(t),u(t))\) 也可以写成 \(l(x(t),\dot x(t))\)。对所有能到达目标的初态都优化 (8.39) 的归一化向量场，称为<b>最优反馈运动计划</b>。</p>
+<p>注意：状态轨迹可以由动作历史和初态确定。其实第 4 章本可以用动作轨迹来定义运动规划问题的解路径；当时把解定义为路径 \(\tau:[0,1]\to\mathcal{C}_{free}\)，是为了避免引入光滑流形上的速度场。书中说：那是全书唯一一处「动作空间好像消失了」的地方，现在可以看出，它只是为了避免不必要的记号而藏了起来。</p>
+
+<h4>导航函数 <span class="en">Navigation functions</span></h4>
+<p>和 8.2.2 节一样，只要给连续状态空间配一个局部算子，势函数就能表示反馈计划。离散情形下局部算子选一个让势下降的动作；连续情形下，局部算子要把势函数转成向量场——每个状态都要定义一个速度向量。默认假设由导航函数导出的向量场不一定归一化。设对所有 \(x\in X_G\)，不管势函数是什么都定义 \(\pi(x) = u_T\)。设势函数 \(\phi:X\to\mathbb{R}\) 的梯度</p>
+<div class="eq">$$\nabla\phi = \left[\frac{\partial\phi}{\partial x_1}\ \ \frac{\partial\phi}{\partial x_2}\ \ \cdots\ \ \frac{\partial\phi}{\partial x_n}\right] \tag{8.40}$$</div>
+<p>在整个 \(X\setminus X_G\) 上存在。相应的反馈计划定义为 \(\pi(x) = -\nabla\phi|_x\)——这就是局部算子：速度取 \(\phi\) 最速下降的方向。用势函数做机器人规划的想法由 <b>Khatib</b> [52, 53] 提出，可以看成<b>梯度下降</b>这种一般优化技术的一种形式。</p>
+<p>也可以使用梯度不是处处存在的势函数。这时对一个小的固定 \(\Delta t\)，定义 (8.4) 的连续版本：</p>
+<div class="eq">$$u^* = \operatorname*{argmin}_{u\in U(x)}\Big\{\phi(x')\Big\}, \tag{8.41}$$</div>
+<p>\(x'\) 是从 \(x\) 以速度 \(u\) 积分 \(\Delta t\) 时间得到的状态。一个问题是 \(\Delta t\) 应选得只用 \(\phi\) 尽可能小的邻域。最好只允许这样的势函数：在每个 \(x\) 处，\(\Delta t\) 可以任意小而不影响 (8.41) 的决策。精确地说：取一列收敛到 0 的 \(\Delta t\) 值，得到一列 \(u^*\)；势函数应保证从序列某一点之后，存在同一个 \(u^*\) 在 \(\Delta t\to 0\) 时满足 (8.41)。梯度存在是一个特例，此时这个序列收敛到负梯度。</p>
+<p>若由势函数 \(\phi\) 导出的向量场是一个解计划，就称 \(\phi\) 为<b>导航函数</b>；最优 cost-to-go 是<b>最优导航函数</b>。若同一个 \(\phi\) 能导出多个向量场，每个都必须是解反馈计划。设计得当的话，势函数可以看成把状态引向 \(X_G\) 的「<b>滑雪坡 ski slope</b>」：若有多余的局部极小把状态困住，就到不了 \(X_G\)；作为导航函数，\(X_G\) 外不允许这样的局部极小。此外还可能有额外要求，以保证导出的向量场满足有界加速度等约束。</p>
+<p><b>例 8.17（二次势函数）</b>：设 \(X = \mathbb{R}^2\)，无障碍，\(q_{goal} = (0,0)\)。二次函数 \(\phi(x_1,x_2) = \frac12 x_1^2 + \frac12 x_2^2\)（书中写作 \(\phi(x,y)\)）是把状态引到目标的好势函数；反馈运动策略定义为 \(f = -\nabla\phi = [-x_1\ \ -x_2]\)，正是图 8.5b 的向内向量场。若目标改为 \((x'_1,x'_2)\in\mathbb{R}^2\)，引导状态到目标的势函数是 \(\phi(x_1,x_2) = (x_1-x'_1)^2 + (x_2-x'_2)^2\)。</p>
+<p>设状态空间是含<b>点障碍</b>的配置空间。上面的 \(\phi\) 可以看成<b>吸引势 attractive potential</b>——位形被吸引向目标；也可以构造把位形推离障碍的<b>排斥势 repulsive potential</b>。记 \(\phi_a\) 为吸引分量、\(\phi_r\) 为排斥势，形如 \(\phi = \phi_a + \phi_r\) 的势函数把两种作用合在一起：机器人在避开障碍的同时被引向目标。问题在于，<b>一般很难保证这样的势函数没有多个局部极小</b>——位形可能被困在不在目标区域的局部极小里。5.4.3 节的规划器就有这个问题。</p>
+
+<div class="widget" data-widget="ch8-potential"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>先选「例 8.17」：没有障碍，等值线是同心圆，针状图就是图 8.5b 的向内流；从任何地方出发都到达目标。</li>
+  <li>切回「吸引 + 排斥」（排斥项的具体公式 ½η(1/d − 1/ρ₀)² 是我们补充的常见写法），点「从 120 个起点各下降一次」：圆盘墙左边的起点大多困在两个红 ✕ 处——吸引力把它们往右拉、排斥力往左推，梯度为零的地方不在目标。</li>
+  <li>把 η 调到 0：局部极小消失了，但轨迹直接撞上障碍（橙点）。拖动圆盘把墙拆开一个缺口，看被困的点怎样变少——这正是习题 20 要你体会的「很难保证没有局部极小」。</li>
+</ul></div>
+
+<h3 id="s8-4-2">8.4.2 单元复形上的向量场 <span class="en">Vector Fields Over Cell Complexes</span></h3>
+<p>这一节说明怎样在单元复形上构造分段光滑的向量场，只考虑归一化向量场。假设复形中每个单元形状简单，容易在上面定义一片向量场。很多情况下，第 6 章为运动规划介绍的单元分解技术都可以用来构造反馈计划。</p>
+<p>设 \(n\) 维状态空间 \(X\) 已分解成单元复形，例如 6.3.1 节定义的单纯复形或奇异复形；目标集是单点 \(x_G\)。在 \(X\) 上定义反馈计划 \(\pi\)，就是在 \(X\) 上放一个向量场，使所有积分曲线都通向 \(x_G\)（若 \(x_G\) 可达）。办法是在每个 \(n\)-单元上定义光滑向量场；每个 \((n-1)\)-单元是 8.3.1 节意义下的切换边界，于是直接得到 Filippov 意义下的解轨迹。若允许 \(\pi\) 不连续，那么维数 \(\le n-1\) 的单元上的值其实无关紧要。构造 \(\pi\) 采用<b>分层</b>方法：</p>
+<ol>
+  <li>在 \(n\)-单元上定义离散规划问题：含 \(x_G\) 的单元是目标，在单元上定义离散导航函数。</li>
+  <li>在每个 \(n\)-单元上定义向量场：让单元中所有状态按离散导航函数的规定流入下一个单元。</li>
+</ol>
+<p>应用中还有一点很重要：尽量减小跨边界不连续的影响；也许能消除不连续，甚至在 \(n\)-单元之间构造光滑过渡。这里不讨论，但它在实际中相当重要 [26, 66]。</p>
+<p>形式化一下。设连续状态空间 \(X\) 上已定义单元复形，记 \(\check X\) 为 \(n\)-单元的集合，可以解释为有限状态空间。为避免与原连续问题混淆，离散规划的各组成部分都加前缀「<b>超 super</b>」：每个<b>超状态</b> \(\check x\in\check X\) 对应一个 \(n\)-单元；对每个相邻的 \(n\)-单元（两单元必须共享一个 \((n-1)\) 维边界），\(\check x\) 有一个<b>超动作</b> \(\check u\in\check U(\check x)\)。目标超状态 \(\check x_g\) 是含 \(x_G\) 的 \(n\)-单元。设离散问题的代价泛函让每个动作（\(u_T\) 除外）代价为 1。于是 8.2 节的概念都可以用于离散问题：用 Dijkstra（或别的算法，特别是不要求最优时）算离散导航函数 \(\check\phi:\check X\to\mathbb{R}\)，用 8.2.2 节的离散局部算子得到离散反馈计划 \(\check\pi:\check X\to\check U\)。</p>
+<p>按照离散反馈计划，\(n\)-单元分两类。第一类是目标单元 \(\check x_g\)：需要在其上定义向量场，使所有积分曲线在有限时间内到达 \(X_g\)（即使 \(X_g\) 是单点也能有限时间到达，因为向量场不连续；否则只可能渐近收敛）；真正到达 \(x_G\) 时施加终止动作。其余都是第二类：对每个单元 \(\check x\)，它与施加 \(\check u = \check\pi(\check x)\) 后到达的单元共享的边界称为<b>出口面 exit face</b>；单元 \(\check x\) 上的向量场必须让所有积分曲线通向出口面。到达出口面时进入下一个 \(n\)-单元。若 \(n\)-单元是凸的，定义这种过渡很直接（除非对场有额外要求，如边界处光滑）；对更复杂的单元，一种可能是定义一个把所有点收缩到单元内某条曲线上的向量场。</p>
+<p>书中用 \(X = \mathcal{C}_{free}\subset\mathbb{R}^2\)、\(\mathcal{C}_{free}\) 边界为多边形的情形说明（6.2 节考虑过这个问题，但没有反馈）。设已按 6.3.2 节算出 \(X\) 的三角剖分（例子见图 6.16）。图 8.10 为某个目标给出离散反馈计划：每个 2-单元（三角形）标一个指向下一个单元的箭头。含 \(x_G\) 的单元：把图 8.5b 的向内向量场的每个非零向量除以模长得到归一化版本，再平移使原点落在 \(x_G\)。其余每个三角形都要构造流入相应相邻单元的向量场，图 8.11 给出一个简单办法：把图 8.5b 的场取负得到<b>向外</b>的场 \(f = [x\ \ y]\)，归一化后平移，让原点落在三角形中<b>不与出口边相接的那个顶点</b>——图 8.11 称它为<b>排斥顶点 repulsive vertex</b>。它把三角形里所有点推向出口边。若每个三角形都这样构造，全局向量场就是问题的一个解反馈计划，（Filippov 意义下的）积分曲线在有限时间内到达 \(x_G\)。</p>
+
+<div class="widget wide" data-widget="ch8-cells"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>鼠标在三角形上移动：橙色粗线是它的出口边，红点是排斥顶点，蓝色小箭头是这个三角形里的场（图 8.11）。勾「显示离散导航函数 φ̌」看 BFS 给每个三角形的值。</li>
+  <li>点「撒 40 个起点」：每条积分曲线都到达 x_G。仔细看「书中」模式的轨迹：从第二个三角形起，它们常常<b>贴着三角形的边</b>走、穿过顶点（右下角统计约三分之一的长度在边上）。原因是：进入一个三角形时所经过的那条边，它的一个端点恰好就是这个三角形的排斥顶点，进入点处的场方向正好沿着这条边——这是一种 Filippov 意义下的「滑动」解 <span class="muted">（补充观察）</span>。</li>
+  <li>切到「补充：挪到顶点外侧一点」：排斥点沿「出口边中点 → 顶点」的方向挪到三角形外面（悬停时的 ✕），射线仍然全部从出口边穿出，但贴边走的比例降到 0。拖动 x_G（切到「移动目标」）：离散计划和整个向量场立即重算。</li>
+</ul></div>
+<p class="small muted">三角剖分是我们用「耳切法 + 把洞用桥接进外边界 + Lawson 翻边」生成的（补充实现）：36 个三角形，恰好等于 \(n + 2h - 2\)（\(n\) 个顶点、\(h\) 个洞），面积之和与自由空间面积一致。</p>
+
+<h3 id="s8-4-3">8.4.3 最优导航函数 <span class="en">Optimal Navigation Functions</span></h3>
+<p>上一节的向量场给出可行轨迹，但除非初态和目标在同一个凸 \(n\)-单元里，一般不是最优的。若 \(X = \mathbb{R}^2\)，可以做 Dijkstra 的<b>连续版本</b> [74]：在 \(X\) 上得到基于到目标 \(x_G\) 的欧氏最短路的<b>精确</b> cost-to-go 函数。这个 cost-to-go 函数就是导航函数，由局部最速下降定义反馈计划。</p>
+<p>设 \(X\) 由一个简单多边形（无洞）围成，只允许归一化向量场，代价泛函是沿状态轨迹走过的欧氏距离。回忆 6.2.4 节：最优路径规划必须用 \(X = \mathrm{cl}(\mathcal{C}_{free})\)。假设 \(\mathcal{C}_{free}\) 与 \(\mathrm{cl}(\mathcal{C}_{free})\) 连通性相同（这排除了「加上边界点后能走出一条不同伦路径」的 \(\mathcal{C}_{free}\)，例如 \(\mathbb{R}^2\) 中两个方形障碍只在一对角点上接触）。这在技术上与 8.3 节切空间的定义冲突——\(X\) 的每个点都必须含于一个开邻域；不过我们允许沿边界的向量，只要它们「指向」与边界相切的方向。形式上可以把边界区域看成单独的流形。</p>
+<p>考虑为图 8.12a 那样的问题计算到点 \(x_G\) 的最优 cost-to-go。对任何 \(x\in X\)，记 \(V(x)\) 为从 \(x\) 可见的所有点构成的<b>可见多边形 visibility polygon</b>（图 8.12b）：\(x'\in V(x)\) 当且仅当线段 \(x'x\) 含于 \(X\)。这意味着从 \(x'\) 到 \(x\) 的 cost-to-go 就是欧氏距离。于是可以立即在 \(V(x_G)\) 上定义最优导航函数：</p>
+<div class="eq">$$\phi(x) = \|x - x_G\|. \tag{8.42}$$</div>
+<p>图 8.13a 画出了它在等间距取值上的等值线。\(X\setminus V(x_G)\) 中的点怎么办？对任何 \(x\in X\)，\(V(x)\) 边界上的线段有的在 \(X\) 的边界上，有的穿过 \(X\) 的内部；图 8.12b 中有两条边穿过内部。对每条穿过内部的线段，把两个端点中离 \(x\) 较近的那个称为<b>路点 way point</b>。图 8.12b 标出了两个路点。\(V(x_G)\) 的路点是某些最优路径必须经过的地方。对任何 \(x\in X\)，记 \(W(x)\) 为 \(V(x)\) 的路点集合。</p>
+<p>一个直接的算法：记 \(Z_i\) 为第 \(i\) 次迭代时 \(\phi\) 已定义的点集。第一次迭代 \(Z_1 = V(x_G)\)（图 8.13a）。把 \(V(x_G)\) 的路点放进队列 \(Q\)。之后每次迭代，从 \(Q\) 取出一个路点 \(x\)；\(Z_i\) 是至今的定义域，把 \(\phi\) 的定义域扩展到从 \(x\) 可见的所有新点 \(V(x)\setminus Z_i\)，于是 \(Z_{i+1} = Z_i\cup V(x)\)。对 \(x'\in Z_{i+1}\setminus Z_i\)，</p>
+<div class="eq">$$\phi(x') = \phi(x) + \|x' - x\|, \tag{8.43}$$</div>
+<p>其中 \(x\) 是从 \(Q\) 取出的路点（它的最优 cost-to-go 已经算好）。\(V(x)\) 中不在 \(Z_{i+1}\) 里的路点加入 \(Q\)，每个都会揭示 \(X\) 中还没见过的新部分。\(Q\) 为空时算法结束，此时对某个 \(k\) 有 \(Z_k = X\)。图 8.13 演示了算法的执行（四次迭代，每次从一个新路点扩展）。</p>
+<p>若 \(X\) 由 \(n\) 条边描述，可见多边形可以在 \(O(n\lg n)\) 时间内算出：用<b>径向扫描 radial sweep</b>——6.2.2 节竖直单元分解方法的改编，区别在于以 \(x\) 为锚的射线像雷达一样径向扫过，与射线相交的线段按到 \(x\) 的距离排序。构造导航函数的算法最多算 \(O(n)\) 个可见多边形（每个来自一个不同的路点），总运行时间 \(O(n^2\lg n)\)。可惜这不能推广到高维：回忆 7.7.1 节，在 3D 环境中计算最短路是 NP-难的 [22]。</p>
+<p>这里的算法容易描述，但既不是最一般的，也不是最高效的。若 \(X\) 有洞，绕障碍从不同方向到达时，等值线会<b>相撞</b>。上面的队列 \(Q\) 可以像 Dijkstra 那样排序，还需要特殊的数据结构识别 cost-to-go 向外传播时的关键事件。[48] 证明了这可以在 \(O(n\lg n)\) 时间、\(O(n\lg n)\) 空间内完成。</p>
+
+<div class="widget" data-widget="ch8-optnav"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>把「显示到第 i 次迭代」从 1 拖到最后：i = 1 时只有 V(x_G) 有颜色（图 8.13a），之后每次从一个路点（紫色，编号即处理顺序）扩展出一块新区域。橙色多边形是本次迭代的 V(x)。</li>
+  <li>默认目标下各路点的 φ 依次为 0.234、0.261、0.297、0.412、0.425，起点 φ = 0.642，最短路径经过路点 1（参考代码第 12 项）。拖动起点：绿色最短路径就是沿 φ 最速下降，由直线段组成，只在路点处拐弯。</li>
+  <li>勾「加一个洞」（习题 5、18b）：洞的四个角也成了路点；看洞上方的等值线——从洞的左右两侧绕过来的「波」在洞后面相撞，形成一条折痕。我们按 φ 从小到大处理 Q（像 Dijkstra），一个点能被多个路点看见时取 (8.43) 的最小值——这在有洞时是必要的。</li>
+</ul></div>
+
+<h3 id="s8-4-4">8.4.4 迈向动力学的一步 <span class="en">A Step Toward Considering Dynamics</span></h3>
+<p>若动力学很重要，前面考虑的不连续向量场就不可取了：由于动量，机械系统不能瞬间改变速度（13.3 节）。这时可能要求向量场满足光滑性或有界加速度等额外约束。这只是迈向考虑动力学的一步；完整的处理在 Part IV，那里动力系统的精确运动方程是模型的一部分。本节的思路是让向量场「为动力学做好准备 dynamics-ready」，而不是仔细考虑具体的运动方程。</p>
+<p>已有一个框架：先在简单区域（如圆盘 [79]）上定义满足某些期望约束的导航函数，再设计一组被证明能保持这些约束的变换，把导航函数适配到更复杂的环境；对给定问题，从某个起始形状施加适当的变换序列，就得到构造导航函数的完备算法。本节主要关注这个变换框架下保持的约束。8.4.2、8.4.3 节用的是归一化向量场；在这个约束下几乎任何向量场都可以定义，只要所得算法构造的场有 Filippov 意义下的积分曲线。本节<b>去掉归一化约束</b>，转而考虑别的约束：向量场给出的速度现在被认为是作为反馈计划执行时必须真正执行的速度。</p>
+<p>加约束的一个后果是最优解可能不再满足它们：例如 8.4.3 节的最优导航函数导出不连续的向量场，违反本节要考虑的约束。所需的约束限制了允许的向量场集合，最优性必须在受限集合上定义；有时最优解甚至不存在（见 9.1.1 节关于开集与最优性的讨论）。所以本节只关注<b>可行</b>解。</p>
+
+<h4>基于加速度的控制模型 <span class="en">An acceleration-based control model</span></h4>
+<p>为引出约束，考虑 [26, 80] 提出的控制模型。Formulation 8.2 中动作空间 \(U(x) = T_x(X)\) 给每个动作 \(u\in U(x)\) 产生一个速度：\(\dot x = u\)。现在改为每个动作产生<b>加速度</b>：\(\ddot x = u\)，\(\ddot x\) 是<b>加速度向量</b></p>
+<div class="eq">$$\ddot x = \frac{d\dot x}{dt} = \left[\frac{d^2x_1}{dt^2}\ \ \frac{d^2x_2}{dt^2}\ \ \cdots\ \ \frac{d^2x_n}{dt^2}\right]. \tag{8.44}$$</div>
+<p>速度 \(\dot x\) 由对时间积分得到，状态轨迹 \(\tilde x: T\to X\) 由对 (8.44) 积分两次得到。设给了向量场 \(\dot x = f(x)\)，怎样得到反馈计划？考虑 \(x\) 变化时 \(f(x)\) 给出的速度向量如何变化。设 \(f(x)\) 光滑（至少 \(C^1\)），令</p>
+<div class="eq">$$\nabla_{\dot x} f(x) = \big[\nabla_{\dot x}f_1(x)\ \ \nabla_{\dot x}f_2(x)\ \ \cdots\ \ \nabla_{\dot x}f_n(x)\big], \tag{8.45}$$</div>
+<p>\(\nabla_{\dot x}\) 表示 \(\dot x\) 方向上未归一化的方向导数：\(\nabla f_i\cdot\dot x\)。设给定初态 \(x_I\)，初速度 \(\dot x = f(x_I)\)，反馈计划可以定义为</p>
+<div class="eq">$$u = \nabla_{\dot x} f(x). \tag{8.46}$$</div>
+<p>这与 8.4.1 节的反馈计划定义等价；唯一区别是现在需要两次积分（需要 \(x\) 和 \(\dot x = f(x_I)\) 两个初始条件），并且向量场必须满足可微条件。</p>
+<p>现在重新定义 \(\dot x\) 与 \(f(x)\) 的关系：设 \(\dot x\) 是执行中真实测到的速度，\(f(x)\) 是由向量场<b>规定</b>的速度。执行时假设 \(\dot x\) 与 \(f(x)\) 不一定相同，任务是让它们尽量接近。两者的差异可能来自没建模的动力学：例如场 \(f(x)\) 要求速度突然改变，移动机器人可能由于动量转不了急弯。按新解释，差 \(f(x) - \dot x\) 可以看成误差。设向量场 \(f\) 已算好，反馈计划变为<b>基于加速度的控制 acceleration-based control</b> 模型</p>
+<div class="eq">$$u = K(f(x) - \dot x) + \nabla_{\dot x} f(x), \tag{8.47}$$</div>
+<p>\(K\) 是标量<b>增益常数 gain constant</b>。\(K\) 越大，控制系统越激进地减小误差；\(K\) 太大则可能违反加速度或能量约束。注意若 \(\dot x = f(x)\)，则 \(u = \nabla_{\dot x}f(x)\)，与前面的表述等价。</p>
+<h4>速度与加速度约束 <span class="en">Velocity and acceleration constraints</span></h4>
+<p>在基于加速度的控制模型下，可以对允许的向量场施加一些约束。<b>有界速度模型 bounded-velocity model</b>：\(\|\dot x\| &lt; v_{max}\)，正实数 \(v_{max}\) 称为<b>最大速率</b>，比如出于安全考虑限制机器人速度；也可以分别限制速度向量的各分量，例如飞机的最大角速度和线速度。直觉上，速度界意味着定义向量场的函数 \(f_i\) 不能取大值。</p>
+<p><b>有界加速度模型 bounded-acceleration model</b>：\(\|\ddot x\|\le a_{max}\)，正实数 \(a_{max}\) 称为<b>最大加速度</b>。直觉上，加速度界意味着沿积分曲线运动时速度不能变化太快。由控制模型 \(\ddot x = u\)，这就是 \(\|u\|\le a_{max}\)；它也对向量场施加了约束：对所有 \(\dot x\) 和 \(x\in X\)，\(\|\nabla_{\dot x}f(x)\|\le a_{max}\)。\(\|u\|\le a_{max}\) 在实际中非常重要：更大的加速度通常更昂贵（要更大的电机、消耗更多燃料等）；动作 \(u\) 可能直接对应施加到电机上的力矩，而每个电机都有上限。</p>
+<p>前面已经看到，给速度设上界一般不影响解的存在：机器人总可以选择走得更慢。若还有加速度上界，机器人也可以通过走得更慢来满足——想象开车急转弯前先减速。想开得快就更难满足加速度约束；不过大多数情况下更快更好。<b>不连续的向量场不满足任何加速度界</b>：在不连续处让速度向量跳变，本质上需要无穷大的加速度。若向量场以某个常数 \(C\) 满足 Lipschitz 条件 (8.16)，则当 \(C &lt; a_{max}\) 时它满足加速度界<sup class="fn"><a href="#fn-lip" id="fn-lip-ref">9</a></sup>。第 13 章会在每个 \(x\in X\) 处精确指定 \(U(x)\)，这比简单的速度、加速度界一般得多，几乎能建模任何物理系统。</p>
+
+<div class="widget" data-widget="ch8-accel"></div>
+<div class="box intuition"><div class="box-title">试一试 <span class="tag">补充演示</span></div><ul>
+  <li>默认：拐弯处的场不连续（w = 0），速率 0.35、a_max = 0.5。点「执行」：机器人在虚线处想立刻转向，可加速度被截断在 a_max（右图蓝线顶在红虚线上），只能慢慢把横向速度减下来——冲过了竖直走廊，撞墙。</li>
+  <li>不改 a_max，把「拐弯过渡宽度 w」调到 0.18 或更大：场变成光滑的，转弯提前开始，同样的加速度界下能到达；w = 0.06、0.12 仍然撞墙。也可以保持 w = 0、把 a_max 提到 0.7（参考代码第 17 项核对过这几组）。</li>
+  <li>看右上角「C·|f| vs a_max」：即使 w = 0.24，C·|f| = 1.20 也大于 0.5，加速度仍会饱和（橙色虚线是跟住 f 需要的加速度）；但过渡越平缓，饱和越短、误差 ‖f − ẋ‖ 越小。增益 K 太小时误差消除得慢，太大则更早撞上 a_max。</li>
+</ul></div>
+
+<h4>Rimon–Koditschek 意义下的导航函数 <span class="en">Navigation function in the sense of Rimon-Koditschek</span></h4>
+<p>现在考虑构造这样的导航函数：由它导出的向量场满足基于加速度的控制模型 (8.47) 所要求的约束。和往常一样，导航函数的定义从势函数 \(\phi: X\to\mathbb{R}\) 开始。势函数要有哪些性质，才既能成为 8.4.1 节意义下的导航函数、又导出满足加速度界的向量场？下面给出充分条件。</p>
+<p>为了给出这些条件，先要刻画多元函数的极值。回忆基础微积分：\(f:\mathbb{R}\to\mathbb{R}\) 在一阶导数为零处有<b>临界点 critical point</b>，二阶导数的符号指出它是极小还是极大。推广到高维：\(\phi\) 的临界点是 \(\nabla\phi = 0\) 的点；\(\phi\) 的 <b>Hessian</b> 定义为矩阵</p>
+<div class="eq">$$H(\phi) = \begin{pmatrix} \dfrac{\partial^2\phi}{\partial x_1^2} & \dfrac{\partial^2\phi}{\partial x_1\partial x_2} & \cdots & \dfrac{\partial^2\phi}{\partial x_1\partial x_n} \\[2mm] \dfrac{\partial^2\phi}{\partial x_2\partial x_1} & \dfrac{\partial^2\phi}{\partial x_2^2} & \cdots & \dfrac{\partial^2\phi}{\partial x_2\partial x_n} \\ \vdots & \vdots & & \vdots \\ \dfrac{\partial^2\phi}{\partial x_n\partial x_1} & \dfrac{\partial^2\phi}{\partial x_n\partial x_2} & \cdots & \dfrac{\partial^2\phi}{\partial x_n^2} \end{pmatrix}. \tag{8.48}$$</div>
+<p>在每个临界点，Hessian 提供关于极值的信息<sup class="fn"><a href="#fn-hess" id="fn-hess-ref">10</a></sup>。若 \(H(\phi)\) 在 \(x\) 处秩为 \(n\)，它就能指出极值的类型：若 (8.48) <b>正定</b>（对所有 \(x\ne 0\)，\(x^TAx > 0\)；对称矩阵——Hessian 就是——等价于特征值全正），\(\phi\) 在 \(x\) 处取<b>局部极小</b>；若<b>负定</b>（特征值全负），取<b>局部极大</b>；其余情形 \(x\) 是<b>鞍点 saddle point</b>。若 \(H(\phi)\) 在 \(x\) 处秩小于 \(n\)，Hessian 是<b>退化的 degenerate</b>，无法判断极值类型——例如 \(x\) 位于一块平台上（没有任何方向让 \(\phi\) 增或减）。这种行为对势函数显然不好，局部算子选不出方向。</p>
+<p>设要求导航函数光滑，以保证每点都有梯度，从而能做梯度下降。若 \(X\) <b>不可缩 not contractible</b>，那么除 \(x_G\) 外必然存在一些临界点 \(\nabla\phi(x) = 0\)；临界点甚至可以用来推断 \(X\) 的拓扑——这是 <b>Morse 理论</b> 的基本思想 [73, 25]。可惜这意味着这样的空间上不存在（8.4.1 节意义下的）解导航函数：那个定义要求从任何能到达 \(x_G\) 的状态出发，用导航函数导出的向量场都要到达 \(x_G\)；若初态恰是临界点，积分曲线就停在原地。所以在光滑约束下，导航函数的定义要修改：允许在少数地方有临界点（只在零测集上）；还要求积分曲线会到达各临界点的那些状态（各临界点的<b>吸引域</b>）测度为零。这样，除一个零测集外，从所有可能的初态出发，积分曲线都要到达 \(x_G\)（若可达）。这由下面的定义保证。</p>
+<div class="box def">
+  <div class="box-title">定义：Rimon–Koditschek 意义下的导航函数 [79]</div>
+  <p>函数 \(\phi: X\to\mathbb{R}\) 若满足以下四条，就称为 Rimon–Koditschek 意义下的导航函数：</p>
+  <ol style="margin:0">
+    <li>光滑（或至少 \(C^2\)）。</li>
+    <li>在含 \(x_G\) 的 \(\mathcal{C}_{free}\) 连通分量上的所有值中，只有一个局部极小，就在 \(x_G\)（有些作者不把全局极小算作局部极小，那样就说「没有局部极小」）。</li>
+    <li>在 \(\partial\mathcal{C}_{free}\)（\(\mathcal{C}_{free}\) 的边界）上取最大值且为常数。</li>
+    <li>是 <b>Morse 函数</b> [73]：在每个临界点 \(x\)（\(\nabla\phi|_x = 0\)），\(\phi\) 的 Hessian 非退化（严格说 Morse 函数还要求各临界点处的函数值互不相同）。任何光滑流形上都存在这样的函数。</li>
+  </ol>
+</div>
+<p>若 \(\phi\) 在 \(C^\infty\) 意义下光滑，则由 <b>Sard 定理</b> [25]，临界点集测度为零。[79] 给出了为 \(\mathcal{C}_{free}\) 有半代数描述的一大类问题构造导航函数的方法：从容易定义导航函数的简单形状开始——例如 \(\mathbb{R}^n\) 中含球形障碍的球形子集（<b>球形世界 sphere world</b>）；再开发一组扭曲变换，把导航函数适配到其它形状，同时保持上面四条性质。一种变换把球扩展成任意的可见区域（8.4.3 节的意义）：把球光滑地拉伸成可见区域的形状（这种区域有时称为<b>星形 star-shaped</b>）。[79] 的变换可以组合起来，为一大类配置空间定义导航函数。主要问题是：配置空间障碍和 \(\mathcal{C}_{free}\) 的连通性都只是<b>隐式</b>表示的，难以把方法正确用于复杂的高维问题。这一方法的优点之一是收敛到目标的证明变得简单，很多情形下可以做 Lyapunov 稳定性分析（15.1.1 节）。</p>
+
+<div class="widget" data-widget="ch8-rk"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>这里用的是 [79] 中球形世界的标准构造 \(\phi = \gamma/(\gamma^k+\beta)^{1/k}\)：\(\gamma = \|q-q_G\|^2\)，\(\beta\) 是外边界函数 \(1-\|q\|^2\) 与各障碍函数 \(\|q-q_i\|^2-r_i^2\) 的乘积 <span class="muted">（具体公式是补充，书中只给了四条性质）</span>。在 \(\partial\mathcal{C}_{free}\) 上 \(\beta = 0\)，所以 \(\phi = 1\)——性质 3。</li>
+  <li>k = 1、2、3、4 时左下方有一个「假极小」（红点），从 150 个起点下降，一部分会困在那里；k ≥ 5 时它消失了，只剩 4 个鞍点——每个障碍旁一个（参考代码第 10 项对 k = 1…6、10 逐一核对）。鞍点只吸引零测集：撒点时几乎没有起点停在鞍点上。</li>
+  <li>拖动障碍或目标：临界点会重新计算。按 Morse 理论，「极小数 − 鞍点数 + 极大数」由空间的拓扑决定：圆盘挖掉 4 个洞，这个数是 1 − 4 = −3（目标处的极小也要算上），所以 k 再大，4 个鞍点也去不掉。<span class="muted">（补充说明）</span></li>
+</ul></div>
+
+<h4>调和势函数 <span class="en">Harmonic potential functions</span></h4>
+<p>另一类重要的导航函数由<b>调和函数 harmonic functions</b> 构造 [27, 28, 29, 49, 54]。若函数 \(\phi\) 满足微分方程</p>
+<div class="eq">$$\nabla^2\phi = \sum_{i=1}^n\frac{\partial^2\phi}{\partial x_i^2} = 0, \tag{8.49}$$</div>
+<p>就称为调和函数。依赖于 \(\phi\) 定义域边界上的条件，方程有很多可能的解；[26] 给出一个有解析解的简单圆盘例子。复杂的导航函数一般通过对 \(\phi\) 在 \(\mathcal{C}_{free}\) 边界上施加约束来定义。<b>Dirichlet 边界条件</b>要求边界保持常值：用这个条件可以构造一个调和导航函数，在单连通状态空间里从任何地方把状态引到目标区域。若有内部障碍，<b>Neumann 边界条件</b>迫使速度向量与障碍边界相切。在两种边界条件的组合下解 (8.49)，可以构造一个调和导航函数：平行于障碍边界运动以避开障碍，最终落入目标。已经证明在一般条件下能产生导航函数 [29, 28]；但主要问题是 \(\mathcal{C}_{free}\) 的边界通常没有被显式构造（回忆第 5 章为什么要回避它），而且数值求解 (8.49) 代价很高。可以用 <b>Gauss–Seidel 迭代</b>求解（如 [29]），它与值迭代有关（两者的区别见 [11]）。[16] 给出了通过调和函数构造导航函数的采样方法。8.5.2 节会用值迭代产生近似最优的导航函数。</p>
+
+<div class="widget wide" data-widget="ch8-harmonic"></div>
+<div class="box intuition"><div class="box-title">试一试 <span class="tag">补充演示</span></div><ul>
+  <li>点「▶ 迭代」：每一轮把每个自由格子换成四个邻居的平均（离散拉普拉斯方程的 Gauss–Seidel），颜色从目标附近一层层「传」出去——和值迭代的传播很像。</li>
+  <li>「一次跑到收敛」：Dirichlet（障碍上 φ = 1）要 877 轮，Neumann（障碍上 ∂φ/∂n = 0，外边界 φ = 1）要 4610 轮（参考代码第 18 项）。收敛后左上角 1 − φ 只有 10⁻⁸（Dirichlet）——梯度极小，但方向仍然对：流线都到达目标，而且<b>没有局部极小</b>（离散极大值原理，参考代码第 11 项）。</li>
+  <li>迭代还没收敛时点画布：远处的值仍是 1，梯度为 0，流线走不动（✕）。比较两种边界条件下的流线：Neumann 的流线贴着障碍边缘平行地走（「切向」），Dirichlet 的流线离障碍远一些。</li>
+</ul></div>
+</section>
+
+<!-- ============================================================ 8.5 -->
+<section id="s8-5">
+<h2>8.5 连续空间的采样方法 <span class="en">Sampling-Based Methods for Continuous Spaces</span></h2>
+<p>8.4 节的方法可以看成第 6 章组合方法的反馈版。它们给出了优雅的解，但问题又来了：要么只适用于低维问题，要么只适用于有特殊结构的问题。这就引出采样方法——本节是第 5 章的反馈版。</p>
+
+<h3 id="s8-5-1">8.5.1 计算漏斗的组合 <span class="en">Computing a Composition of Funnels</span></h3>
+<p>Mason 提出用<b>漏斗 funnel</b> 作为隐喻，描述不论初始位置如何都收敛到状态空间同一小区域的运动 [70]：就像漏斗里的沙粒沿漏斗壁滑到底部的开口。导航函数可以想象成把状态引入目标的漏斗；例如图 8.13d 的 cost-to-go 函数可以看成一个复杂的漏斗，把每粒沙沿最优路径送到目标。</p>
+<svg class="funnels" viewBox="0 0 560 170" role="img" aria-label="图 8.14 的重画：漏斗的组合">
+  <defs><marker id="f814a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/></marker></defs>
+  <g fill="none" stroke="var(--text-2)" stroke-width="1.4">
+    <ellipse cx="60" cy="22" rx="42" ry="9"/><path d="M18 22 C 40 50, 70 70, 102 92"/><path d="M102 22 C 100 50, 110 75, 118 92"/>
+    <ellipse cx="128" cy="96" rx="40" ry="9"/><path d="M88 96 C 110 120, 150 135, 175 150"/><path d="M168 96 C 168 120, 180 140, 190 150"/>
+    <ellipse cx="196" cy="152" rx="34" ry="8"/>
+  </g>
+  <g font-size="12" fill="var(--text-2)" text-anchor="middle"><text x="60" y="26">1</text><text x="128" y="100">2</text><text x="196" y="156">3</text></g>
+  <g fill="var(--accent-soft)" stroke="var(--text-2)" stroke-width="1.4" fill-opacity=".55">
+    <circle cx="330" cy="85" r="58"/><circle cx="405" cy="85" r="58"/><circle cx="480" cy="85" r="58"/>
+  </g>
+  <g stroke="var(--accent)" stroke-width="1.6">
+    <path d="M300 70 L348 80" marker-end="url(#f814a)"/><path d="M296 92 L348 90" marker-end="url(#f814a)"/><path d="M302 110 L348 100" marker-end="url(#f814a)"/>
+    <path d="M380 75 L424 80" marker-end="url(#f814a)"/><path d="M378 90 L424 90" marker-end="url(#f814a)"/><path d="M380 105 L424 100" marker-end="url(#f814a)"/>
+    <path d="M455 75 L498 80" marker-end="url(#f814a)"/><path d="M453 90 L498 90" marker-end="url(#f814a)"/><path d="M455 105 L498 100" marker-end="url(#f814a)"/>
+  </g>
+  <g font-size="12" fill="var(--text-2)" text-anchor="middle"><text x="315" y="40">1</text><text x="405" y="40">2</text><text x="495" y="40">3</text></g>
+</svg>
+<p class="small muted" style="text-align:center">图 8.14 的重画：导航函数和对应的向量场可以设计成漏斗的组合。左：漏斗 1 的出口落进漏斗 2，再落进漏斗 3；右：每个重叠区域上的场把状态送进下一个区域。</p>
+<p>与其设计一个大漏斗，不如把状态空间分解成一组简单的、彼此重叠的区域，在每个区域上设计一个把状态引入另一个漏斗的漏斗（图 8.14）。例如 [20] 在每个漏斗上放一个 <b>Lyapunov 函数</b>（15.1.2 节）来保证收敛到下一个漏斗。组合若干个漏斗就构造出反馈计划：从 \(X\) 中某个初态出发，依次访问一串漏斗直到到达目标；每个漏斗本质上解决「到达下一个漏斗」这个子目标；最终到达含目标的漏斗，其上的导航函数让状态到达目标。在<b>感知不确定</b>的情形下（漏斗隐喻正是为此提出的），漏斗的组合成为<b>原像规划框架 preimage planning framework</b> [69]，见 12.5.1 节。本节假设当前状态总是已知的。</p>
+
+<h4>近似覆盖 <span class="en">An approximate cover</span></h4>
+<p>图 8.15 说明了<b>近似覆盖</b>的概念，后面用它表示漏斗的定义域。记 \(\tilde X\) 为状态空间 \(X\) 的子集。\(\tilde X\) 的<b>覆盖 cover</b> 是一族集合 \(\mathcal{O}\)，满足：</p>
+<ol>
+  <li>对每个 \(O\in\mathcal{O}\)，\(O\subseteq X\)。</li>
+  <li>\(\tilde X\) 是覆盖中所有集合的并的子集：
+    <div class="eq">$$\tilde X\subseteq\bigcup_{O\in\mathcal{O}} O. \tag{8.50}$$</div></li>
+</ol>
+<p>每个 \(O\in\mathcal{O}\) 称为一个<b>邻域 neighborhood</b>。8.3.2 节用坐标邻域的覆盖定义光滑流形，用的就是覆盖的概念。一般地，覆盖允许：1) 任意多个邻域重叠（交集非空）；2) 邻域包含 \(\tilde X\) 以外的点。6.3.1 节的单元分解是一种特殊的覆盖：邻域构成 \(\tilde X\) 的一个<b>划分</b>，而且必须拼合得很好（回忆图 6.15）。</p>
+<p>到目前为止还没对邻域加任何约束。实际上应选择它们，让在每个邻域上设计导航函数变得大大简化。对原运动规划问题，单元分解的设计使得在每个单元里找无碰路径变得平凡；这里思想相同，只是现在要构造反馈计划。所以通常假设单元形状简单。若 \(\tilde X\) 是 \(X\) 的<b>真子集</b>，覆盖称为<b>近似的 approximate</b>。理想情况是<b>精确覆盖 exact cover</b>：\(\tilde X = X\)，且每个邻域有好的性质，如凸——这只在低维或有特殊结构的状态空间里才可行（第 6 章的单元分解就是这样）。</p>
+<p>考虑为 \(X\) 构造近似覆盖。目标应是覆盖尽可能多的 \(X\)：\(\mu(X\setminus\tilde X)\) 尽可能小，\(\mu\) 是 5.1.3 节定义的 Lebesgue 测度。还希望 \(\tilde X\) 保持 \(X\) 的连通性：若 \(X\) 中两点间存在路径，那么 \(\tilde X\) 中也应存在。</p>
+
+<h4>在覆盖上定义反馈计划 <span class="en">Defining a feedback plan over a cover</span></h4>
+<p>8.4.2 节的思想可以改编来在 \(\tilde X\) 上用覆盖定义反馈计划。记 \(\check X\) 为离散状态空间，每个超状态是一个邻域；相应离散规划问题的大部分组成和 8.4.2 节一样，唯一区别在于超动作的定义——覆盖中的邻域可以重叠。对每个邻域 \(O\in\mathcal{O}\)，对每个满足 \(O\cap O'\neq\emptyset\)（通常是内部重叠 \(\mathrm{int}(O)\cap\mathrm{int}(O')\neq\emptyset\)）的其它邻域 \(O'\in\mathcal{O}\)，存在一个超动作。注意单元分解中这不会产生超动作，因为它是划分。按照漏斗组合的隐喻，有些漏斗的定义域应该重叠（图 8.14）。从邻域 \(O\) 到 \(O'\) 的转移，靠在 \(O\) 上定义一个把 \(O\setminus O'\) 中所有状态送进 \(O\cap O'\) 的向量场实现（图 8.16：所有积分曲线都通向 \(O\cap O'\)）。一旦到达 \(O'\)，就不再跟随 \(O\) 的场，改用 \(O'\) 的场；用 \(O'\) 的场又可以转移到另一个邻域。注意从 \(O\) 的场跳到 \(O'\) 的场，可能使反馈计划在 \(\tilde X\) 上成为不连续的向量场；若覆盖设计得让 \(O\cap O'\) 很大（若它们相交），就有可能通过混合 \(O\) 与 \(O'\) 的场实现渐变。</p>
+<p>离散问题定义好以后，可以按 8.2 节在 \(\check X\) 上算离散反馈计划，再转成 \(X\) 上的反馈计划：在每个邻域上定义导致相应转移的向量场。每个 \(\check x\in\check X\) 既可以解释为超状态，也可以解释为邻域。对每个 \(\check x\)，离散反馈计划给出超动作 \(\check u = \check\pi(\check x)\)，得到新邻域 \(\check x'\)；于是把 \(\check x = O\) 上的向量场设计成把所有状态送进 \(\check x' = O'\)。</p>
+<p>如果需要，还能由离散导航函数 \(\check\phi\) 得到 \(X\) 上的导航函数 \(\phi\)。设 \(\check\phi\) 的构造使每个 \(\check x\in\check X\) 的 \(\check\phi(\check x)\) 都不同（\(\check X\) 有限，任何导航函数都能轻易变换成满足此约束）。记 \(\phi_O\) 为某个 \(O\in\mathcal{O}\) 上的导航函数。设 \(X_G\) 是单点 \(x_G\)（可以推广到更一般的情形）。对每个 \(x_G\notin O\) 的邻域，\(\phi_O\) 的定义使梯度下降通向 \(\check\phi(\check x)\) 最小的那个重叠邻域；若 \(O\) 含 \(x_G\)，\(\phi_O\) 直接把状态引到 \(x_G\)。各邻域上的导航函数可以很容易地拼成整个 \(X\) 上的导航函数：多个邻域重叠的地方，\(\phi\) 定义为 \(\check\phi(\check x)\) 最小的那个邻域的导航函数。这可以通过给每个 \(\phi_O\) 加一个大常数实现。记 \(c\) 为一个常数，使对所有 \(O\in\mathcal{O}\)、\(x\in O\) 都有 \(\phi_O(x) &lt; c\)（假设每个 \(\phi_O\) 有界），并设 \(\check\phi\) 只取整数值；记 \(\mathcal{O}(x)\) 为所有满足 \(x\in O\) 的 \(O\in\mathcal{O}\)。\(X\) 上的导航函数定义为</p>
+<div class="eq">$$\phi(x) = \min_{O\in\mathcal{O}(x)}\Big\{\phi_O(x) + c\,\check\phi(O)\Big\}. \tag{8.51}$$</div>
+
+<h4>一种采样方法 <span class="en">A sampling-based approach</span></h4>
+<p>构造覆盖的方法很多。为说明思路，这里介绍称为<b>基于采样的邻域图 sampling-based neighborhood graph</b> 的方法 [91]。设 \(X = \mathcal{C}_{free}\)，是某个配置空间的子集。如 5.4 节，记 \(\alpha\) 为 \(X\) 中稠密的无穷样本序列；设有一个碰撞检测算法能返回机器人与世界中障碍的距离 (5.28)（这类算法见 5.3 节）。图 8.17 给出一个增量算法。开始时 \(\mathcal{O}\) 为空；每次迭代，若 \(\alpha(i)\in\mathcal{C}_{free}\) 且它不在任何已有邻域里，就往 \(\mathcal{O}\) 加一个新邻域。两个主要问题是：1) 怎样定义新邻域 \(O\) 使 \(O\subset\mathcal{C}_{free}\)；2) 何时终止。任何时候覆盖都是近似的；所有邻域的并是 \(\tilde X\)，它是 \(X\) 的真子集。与图 8.15 相比，这里的覆盖是邻域不超出 \(\tilde X\) 的特例。</p>
+<div class="box algo">
+  <div class="box-title">图 8.17　INCREMENTAL COVER CONSTRUCTION</div>
+  <div class="pseudo ch8-wrap">
+    <span class="ln">初始化 \(\mathcal{O} = \emptyset\)，\(i = 1\)。</span>
+    <span class="ln">令 \(x = \alpha(i)\)，\(d\) 为碰撞检测算法在 \(x\) 处返回的距离。</span>
+    <span class="ln">若 \(d > 0\)（这意味着 \(x\in\mathcal{C}_{free}\)）且对所有 \(O\in\mathcal{O}\) 都有 \(x\notin O\)，则把新邻域 \(O_n\) 插入 \(\mathcal{O}\)；邻域的大小和形状由 \(x\) 和 \(d\) 决定。</span>
+    <span class="ln">若终止条件不满足，则 \(i := i+1\)，回到第 2 步<sup class="fn"><a href="#fn-817" id="fn-817-ref">11</a></sup>。</span>
+    <span class="ln">从 \(\mathcal{O}\) 中删除完全包含在另一个邻域里的邻域。</span>
+  </div>
+</div>
+<p><b>定义新邻域</b>：邻域要简单，因为执行时需要快速确定哪些邻域包含状态 \(x\)。设所有邻域都是开球</p>
+<div class="eq">$$B(x,r) = \{x'\in X \mid \rho(x,x') &lt; r\}, \tag{8.52}$$</div>
+<p>\(\rho\) 是 \(\mathcal{C}\) 上的度量。在所有邻域都是球的假设下，有判断「是否存在 \(O\in\mathcal{O}\) 使 \(x\in O\)」的高效算法 [72]；实践中基于 Kd 树的方法表现很好 [5, 6]（回忆 5.5.2 节）。第 3 步可以为 \(x = \alpha(i)\) 构造新球 \(B(x,r)\)，但半径取多大？对在 \(\mathbb{R}^2\) 或 \(\mathbb{R}^3\) 中平移的点机器人，机器人与 \(\mathcal{W}\) 中障碍的 Hausdorff 距离 \(d\) 恰好就是到 \(\mathcal{C}_{obs}\) 的距离，于是可以取 \(r = d\)，\(B(x,r)\) 保证无碰。</p>
+<p>一般的配置空间里，可以找到 \(r\) 使 \(B(x,r)\subseteq\mathcal{C}_{free}\)，但一般 \(r &lt; d\)。这个问题在 5.3.4 节检查路径段时出现过，3.2、3.3 节的变换在确定 \(r\) 时很重要。为说明，设 \(\mathcal{C} = \mathbb{R}^2\times\mathbb{S}^1\)，对应在 \(\mathcal{W} = \mathbb{R}^2\) 中平移和旋转的刚体机器人 \(\mathcal{A}\)，每个点 \(a\in\mathcal{A}\) 用 (3.35) 变换。想象从某个位形 \(q = (x,y,\theta)\) 出发，给每个坐标加扰动 \(\Delta x\)、\(\Delta y\)、\(\Delta\theta\)：\(\mathcal{A}\) 上的点最多能移动多远？平移对 \(\mathcal{A}\) 上所有点的影响相同，旋转则不同。回忆 5.3.4 节的图 5.12：记 \(a_r\in\mathcal{A}\) 为离原点 \((0,0)\) 最远的点，\(r\) 为它到原点的距离。若旋转扰动 \(\Delta\theta\)，任何 \(a\in\mathcal{A}\) 的位移不超过 \(r\Delta\theta\)。书中说，若三个位形参数都被扰动，则</p>
+<div class="eq">$$(\Delta x)^2 + (\Delta y)^2 + (r\Delta\theta)^2 &lt; d^2 \tag{8.53}$$</div>
+<p>就是保证所得球在 \(\mathcal{C}_{free}\) 中必须满足的约束<sup class="fn"><a href="#fn-853" id="fn-853-ref">12</a></sup>。这其实是一个实心椭球的方程，\(r = 1\) 时就是球。重新参数化 \(SE(2)\)，让 \(\Delta\theta\) 与 \(\Delta x\)、\(\Delta y\) 效果相同，就能把它变成球：变换 \(h:\theta\mapsto r\theta\) 把 \(\theta\) 映到新的定义域 \(Z = [0, 2\pi r)\)。在这个新空间里，球的方程是</p>
+<div class="eq">$$(\Delta x)^2 + (\Delta y)^2 + (\Delta z)^2 &lt; d^2, \tag{8.54}$$</div>
+<p>\(\Delta z\) 表示 \(z\in Z\) 的变化。(3.35) 的重新参数化版本是</p>
+<div class="eq">$$T = \begin{pmatrix}\cos(\theta/r) & -\sin(\theta/r) & x_t\\ \sin(\theta/r) & \cos(\theta/r) & y_t\\ 0 & 0 & 1\end{pmatrix}. \tag{8.55}$$</div>
+<p>对 3D 刚体，可以对欧拉角或四元数做类似的重新参数化，得到六维的球；也可以推广到多个物体构成的链 [91]。主要困难之一是这些球不是最大可能的球。高维中问题更严重：需要大量的球，而按上面方法构造的半径往往比可能的值小得多。允许轴对齐的柱体可以减少球的数目，但在超过六维时仍难以覆盖 \(\mathcal{C}_{free}\) 的大部分。</p>
+
+<div class="widget" data-widget="ch8-safeball"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>点「找 (8.53) 椭球表面上最坏的扰动」：在 (8.53) 椭球表面（缩小 0.1%）上搜索，找到的扰动<b>满足</b> (8.53)，扰动后的机器人却与障碍重叠（红色）——(8.53) 不足以保证无碰。</li>
+  <li>原因：平移造成的位移和旋转造成的位移可以<b>同向相加</b>，最大位移是 \(\sqrt{\Delta x^2+\Delta y^2} + r|\Delta\theta|\)，而不是平方和开根号。右下的截面图：圆是 (8.53)，菱形是保证无碰的 \(\sqrt{\Delta x^2+\Delta y^2}+r|\Delta\theta| &lt; d\)；圆超出菱形的四个角就是危险区（参考代码第 13 项：满足 (8.53) 的扰动可让点移动约 1.4d）。</li>
+  <li>手动拖 Δx、Δθ 看两项检查分别何时变红；拖动机器人或改 θ 换一个位形，d 和 r 都会变。</li>
+</ul></div>
+
+<p><b>终止 Termination</b>：第 5 章的采样规划算法找到解路径就终止。这里的终止要复杂一些，因为我们关心<b>所有</b>初始位形的解。由于 \(\alpha\) 稠密，\(\mathcal{C}_{free}\) 中未被覆盖的体积趋于零。经过有限次迭代后，最好能衡量近似的质量，达到期望质量时终止（5.6.2 节的可见性采样路线图也能这样做）。用随机样本时，可以记录「在 \(\mathcal{C}_{free}\) 中但在覆盖外」的失败百分比，估计被覆盖的 \(\mathcal{C}_{free}\) 比例。例如，若 1000 次迭代只新建了一个邻域，就可以估计 99.9% 的 \(\mathcal{C}_{free}\) 已被覆盖。还可以得到高概率界：[91] 给出的终止条件以大于 \(P_c\) 的概率保证至少覆盖了 \(\mathcal{C}_{free}\) 的 \(\alpha\in(0,1)\) 比例（这里的 \(\alpha\) 与样本序列 \(\alpha\) 撞了记号，原书如此），常数 \(P_c\) 与 \(\alpha\) 作为算法参数给出，满足条件时算法用严格的统计检验终止。若用确定性采样，终止可以基于<b>分散度</b>：它指出 \(\mathcal{C}_{free}\) 中不含其它邻域中心的最大球。体积准则的一个问题是无法保证覆盖保持 \(\mathcal{C}_{free}\) 的连通性：若 \(\mathcal{C}_{free}\) 的两部分由窄通道相连，覆盖可能漏掉一个体积很小、却是连接两部分所必需的邻域。</p>
+<p><b>例 8.18（计算出的漏斗的 2D 例子）</b>：图 8.18 是用随机样本和图 8.17 的算法算出的 2D 例子。覆盖一旦算好，就可以为不同目标快速计算不同的导航函数和向量场。这个例子主要用于说明；对多边形环境，基于凸多边形构造覆盖会更高效。</p>
+
+<div class="widget" data-widget="ch8-cover"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>点「+10」几次看图 8.17 的过程：红点是最新样本；它落在已有球里或障碍里就什么都不做。点「直到满足终止条件」：最近 m 个自由样本里只出现 ≤ 1 个新邻域时停下（m = 1000 就是书中「1000 次只新建一次 ⇒ 99.9%」的规则）。对比「估计覆盖率」和用细网格算的「真实覆盖率」：估计值往往偏高一点——没覆盖到的是窄缝和角落，随机样本很少落进去。</li>
+  <li>覆盖建好后背景是 (8.51) 的 φ 分层（越深越远，对照图 8.18b）。拖动 x_G：离散 BFS 和每个球上的场立即重算，不用重建覆盖。点画布放起点：绿色轨迹在每个球里直奔「重叠透镜」中心的转移点（橙色小点），进入下一个球就换场（图 8.16）。</li>
+  <li>换成 Halton 序列重来：球的分布更均匀。第 5 步「删掉被包住的球」在这个点机器人例子里几乎删不掉什么——新球的中心总在已有球之外。<span class="muted">（「转移点取重叠透镜的中心」与 c = 2 是我们的选择。）</span></li>
+</ul></div>
+
+<h3 id="s8-5-2">8.5.2 带插值的动态规划 <span class="en">Dynamic Programming with Interpolation</span></h3>
+<p>Part II 以用 2.3 节的<b>值迭代</b>解运动规划问题收尾。8.2 节已经用值迭代得到离散反馈计划；现在先允许在连续<b>状态</b>空间上插值，再允许在连续<b>动作</b>空间上插值，把它推广到连续空间。这给出计算最优导航函数和反馈计划的数值方法。重点放在<b>后向</b>值迭代，但插值的概念也可以用于前向。这里把最优反馈运动规划看成离散时间最优控制问题 [3, 8, 19, 62]。</p>
+<h4>在连续状态空间上插值 <span class="en">Using interpolation for continuous state spaces</span></h4>
+<p>考虑一个和 Formulation 8.1 一样的问题，只是 \(X\) 可以是连续的。设 \(X\) 有界，并暂时设对所有 \(x\in X\)，动作空间 \(U(x)\) 有限。后向值迭代可用，动态规划的论证和推导与 2.3 节相同，得到的递推与 (2.11) 相同：</p>
+<div class="eq">$$G^*_k(x_k) = \min_{u_k\in U(x_k)}\Big\{l(x_k,u_k) + G^*_{k+1}(x_{k+1})\Big\}. \tag{8.56}$$</div>
+<p>唯一的困难是 \(G^*_k(x_k)\) 不能对每个 \(x_k\in X\) 都存下来，因为 \(X\) 是连续的。有两类一般做法：一是用参数化曲面族近似 \(G^*_k\)，如多项式或神经网络导出的非线性基函数 [12]；二是只在有限个<b>样本点</b>上存 \(G^*_k\)，其它点的值用<b>插值</b>得到 [61, 62]。设用有限样本集 \(S\subset X\) 表示 \(X\) 上的 cost-to-go 函数。图 8.19 描绘了用插值评估 (8.56)：即使 \(x_k\) 是样本点，下一个状态 \(x_{k+1} = f(x_k,u_k)\) 也可能落在样本点之间，对每个 \(u_k\in U(x_k)\) 都可能需要插值。一般地，样本应选得让<b>分散度</b>（5.2.3 节）尽量小，以免在大片没有样本点的区域上近似 cost-to-go 函数。收敛速度最终取决于分散度 [10]（结合状态转移方程和代价泛函上的 Lipschitz 条件）。为简化记号，设 \(S\) 是 \(\mathbb{R}^n\) 中规则间隔的网格。</p>
+<p>先看 \(X = [0,1]\subset\mathbb{R}\)。令 \(S = \{s_0,s_1,\ldots,s_r\}\)，\(s_i = i/r\)；例如 \(r = 3\) 时 \(S = \{0, 1/3, 2/3, 1\}\)。这样总会在 \(X\) 的边界上有样本，保证 \((0,1)\) 中任何点上下都有样本。令 \(i\) 为满足 \(s_i &lt; x\) 的最大整数，于是 \(s_{i+1} > x\)；样本 \(s_i\)、\(s_{i+1}\) 称为 \(x\) 的<b>插值邻居 interpolation neighbors</b>。\(G^*_{k+1}\) 在任意 \(x\in[0,1]\) 处的值可以由<b>线性插值</b>得到：</p>
+<div class="eq">$$G^*_{k+1}(x) \approx \alpha\,G^*_{k+1}(s_i) + (1-\alpha)\,G^*_{k+1}(s_{i+1}), \tag{8.57}$$</div>
+<p>系数 \(\alpha\in[0,1]\) 为</p>
+<div class="eq">$$\alpha = 1 - r(x - s_i) = 1 - \frac{x - s_i}{1/r}. \tag{8.58}$$</div>
+<p>若 \(x = s_i\)，则 \(\alpha = 1\)，(8.57) 化为 \(G^*_{k+1}(s_i)\)，正如所料；若 \(x = s_{i+1}\)，则 \(\alpha = 0\)，化为 \(G^*_{k+1}(s_{i+1})\)。在两者之间的所有点，(8.57) 用 \(\alpha\) 混合 \(s_i\)、\(s_{i+1}\) 处的 cost-to-go 值，给出合适的权重。（这里写的是改正后的 (8.58)；原书写作 \(\alpha = 1 - (x-s_i)/r\)<sup class="fn"><a href="#fn-858" id="fn-858-ref">13</a></sup>。）</p>
+<p>插值的思想可以自然推广到多维。设 \(X\) 是 \(\mathbb{R}^n\) 的有界子集，\(S\) 是 \(\mathbb{R}^n\) 中的 \(n\) 维网格点，每个样本记作 \(s(i_1,i_2,\ldots,i_n)\)。对某个 \(x\in X\)，有 \(2^n\) 个「包围」它的插值邻居——包含 \(x\) 的 \(n\) 维立方体的角点。设 \(x = (x_1,\ldots,x_n)\)，令 \(i_j\) 为使 \(s(i_1,\ldots,i_n)\) 的第 \(j\) 个坐标小于 \(x_j\) 的最大整数，那么 \(2^n\) 个样本就是对每个 \(j\)、\(s(\cdot,\ldots,\cdot)\) 的第 \(j\) 个下标取 \(i_j\) 或 \(i_j+1\) 的那些——这要求所有这些样本都在 \(S\) 中。注意 \(X\) 可以是 \(\mathbb{R}^n\) 的复杂子集，只要对任何 \(x\in X\)，所需的 \(2^n\) 个插值邻居都在 \(S\) 中。用这 \(2^n\) 个插值邻居，(8.56) 中 \(G^*_{k+1}\) 在任意 \(x\in X\) 处的值可以通过<b>多线性插值 multi-linear interpolation</b> 得到。\(n=2\) 时为</p>
+<div class="eq">$$\begin{aligned} G^*_{k+1}(x) \approx\ & \alpha_1\alpha_2\,G^*_{k+1}(s(i_1,i_2)) + \alpha_1(1-\alpha_2)\,G^*_{k+1}(s(i_1,i_2+1)) \\ &+ (1-\alpha_1)\alpha_2\,G^*_{k+1}(s(i_1+1,i_2)) + (1-\alpha_1)(1-\alpha_2)\,G^*_{k+1}(s(i_1+1,i_2+1)), \end{aligned} \tag{8.59}$$</div>
+<p>\(\alpha_1\)、\(\alpha_2\) 的定义类似 (8.58)，只是分别基于沿 \(x_1\)、\(x_2\) 方向的距离。更高维的多线性插值表达式类似但写起来更麻烦；也可以用二次插值等更高阶的插值 [62]。</p>
+<p>可惜插值邻居的个数随维数 \(n\) 指数增长。一个改进是把 \(2^n\) 个样本定义的立方体分解成单纯形，每个单纯形只有 \(n+1\) 个样本作顶点，只把含 \(x\) 的单纯形的顶点作为 \(x\) 的插值邻居——计算 \(G^*_{k+1}(x)\) 的代价降到 \(O(n)\)。问题在于确定哪个单纯形包含 \(x\) 可能是个有挑战的<b>点定位问题 point-location problem</b>（计算几何的常见问题 [32]）。若用<b>重心细分 barycentric subdivision</b>（用所有面的中点分解立方体），点定位问题可以在 \(O(n\lg n)\) 时间内解决 [31, 64, 75]，比上面的 \(O(2^n)\) 好。图 8.20 给出了二维和三维的例子；这有时称为 <b>Coxeter–Freudenthal–Kuhn 三角剖分</b>。实际中由于性能考虑 \(n\) 不会太大（通常 \(n\le 6\)），即使 \(n = 3\)，实现中也能显著节省。</p>
+<p class="small muted">补充说明：下面的互动图用的是 Kuhn 三角剖分——把单元的分数坐标从大到小排序，从原点角出发按这个顺序逐个把坐标加 1，走过的 \(n+1\) 个角就是含 \(x\) 的单纯形，权重是相邻排序值之差；排序需要 \(O(n\lg n)\)。图 8.20 的 \(n=2\) 图（两条对角线加两条中线）可以看成以样本为顶点的 2×2 个单元、各被一条指向中心的对角线分开。</p>
+
+<div class="widget wide" data-widget="ch8-interp"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>左图 r = 3，把 x 从 s₁ 拖到 s₂：绿点（改正的 α）从 G(s₁) 平滑地走到 G(s₂)；红 ✕（原书 (8.58)）几乎不动，到 s₂ 时 α 还是 1 − 1/r² ≈ 0.889，与「x = s_{i+1} 时 α = 0」矛盾（参考代码第 14 项）。</li>
+  <li>右图拖动 x 跨过对角线：单纯形插值换了一个三角形，只用 3 个角；双线性用 4 个角。两者在角点和单元边上一致，在内部略有不同；对仿射函数两者都精确。</li>
+  <li>维数为 n 时：多线性要 2ⁿ 个邻居（n = 6 时 64 个），单纯形只要 n + 1 = 7 个。</li>
+</ul></div>
+
+<p>为了方便，直接称所有必需插值邻居都存在的点的集合为插值区域。对任何有限样本集 \(S\subseteq X\)，令<b>插值区域 interpolation region</b> \(R(S)\) 为可以用插值算出 \(G^*(x)\) 的所有 \(x\in X\setminus S\)：\(x\in R(S)\) 当且仅当 \(x\) 的所有插值邻居都在 \(S\) 中。图 8.21a 给出一个例子。注意有些样本点可能不给 \(R\) 贡献任何点。若用网格样本近似 \(G^*\)，随着采样分辨率增加，\(X\setminus R(S)\) 的体积趋于零。</p>
+<h4>连续动作空间 <span class="en">Continuous action spaces</span></h4>
+<p>现在设除了 \(X\)，\(U(x)\) 也是连续的，并设 \(U(x)\) 是 \(\mathbb{R}^n\) 的闭有界子集。动态规划递推 (8.56) 不变；麻烦在于 min 现在是在不可数无穷多个选择上的优化问题。一种可能是用非线性优化技术选最优的 \(u\in U(x)\)，效果很依赖 \(U(x)\)、\(X\) 和代价泛函。另一种办法是在从 \(U(x)\) 中抽取的有限样本上评估 (8.56)，样本同样最好能尽量减小分散度。某些情形下，还可以仔细利用 cost-to-go 函数及其插值表示的性质，从考虑中排除一些动作。</p>
+<h4>与反馈运动规划的联系 <span class="en">The connection to feedback motion planning</span></h4>
+<p>现在已经有了用值迭代解运动规划问题的工具。配置空间是连续状态空间，令 \(X = \mathcal{C}_{free}\)；动作空间也是连续的，\(U(x) = T_x(X)\)。对运动规划问题，\(0\in T_x(X)\) 只在施加 \(u_T\) 时才会得到，因此不需要单独表示。为计算运动规划的最优 cost-to-go 函数，主要关注点如下：</p>
+<ol>
+  <li>动作空间必须有界。</li>
+  <li>必须做离散时间近似，得到跨阶段的状态转移方程。</li>
+  <li>代价泛函必须离散化。</li>
+  <li>必须考虑障碍区域 \(\mathcal{C}_{obs}\)。</li>
+  <li>至少有某个插值区域必须给出 \(G^*(x) = 0\)，表示目标区域。</li>
+</ol>
+<p><b>限制动作空间</b>：用归一化向量场不改变解的存在性。这很方便，因为要用有限个样本近似 \(U(x)\)，它必须有界。把动作集限制为</p>
+<div class="eq">$$U(x) = \{u\in\mathbb{R}^n \mid \|u\|\le 1\} \tag{8.60}$$</div>
+<p>很有用。为提高性能，有时可以只用 \(\|u\| = 1\) 或 \(u = 0\) 的 \(u\)，但可能出现数值不稳定（习题 13）。\(U(x)\) 的有限样本应有低分散度，并且总包含 \(u = 0\)。</p>
+<p><b>得到状态转移方程</b>：值迭代在离散阶段上进行，而反馈计划的积分曲线发生在连续时间里，所以要对时间区间 \(T\) 采样。令 \(\Delta t\) 为表示固定时间间隔的小正常数，阶段下标 \(k\) 对应时间 \((k-1)\Delta t\)。考虑在 \(\mathbb{R}^n\) 上表示速度场 \(\dot x\)。按定义，</p>
+<div class="eq">$$\frac{dx}{dt} = \lim_{\Delta t\to 0}\frac{x(t+\Delta t) - x(t)}{\Delta t}. \tag{8.61}$$</div>
+<p>8.3.1 节中速度场的定义是给每个 \(x\in X\) 指定某个 \(u\in U(x)\)。把速度向量 \(u\) 从 \(x(t)\) 出发积分一小段 \(\Delta t\)，得到新状态 \(x(t+\Delta t)\)。若 \(u\) 保持不变，则</p>
+<div class="eq">$$x(t+\Delta t) = x(t) + \Delta t\,u, \tag{8.62}$$</div>
+<p>称为 <b>Euler 近似</b>。执行反馈计划时，\(u\) 由 \(x\) 通过 \(u = \pi(x(t))\) 决定，一般意味着状态向前积分时 \(u\) 可能变化，这时 (8.62) 只是近似：</p>
+<div class="eq">$$x(t+\Delta t) \approx x(t) + \Delta t\,\pi(x(t)). \tag{8.63}$$</div>
+<p>(8.62) 可以看成跨阶段的状态转移方程。令 \(x_{k+1} = x(t+\Delta t)\)、\(x_k = x(t)\)，转移可以写成</p>
+<div class="eq">$$x_{k+1} = f(x_k,u) = x_k + \Delta t\,u. \tag{8.64}$$</div>
+<p>\(\Delta t\) 越小近似越好；沿时间用更多样本点能得到更好的近似，最著名的是 <b>Runge–Kutta</b> 一族。对最优运动规划来说，结果是方向向量沿积分曲线<b>几乎总是保持不变</b>：例如图 8.13d 中，对最优导航函数做梯度下降得到分段线性的路径，方向向量在所得积分曲线的大部分上是常数（只在碰到障碍时改变）。所以近似问题在运动规划里往往不严重。近似动力系统（如第 13 章的那些）时需要更好的近似，见 14.3.2 节。一个重要问题是 \(\Delta t\) 要与网格分辨率<b>相容</b>：若 \(\Delta t\) 小到动作改变状态不足以产生新的插值邻居，插值得到的 cost-to-go 值就保持不变。这意味着 \(\Delta t\) 必须选得让 \(x(t+\Delta t)\) 的插值邻居集合与 \(x(t)\) 的不同。</p>
+<p>这与 7.7 节的近似运动规划问题有一个有趣的联系：Formulation 7.4 恰好对应这里定义的近似，只是用 \(\epsilon\) 代替 \(\Delta t\)，因为那时还没考虑速度（而且因为没有反馈，初始条件是给定的）。回忆图 7.41 的各种动作空间：如 7.7 节所说，若用曼哈顿或独立关节模型，位形保持在网格点上，就能做离散值迭代，也能算出 8.2.3 节那样的离散反馈计划和导航函数。若用更自然的欧氏运动模型，转移就允许连续的位形，最终可以用本节的在配置空间上插值来处理。</p>
+<p><b>近似代价泛函</b>：离散代价泛函要由连续代价泛函 (8.39) 推出。末项直接取 \(l_F(x_F) = l_F(x(t_f))\)，每个阶段的代价为</p>
+<div class="eq">$$l_d(x_k,u_k) = \int_0^{\Delta t} l(x(t),u(t))\,dt, \tag{8.65}$$</div>
+<p>在 (8.56) 中用 \(l_d(x_k,u_k)\) 代替 \(l(x_k,u_k)\)。很多问题不需要反复计算这个积分。要得到欧氏最短路，可以放心地对所有 \(x_k\in X\)、\(u_k\in U(x_k)\) 取 \(l_d(x_k,u_k) = \|u_k\|\)（补充：严格地说是 \(\Delta t\|u_k\|\)，常数因子不影响最优动作；互动图用的是 \(\Delta t\|u_k\|\)）。\(\Delta t\) 很小时，(8.65) 的一个合理近似是 \(l(x(t),u(t))\Delta t\)。</p>
+<p><b>处理障碍</b>：一个简单办法是值迭代前先对每个 \(x\in S\) 判断 \(x\in\mathcal{C}_{obs}\) 并存成数组；对刚体机器人可以用<b>快速 Fourier 变换</b>高效计算 [50]。对每个 \(x\in\mathcal{C}_{obs}\)，\(G^*(x) = \infty\)，这些样本上不做值迭代，值必须保持无穷。评估 (8.59)（或更高维版本）时会尝试不同的动作；对每个动作，要求 \(x_{k+1}\) 的所有插值邻居都在 \(\mathcal{C}_{free}\) 中，任何一个在 \(\mathcal{C}_{obs}\) 中，该动作的代价就是无穷。这自动把插值区域 \(R(S)\) 缩小为所有顶点都在 \(\mathcal{C}_{free}\) 中的立方体（图 8.21b）。本节其余部分假设 \(\mathcal{C}_{obs}\) 中的样本都从 \(S\) 中删去；但插值仍用完整的网格，让无穷值表示障碍区域。注意按目前的说法，\(\mathcal{C}_{obs}\) 中的点有可能落在 \(R(S)\) 里，因为只在样本上做了碰撞检测。实践中，要么网格分辨率足够细以减小这种错误的机会，要么利用碰撞检测算法的距离信息推断每个样本周围足够大的球无碰。若不能保证插值区域在 \(\mathcal{C}_{free}\) 中，就可能需要（至少局部地）提高分辨率。</p>
+<p><b>处理目标区域</b>：回忆后向值迭代从最终的 cost-to-go 函数开始向后迭代。开始时，最终 cost-to-go 除目标中的状态外都设为无穷。为正确初始化，\(X\) 必须有某个子集能通过插值得到零值。令 \(G = S\cap X_G\)，要求是插值区域 \(R(G)\) 必须非空；不满足就要提高网格分辨率或扩大目标集。若 \(X_g\) 是单点，不管分辨率多高都必须扩大它（除非开发了在目标点附近插值的其它办法）。在图 8.21c 的插值区域里，\(x_G\) 附近所有状态插值得到的 cost-to-go 值为零；若不存在这样的区域，评估 (8.59) 时从任何状态出发的代价都保持无穷。注意 \(\Delta t\) 必须选得足够大，以保证新样本能到达 \(G\)。</p>
+<p><b>把 \(G^*\) 当作导航函数</b>：cost-to-go 值稳定后，得到的 cost-to-go 函数 \(G^*\) 可以用作导航函数。虽然 \(G^*\) 只定义在 \(S\subset X\) 上，但用插值可以得到 \(R(S)\) 中任意点处导航函数的值。最优动作选为满足 (8.6) 中 min 的那个。这意味着状态轨迹不必像曼哈顿模型那样访问网格点；轨迹可以访问 \(R(S)\) 中的任意点，使轨迹在 \(\Delta t\) 和网格间距趋于零时收敛到真正的最优解。</p>
+<p><b>拓扑上的考虑</b>：到目前为止没有显式考虑 \(\mathcal{C}\) 的拓扑。设 \(\mathcal{C}\) 是流形，上面讨论的概念可以用于任何定义了坐标的开集。实践中常用 4.1.2 节的流形表示：流形表示为某些面被粘合的立方体 \([0,1]^n/\sim\)。在立方体内部，本节的所有概念都不用修改；在边界上，插值用到的样本要考虑粘合，动作 \(u_k\) 和下一状态 \(x_{k+1}\) 也必须在边界上正确工作。但宣称某个解最优时要小心：欧氏最短路依赖于流形的参数化。这种歧义通常通过用时间或能量等物理量表述代价来解决，这往往需要建模动力学（Part IV）。</p>
+<p>带插值的值迭代极其通用。它是近似求解最优控制问题的一种通用算法：限制 \(U(x)\) 以考虑复杂的微分约束，就能解 Part IV 的许多问题；还能推广到预测中有显式不确定性的问题（10.6 节）。</p>
+
+<h4>得到类 Dijkstra 算法 <span class="en">Obtaining Dijkstra-like algorithms</span></h4>
+<p>对运动规划问题，由 (8.62) 算出的 \(x(t+\Delta t)\) 相对 \(X\) 的尺寸总是接近 \(x(t)\)。这提示可以用类 Dijkstra 算法更高效地计算最优反馈计划。如 2.3.3 节对有限情形的讨论，值迭代过程中很多值保持不变（例 2.5）；Dijkstra 算法维护一个数据结构，把计算集中在状态空间中值在变化的部分。连续情形下仔细考虑样本点，也可以这样做 [64]。值迭代过程中有三类样本点，和离散情形一样（回忆 2.3.3 节）：</p>
+<ol>
+  <li><b>Dead</b>：cost-to-go 已稳定到最优值。</li>
+  <li><b>Alive</b>：当前 cost-to-go 有限，但还不知道是否最优。</li>
+  <li><b>Unvisited</b>：cost-to-go 仍是无穷，因为样本还没被到达。</li>
+</ol>
+<p>由于样本集 \(S\) 与插值区域 \(R(S)\) 之间的相互作用，在连续状态空间里维护这些集合要难一些。想象第一次值迭代：开始时 \(G\) 中所有点设为零值。\(S\) 中有多少样本一步能到达 \(R(G)\)？离 \(G\) 很远的样本到不了 \(R(G)\)，值保持无穷；离 \(G\) 近的应该能到。若能把离 \(G\) 太远的样本都剪掉就方便了：每次迭代都去掉离已到达样本太远的样本，也不必在 dead 样本上迭代，因为它们的值不再改变。</p>
+<p>为了跟踪可达的样本，引入<b>反向投影 backprojection</b> 的概念（10.1 节会进一步研究）。对单个状态 \(x\in X\)，它的反向投影定义为</p>
+<div class="eq">$$\mathrm{B}(x) = \{x'\in X \mid \exists u'\in U(x') \text{ 使 } x = f(x',u')\}. \tag{8.66}$$</div>
+<p>点集 \(X'\subseteq X\) 的反向投影就是各点反向投影的并：</p>
+<div class="eq">$$\mathrm{B}(X') = \bigcup_{x\in X'}\mathrm{B}(x). \tag{8.67}$$</div>
+<p>考虑一种用反向投影把「值已知不会改变」的状态排除在外的值迭代。令 \(i\) 为当前值迭代考虑的阶段数；第一次迭代 \(i = 1\)，考虑所有一阶段轨迹。令 \(S\) 为样本集（假设都不在 \(\mathcal{C}_{obs}\) 中），\(D_i\)、\(A_i\) 分别表示 dead 和 alive 样本。开始时 \(D_1 = G\)，即目标集中的样本；第一个 alive 集 \(A_1\) 用<b>前沿 frontier</b> 的概念得到：样本点集 \(S'\subseteq S\) 的前沿为</p>
+<div class="eq">$$\mathrm{Front}(S') = \big(\mathrm{B}(R(S'))\setminus S'\big)\cap S. \tag{8.68}$$</div>
+<p>这是一步能到达 \(R(S')\) 的样本点集，排除已在 \(S'\) 中的。图 8.22 说明了前沿：(a) 阴影圆盘表示从左边样本一步可达的所有点，它一步到不了右边代表 \(R(S')\) 的阴影区域；(b) 前沿是能到达 \(R(S')\) 的样本集合，把前沿加进来，插值区域就扩展到 \(R(S')\) 之外。用 (8.68)，\(A_1 = \mathrm{Front}(D_1)\)。</p>
+<p>第 \(i\) 次迭代：在 \(A_i\) 的所有点上计算 cost-to-go 更新 (8.56)。若对某个 \(s\in A_i\) 有 \(G^*_{k+1}(s) = G^*_k(s)\)，\(s\) 就被宣布为 dead，移入 \(D_{i+1}\)。样本永远不会从 dead 集合中移除，所以 \(D_i\) 中所有点也加入 \(D_{i+1}\)。下一个 alive 集 \(A_{i+1}\) 包括 \(A_i\) 中没有移入 dead 集的样本；此外 \(\mathrm{Front}(A_i)\) 中的所有样本也加入 \(A_{i+1}\)，因为它们在下一次迭代中会产生有限的 cost-to-go 值。迭代照常进行，直到某个阶段 \(m\) 时 \(A_m\) 为空，\(D_m\) 包含所有能到达目标的样本（在本节的近似假设下）。为提高效率，可以用 Front 的近似，只要真正的前沿是近似前沿的真子集：例如前沿可以加入 \(S'\) 中各点指定半径内的所有新样本。这时 \(s\in A_i\) 更新后的 cost-to-go 可能仍是无穷，那它当然不加入 \(D_{i+1}\)，并且在计算下一个前沿时从 \(A_i\) 中删去（前沿只应对 cost-to-go 有限的样本计算）。</p>
+<p>上面的做法通过不在不必要的样本上评估 (8.56)，可望减少每次值迭代的计算量；每次迭代得到的 cost-to-go 值与原来相同，因为只排除了值不会变的样本。但这还不像 Dijkstra 算法——每个阶段仍要对整个 \(A_i\) 做值迭代。要做一个像 Dijkstra 那样运行的版本，引入队列 \(Q\)，每次迭代移出最小元素。插值版本先对每个 \(s\in G\) 赋 \(G^*(s) = 0\)，并维护初始为 \(D = G\) 的 dead 样本集合 \(D\)。对每个 \(s\in\mathrm{Front}(G)\) 计算 cost-to-go 更新 (8.56)；优先队列 \(Q\) 初始化为 \(\mathrm{Front}(G)\)，元素按当前 cost-to-go 值（可能不是最优的）排序。算法反复移出 \(Q\) 中最小的元素（因为它的最优 cost-to-go 已知就是当前值），\(Q\) 为空时终止。每次移出最小元素 \(s_s\in Q\)，就把它插入 \(D\)，并执行两个过程：1) 队列中有些元素要用 (8.56) 重算 cost-to-go，因为 \(G^*(s_s)\) 已知是最优的，它们的值可能依赖它——这些就是 \(Q\) 中位于 \(\mathrm{Front}(D)\)（\(D\) 刚加入了 \(s_s\)）里的样本；2) \(\mathrm{B}(R(D))\) 中不在 \(Q\) 里的样本，用 (8.56) 算出 cost-to-go 后插入 \(Q\)。这让 alive 样本集随 dead 样本集一起增长。带插值的 Dijkstra 算法算出的值与值迭代并不相同，因为算 \(G^*_k\) 时并没有显式存储 \(G^*_{k+1}\)。每个算出的值都是<b>某个</b> cost-to-go，但只有当样本被放进 \(D\) 时才知道它是最优的。不过可以证明方法是收敛的，因为算出的值不高于值迭代会算出的值。这也是用 Gauss–Seidel 迭代做动态规划的基础 [11]。</p>
+<p>对「找出以最少阶段数到达目标的解」这一特殊情形，可以做一个专门的 wavefront 传播版本，与图 8.4 的算法类似：从初始波前 \(W_0 = G\) 开始（对每个 \(s\in G\) 有 \(G^*(s) = 0\)）；每次迭代最优 cost-to-go 值 \(i\) 加一，波前 \(W_{i+1}\) 由 \(W_i\) 算出：\(W_{i+1} = \mathrm{Front}(W_i)\)。算法在第一个波前为空的迭代处终止。</p>
+
+<div class="widget" data-widget="ch8-vi"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>默认（N = 21、16 个方向、Δt = 1.5h）点「跑完」：值迭代 57 轮收敛，动作求值 340,176 次。切到「类 Dijkstra」再跑完：373 次出队、55,744 次求值——约为值迭代的 16%（参考代码第 16 项）。</li>
+  <li>类 Dijkstra 跑完后看「比较」：有 120 个样本的值比值迭代的不动点<b>高</b>（最多高 0.406），没有一个更低。它们集中在要绕过障碍拐角的地方：一个样本出队时，它最优动作落点的插值邻居可能还没出队、只有临时值——正如书中所说「每个算出的值都是某个 cost-to-go，只有放进 D 时才认为是最优」。<span class="muted">（补充：要让两者完全一致，离散格式需要满足「因果性」——每个样本的值只依赖比它小的值。）</span></li>
+  <li>把 Δt 调到 1h 以下：所有值保持 ∞——Δt &lt;  h 时每个动作都落在以样本自己为一个角的单元里（参考代码第 15 项）。把目标半径调小到盖不住任何样本：G = S ∩ X_G 为空。鼠标停在一个样本上看图 8.19：紫点是 x + Δt·u，圈出来的是它们的插值邻居；勾「插值区域 R(S)」看障碍旁被斜线划掉的单元（图 8.21b）。</li>
+</ul></div>
+<p class="small muted">「4 个方向（曼哈顿）」选项对应 7.7 节的曼哈顿运动模型：执行轨迹只能走轴向，路径明显更长；方向越多，轨迹越接近图 8.13 那种分段直线的最优路径。</p>
+</section>
+
+<!-- ============================================================ 末尾 -->
+<section id="cheatsheet">
+<h2>本章速查表</h2>
+<div class="table-wrap">
+<table class="data">
+  <thead><tr><th style="width:9em">概念</th><th>要点</th></tr></thead>
+  <tbody>
+    <tr><td>为什么要反馈</td><td>未来状态不可预测（本章「隐式」处理：模型无不确定性，但计划在每个状态都有定义）；初始状态未知。开环 = 不看当前状态照做；闭环 = 每步用当前状态查计划。</td></tr>
+    <tr><td>Formulation 8.1</td><td>有限 \(X\)、\(U(x)\)、\(f\)、\(X_G\)、代价 (8.3)；<b>不给初态</b>。反馈计划 \(\pi:X\to U\)，目标处 \(u_T\)。一个计划就能对所有初态最优（动态规划原理）。</td></tr>
+    <tr><td>导航函数</td><td>局部算子 (8.4) / (8.5)；三条性质：目标处 0、∞ ⇔ 不可达、目标外局部算子严格下降（无局部极小）；最优导航函数 = \(G^*\)，满足 (8.6)。\(\pi\) 与 \(\phi\) 可互换。</td></tr>
+    <tr><td>wavefront / Dial</td><td>单位代价的 Dijkstra：\(W_0 = X_G\)，一层层推，\(O(n)\)；任何时刻两个桶。整数代价用 Dial：按代价分桶，最小桶并行处理。</td></tr>
+    <tr><td>NF2</td><td>从障碍边界做 wavefront → 波前相遇处为骨架 → 连上 \(x_G\) → \(\phi = \phi_1(x') + \phi_2(x)\)。多连通时不保证选间隙最大的路线（习题 3）。</td></tr>
+    <tr><td>向量场 / 积分曲线</td><td>\(\dot x = f(x)\) (8.13)；积分曲线 (8.14)(8.15)；光滑或 Lipschitz (8.16) ⇒ 唯一解；线性场看 \(A\) 的特征值。</td></tr>
+    <tr><td>Filippov 解</td><td>(8.21) 微分包含：速度在附近 \(f\) 值的凸包里。切换边界上四种流：一致、向内（沿 S 滑动，正则化 / 滑模控制）、向外（从 S 出发不唯一）、切向（避开）。</td></tr>
+    <tr><td>光滑流形</td><td>坐标邻域 \((U,\phi)\)；坐标变换 \(\psi\circ\phi^{-1}\) 在重叠处光滑 ⇒ 相容；光滑结构的三条（覆盖、相容、极大）。\(\mathbb{S}^n\)：\(2(n+1)\) 个投影邻域或 2 个球极投影；\(\mathbb{RP}^n\)：\(n+1\) 个。</td></tr>
+    <tr><td>切空间</td><td>\(T_p(M)\)：方向导数算子（线性 + Leibniz）构成的 \(n\) 维向量空间；用参数化求导得基 (8.35)(8.36)；\(\mathbb{S}^2\) 法向量 \([x\ y\ z]\)，切平面 (8.37)。</td></tr>
+    <tr><td>Formulation 8.2</td><td>\(X\) 光滑流形，\(U(x) = T_x(X)\)，\(\dot x = u\)；解 = 积分曲线从所有 \(X_r\) 中的点到达 \(X_G\)。渐近解、毛球定理、归一化向量场、最优 (8.39)。</td></tr>
+    <tr><td>连续导航函数</td><td>\(\pi = -\nabla\phi\) (8.40)；梯度不存在时 (8.41)；吸引 + 排斥势会有局部极小。</td></tr>
+    <tr><td>单元复形</td><td>超状态 = \(n\)-单元，BFS 得 \(\check\phi\)；每个单元的场把状态推过出口面；三角形里从排斥顶点往外推。</td></tr>
+    <tr><td>最优导航函数（平面）</td><td>\(Z_1 = V(x_G)\)，路点入队，(8.42)(8.43)；可见多边形 \(O(n\lg n)\)，总 \(O(n^2\lg n)\)；[48] 为 \(O(n\lg n)\)；3D 最短路 NP-难。</td></tr>
+    <tr><td>加速度模型</td><td>\(\ddot x = u\)，\(u = K(f(x)-\dot x) + \nabla_{\dot x}f(x)\) (8.47)；\(\|u\|\le a_{max}\)；不连续场需要无穷大加速度；Lipschitz 常数 \(C\) 越小越好。</td></tr>
+    <tr><td>Rimon–Koditschek</td><td>光滑、\(x_G\) 处唯一极小、边界上最大且为常数、Morse（临界点 Hessian 非退化）；不可缩空间必有别的临界点（鞍点），只吸引零测集。</td></tr>
+    <tr><td>调和势函数</td><td>\(\nabla^2\phi = 0\) (8.49)，无内部局部极小；Dirichlet / Neumann 边界条件；Gauss–Seidel 求解，代价高。</td></tr>
+    <tr><td>漏斗与覆盖</td><td>覆盖 (8.50)；近似 / 精确覆盖；超动作 = 相交的邻域；(8.51) 拼出全局 \(\phi\)；图 8.17 增量覆盖、球 (8.52)、点机器人 \(r = d\)；终止：失败率 / 统计检验 / 分散度。</td></tr>
+    <tr><td>带插值的值迭代</td><td>(8.56) + 线性 / 多线性插值 (8.57)–(8.59)；单纯形插值 \(n+1\) 个邻居；\(R(S)\)；\(U(x)\) 取 (8.60) 的样本；Euler (8.62)–(8.64)；\(\Delta t\) 要与网格相容；\(R(G)\) 非空；类 Dijkstra：dead / alive / unvisited，Front (8.68)。</td></tr>
+  </tbody>
+</table>
+</div>
+</section>
+
+<section id="pitfalls">
+<h2>常见陷阱</h2>
+<ol>
+  <li><b>把势函数当成导航函数</b>：随便一个「越靠近目标越小」的势函数（如无视障碍的距离）通常有局部极小，不满足性质 3。最优 cost-to-go 才保证是导航函数。</li>
+  <li><b>忘了性质 2</b>：到不了目标的状态必须是 ∞；否则局部算子会让机器人在被隔开的区域里白忙。</li>
+  <li><b>用 wavefront 处理非单位代价</b>：wavefront 只对单位代价最优；斜走代价 √2 时要用 Dijkstra，或用整数近似（如 5/7）配 Dial 算法。</li>
+  <li><b>以为反馈计划一定是连续向量场</b>：8.4.2、8.4.3 节的计划都不连续，积分曲线要用 Filippov 意义理解；需要有界加速度时这就不行了（8.4.4 节）。</li>
+  <li><b>目标是单点时期望有限时间到达</b>：光滑向量场只能渐近收敛；归一化或不连续的场才能有限时间到达。</li>
+  <li><b>在不可缩空间里要求光滑导航函数没有其它临界点</b>：做不到（Morse 理论），只能让多余的临界点是鞍点，吸引域测度为零。</li>
+  <li><b>坐标邻域只用一个</b>：除了 \(\mathbb{R}^n\)（及与之同胚的空间），一个坐标邻域覆盖不了整个流形；在极点等处坐标会退化（例 8.16）。</li>
+  <li><b>(8.53) 当作充分条件</b>：平移和旋转的位移可以同向相加，应该用 \(\sqrt{\Delta x^2+\Delta y^2}+r|\Delta\theta| &lt; d\)（或 5.3.4 节的 (5.31)）。</li>
+  <li><b>\(\Delta t\) 比网格间距还小</b>：插值邻居不变、值一直是 ∞；目标太小使 \(R(G)\) 为空也一样。</li>
+  <li><b>把类 Dijkstra 的值当成值迭代的不动点</b>：插值打破了「只依赖更小的值」，有些样本的值会偏高。</li>
+</ol>
+</section>
+
+<section id="exercises">
+<h2>习题导引</h2>
+<p class="small muted">只给思路，不给完整解答。标「互动」的可以先在本页对应的图里做实验。</p>
+<ol>
+  <li><b>用很快的路径规划器模拟反馈</b>：每隔一小段时间从当前状态重新规划（滚动规划），只执行开头一小段。权衡：在线计算的延迟与可靠性、离线反馈计划的存储与对环境变化的适应性。（互动：「开环 vs 反馈」里想象每一步都重新规划。）</li>
+  <li><b>带「离障碍太近」惩罚的网格导航函数</b>：把每个格子的代价设为 1 + λ·g(到障碍的距离)，用 Dijkstra（或整数化后用 Dial）。λ 越大路径越远离障碍、越长。（互动：「wavefront 与 Dial」。）</li>
+  <li><b>修正 NF2 的多路线问题</b>：先算每条（同伦类不同的）骨架路线上的最小间隙，在骨架图上用「瓶颈最短路」（最大化最小间隙，再按长度打破平局）来定 \(\phi_1\)。（互动：「NF2」。）</li>
+  <li><b>切空间的基</b>：(a) 单位四元数构成 \(\mathbb{S}^3\)，在 \(h\) 处切空间是与 \(h\) 正交的三维子空间，例如 \(h\) 左乘纯虚四元数 \(\mathbf{i},\mathbf{j},\mathbf{k}\) 得到的三个向量；(b) 对 (4.20) 的旋转矩阵分别关于 \(a,b,c,d\) 求导，再投影到约束 \(a^2+b^2+c^2+d^2=1\) 的切向。（互动：「S² 上的切空间」是低一维的版本。）</li>
+  <li><b>带洞多边形的最优导航函数</b>：把所有洞的顶点都当作候选路点，按 \(\phi\) 从小到大（Dijkstra 顺序）处理，并对能被多个路点看见的点取 (8.43) 的最小值<sup class="fn"><a href="#fn-ex5" id="fn-ex5-ref">14</a></sup>。（互动：「平面多边形里的最优导航函数」勾「加一个洞」。）</li>
+  <li><b>用竖直单元分解构造反馈计划</b>：单元是梯形（凸）；在单元邻接图上 BFS，每个梯形里从出口边对面的点往外推（或直接指向出口边中点）。</li>
+  <li><b>开圆环上流入 \(X_G\) 的连续向量场</b>：提示——在圆环上围绕内洞的方向，一个连续场能否在「绕洞的两侧」都指向 \(X_G\)？考虑沿着包围内洞的一个圆走一圈，向量场方向的转动（或用临界点 / Morse 论证）。</li>
+  <li><b>最大间隙的单元分解与反馈计划</b>：用 6.2.3 节的广义 Voronoi 图把自由空间分成「以 Voronoi 边为界」的单元，先把状态推到 Voronoi 边，再沿它走。</li>
+  <li><b>多边形 C-space 的精确覆盖</b>：从凸分解出发，把相邻凸块向彼此「膨胀」一点，使相交部分有二维内部；注意膨胀后仍要在 \(\mathcal{C}_{free}\) 里。</li>
+  <li><b>欧拉角下的无碰球</b>：对每个旋转轴，取垂直于该轴的平面里离轴最远的点，得到三个半径 \(r_1,r_2,r_3\)；保守的条件是 \(\|\Delta t\| + r_1|\Delta\alpha| + r_2|\Delta\beta| + r_3|\Delta\gamma| &lt; d\)（注意不是平方和，见脚注 12）。</li>
+  <li><b>四元数下的无碰球</b>：用 \(\|h - h'\|\) 界定旋转角的变化，再乘以离转轴最远的距离（与第 5 章习题 14 类似）。</li>
+  <li><b>把 (8.59) 推广到 \(n\) 维</b>：权重是 \(\prod_j w_j\)，第 \(j\) 维取 \(\alpha_j\) 或 \(1-\alpha_j\)，对应下标取 \(i_j\) 或 \(i_j+1\)；共 \(2^n\) 项。（互动：「在样本之间插值」右图是 \(n = 2\)。）</li>
+  <li><b>只用 \(\|u\| = 1\) 的问题</b>：目标附近无法「停下」，状态在目标周围来回跳，cost-to-go 可能不收敛或出现震荡；包含 \(u = 0\) 才能在到达后保持不动。</li>
+  <li>–20. <b>实现题</b>：14 → 「调和势函数」（试试别的边界条件和更大的网格）；15 → 「带插值的值迭代」换成 \(\mathbb{R}^2\times\mathbb{S}^1\)，θ 方向用加权的欧氏度量并处理 \(0\sim 2\pi\) 的粘合；16 → 比较「在样本之间插值」里两种插值的代价；17 → 「三角剖分上的向量场」；18 → 「平面多边形里的最优导航函数」；19 → 在「带插值的值迭代」基础上把目标换成随时间移动的 target，代价里加「看不见目标」的惩罚；20 → 「势函数与梯度下降」。</li>
+</ol>
+</section>
+
+<section id="further">
+<h2>延伸阅读（据原书 Further Reading）</h2>
+<p>与前几章相比，本章相关的文献要少得多；如 8.1 节所说，由于历史原因，反馈通常与运动规划分开。<b>导航函数</b> [58, 79] 是把反馈带入运动规划最有影响的思想之一，所以它贯穿全章。其它使用或开发导航函数的工作见 [24, 34, 77]。<b>进展度量 progress measures</b> [41]、Lyapunov 函数（15.1.1 节）和 cost-to-go 函数都密切相关；基于 Lyapunov 的反馈控制律设计见 [35]。在运动规划的语境里，误差检测与恢复（EDR）框架也包含反馈思想 [37]。[42] 通过「覆盖 \(\mathcal{C}\times\mathcal{C}\)、在每块区域上定义连续路径函数所需的最少区域数」研究 C-space 的<b>拓扑复杂度</b>，这给出了能构造的导航函数的极限（假设 \(q_I\)、\(q_G\) 都是变量；本章 \(q_G\) 是固定的），后续工作见 [43, 44]。</p>
+<p>要更好地直观理解向量场，[4] 是很有用的参考，有许多有启发的插图；适合控制理论概念的光滑流形入门见 [17]；2D、3D 曲线曲面的基本直觉见 [78]；光滑流形与微分几何的其它来源有 [1, 13, 25, 36, 86, 87, 90]；分段光滑向量场见 [2, 65, 84, 92]。8.4.2、8.4.3 节分别受 [26, 66] 和 [74] 启发；这些方法允许不连续的向量场，从而避开了许多困难，要求连续或光滑就得到 8.4.4 节，它主要基于 [79, 80]；其它导航函数工作有 [30, 67, 68]。8.5.1 节主要受 [20, 70] 启发，基于邻域图的方法来自 [91]。</p>
+<p>8.5.2 节的带插值值迭代在运动规划里有时被遗忘，因为它被提出时计算机还不够强大 [8, 9, 61, 62]；如今对几维（如 3 或 4）的有挑战问题已经能算出解。离散值迭代收敛到最优连续问题的解，最先由 [10] 在状态转移方程和代价泛函的 Lipschitz 条件下建立；考虑插值的分析和一般的离散化问题见 [21, 39, 46, 59, 60]；多分辨率变体见 [76]；类 Dijkstra 版本的讨论基于 [64, 89]；level-set 方法也密切相关 [55, 57, 56, 85]。</p>
+</section>
+
+<section id="notes">
+<h2>脚注</h2>
+<div class="box small">
+  <p id="fn-sec" style="margin:0 0 6px"><sup>1</sup> 原书 8.2 节开头（第 371 页）说这里的讨论是「Section 8.4.1」反馈规划概念的背景，「In that case, uncertainty will be explicitly modeled」。但 8.4.1 节（反馈运动规划的定义）并不显式建模不确定性；显式建模不确定性的是第 10 章（如 10.1 节）。我们判断这里的交叉引用可能有误，按原文转述并标出。<a href="#fn-sec-ref">↩</a></p>
+  <p id="fn-nf" style="margin:0 0 6px"><sup>2</sup> 原书脚注：「导航函数」这个词是 [58, 79] 为连续配置空间提出的；本书用得更广，但保留了基本思想。<a href="#fn-nf-ref">↩</a></p>
+  <p id="fn-grid" style="margin:0 0 6px"><sup>3</sup> 原书脚注：很多年来，研究者分不清这两种用法，以为网格在第 5 章的开环路径规划问题上表现很差——主要是因为以为必须用高分辨率网格。其实对很多问题，只考虑每轴几个点就能提前结束。<a href="#fn-grid-ref">↩</a></p>
+  <p id="fn-field" style="margin:0 0 6px"><sup>4</sup> 原书脚注：「field」一词在两个不相干的地方出现——向量空间定义里的「域」和「向量场」里的「场」，只是偶然撞了词。<a href="#fn-field-ref">↩</a></p>
+  <p id="fn-86" style="margin:0 0 6px"><sup>5</sup> <b>原书笔误</b>（第 385 页，已对照 PDF 原页）：例 8.6 正文说常值场「assigns the vector [1 2]」，而图 8.5 的图注写 \(f(x,y) = [1\ \ 1]\)，图中箭头也都是 45°。两者必有一处笔误；按图，例 8.6 应为 [1 1]（例 8.9 用的才是 [1 2]）。互动图里两个都提供了。<a href="#fn-86-ref">↩</a></p>
+  <p id="fn-89" style="margin:0 0 6px"><sup>6</sup> <b>原书笔误</b>（第 387 页）：例 8.9 写作「a constant field \(x_1 = 1\) and \(x_2 = 2\)」，漏了上面的点，应为 \(\dot x_1 = 1\)、\(\dot x_2 = 2\)。另外例 8.10（第 388 页）的「If can be verified」应为「It can be verified」（排版小误）。<a href="#fn-89-ref">↩</a></p>
+  <p id="fn-826" style="margin:0 0 6px"><sup>7</sup> <b>原书笔误</b>（第 394、395 页，已对照 PDF 原页）：(1) (8.26)、(8.27) 中根号前多了「\(1-\)」：在 \(U_i^+\) 上应有 \(x_i = +\sqrt{1-\sum_{j\ne i}x_j^2}\)；按原式，\(\mathbb{S}^1\) 上 \(i = 2\) 时 \(x\mapsto(x,\,1-\sqrt{1-x^2})\)，\(x = 0\) 给出 \((0,0)\)，根本不在圆上（参考代码第 7 项）。(2) (8.27) 左边写的是 \(\phi_k^-\)，而上下文都是 \(\phi_j^-\)。(3) (8.25) 右边写到 \(x_n\) 为止，只有 \(n-1\) 个分量，应写到 \(x_{n+1}\)；(8.26)、(8.27) 的根号里与参数表里同样应到 \(x_{n+1}\)。(4) 同样的下标问题出现在例 8.15：(8.28) 的最后一项应为 \(x_{n+1}/x_i\)，(8.29) 的最后一项应为 \(z_n\)。正文给出的是改正后的式子。<a href="#fn-826-ref">↩</a></p>
+  <p id="fn-816" style="margin:0 0 6px"><sup>8</sup> 原书（第 398 页）写作「the tangent space at \(\mathbb{R}^2\)」，按上下文应为「at \(p\)」。<a href="#fn-816-ref">↩</a></p>
+  <p id="fn-lip" style="margin:0 0 6px"><sup>9</sup> <b>补充说明</b>（第 410 页）：沿积分曲线 \(\ddot x = \nabla_{\dot x}f(x) = Df(x)\,\dot x\)，Lipschitz 常数为 \(C\) 时 \(\|\ddot x\|\le C\|\dot x\|\)。所以严格的条件是 \(C\cdot v_{max}\le a_{max}\)；书中的「\(C &lt; a_{max}\)」隐含了速率不超过 1（例如归一化向量场）。例：\(f = [-x_2\ \ x_1]\) 的 \(C = 1\)，在半径 2 的圆上速率是 2，需要的加速度也是 2（参考代码第 9 项）。<a href="#fn-lip-ref">↩</a></p>
+  <p id="fn-hess" style="margin:0 0 6px"><sup>10</sup> 原书 (8.48)（第 411 页）左上角印成 \(\partial^2\phi/\partial^2x_1^2\)，应为 \(\partial^2\phi/\partial x_1^2\)（正文已改）。同页脚注 13、14 定义正定 / 负定时写「对所有 \(x\in\mathbb{R}^n\)，\(x^TAx > 0\)」，漏了 \(x\ne 0\)（\(x = 0\) 时恒为 0）。<a href="#fn-hess-ref">↩</a></p>
+  <p id="fn-817" style="margin:0 0 6px"><sup>11</sup> <b>原书笔误</b>（第 418 页，图 8.17，已对照 PDF 原页）：第 4 步写「go to Step 1」，但第 1 步会把 \(\mathcal{O}\) 清空、把 \(i\) 重置为 1，算法就永远停不下来；应为「回到第 2 步」。<a href="#fn-817-ref">↩</a></p>
+  <p id="fn-853" style="margin:0 0 6px"><sup>12</sup> <b>补充分析</b>（第 418 页，已对照 PDF 原页）：(8.53) 并不足以保证 \(B(x,r)\subseteq\mathcal{C}_{free}\)。点 \(a\) 的位移是 \(\Delta t + (R(\Delta\theta)-I)a\)，两项可以同向，最大可达 \(\|\Delta t\| + 2r\sin(|\Delta\theta|/2)\approx\|\Delta t\| + r|\Delta\theta|\)；在 (8.53) 的椭球上这个和最大约为 \(\sqrt 2\,d\)。反例（参考代码第 13 项）：\(r = d = 1\)，\(\Delta\theta = 0.7\)，平移 0.7 且与旋转位移同向，(8.53) 左边 = 0.98 &lt; 1，但 \(a_r\) 实际移动 1.386 > \(d\)。充分条件应为 \(\sqrt{\Delta x^2+\Delta y^2} + r|\Delta\theta| &lt; d\)（与 5.3.4 节的 (5.31) 一致，(5.31) 用的是 \(|\Delta x|+|\Delta y|\)，更保守）。相应地，(8.54) 的「球」应换成这个锥形区域，或把球的半径缩小到 \(d/\sqrt 2\)。<a href="#fn-853-ref">↩</a></p>
+  <p id="fn-858" style="margin:0 0 6px"><sup>13</sup> <b>原书笔误</b>（第 421 页，已对照 PDF 原页）：原式 (8.58) 为 \(\alpha = 1-(x-s_i)/r\)。但 \(s_i = i/r\)，样本间距是 \(1/r\) 而不是 \(r\)；按原式，\(x = s_{i+1}\) 时 \(\alpha = 1 - 1/r^2\neq 0\)，与紧接着的「若 \(x = s_{i+1}\)，则 \(\alpha = 0\)」矛盾（\(r = 3\) 时为 0.889，参考代码第 14 项）。应为 \(\alpha = 1 - r(x-s_i)\)。另外「令 \(i\) 为满足 \(s_i &lt; x\) 的最大整数」严格说应为 \(s_i\le x\)，否则后面「若 \(x = s_i\)」的情形不会出现（小瑕疵）。<a href="#fn-858-ref">↩</a></p>
+  <p id="fn-ex5" style="margin:0"><sup>14</sup> 原书习题 5（第 431 页）说「See Example 8.16 for a similar problem」，但例 8.16 讲的是 \(\mathbb{S}^2\) 的切空间，与带洞多边形的最优导航函数无关，疑似交叉引用错误（也许指习题 18(b)）。<a href="#fn-ex5-ref">↩</a></p>
+</div>
+</section>
+
+<nav class="pager">
+  <a href="ch5-sampling-based-planning.html"><span class="dir">← 前置章节</span>第 5 章 基于采样的运动规划</a>
+  <a class="next" href="../index.html"><span class="dir">回到首页 →</span>全书路线图与进度</a>
+</nav>
+
+<footer class="page-foot">
+  内容依据 Steven M. LaValle《Planning Algorithms》（Cambridge University Press, 2006）Part II 第 8 章整理与讲解，原书可在 <a href="https://lavalle.pl/planning/ch8.pdf" target="_blank" rel="noopener">lavalle.pl/planning/ch8.pdf</a> 免费阅读。互动图为学习辅助，标「补充」的内容不是书中原文；数值例子由 <a href="code/ch8_feedback.py">part2/code/ch8_feedback.py</a> 核对。
+</footer>
+
+</main>
+</div>
+</body>
+</html>
