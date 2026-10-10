@@ -2,6 +2,8 @@
 
 由协调员云端会话维护（[协调员会话](https://claude.ai/code/session_016zxHxZtmZrxE1GBT4hKD1y)，routine `trig_0159isoeLhFKa8WefBAJZVxN`）。每次状态变化都会更新本文件。
 
+> **只有一个协调员**：协调 routine `trig_0159isoeLhFKa8WefBAJZVxN` 在 05:04–05:06Z 被触发了 3 次，起了 3 个协调员会话：`session_011PiP9AgzhoU64wsMpBk4Ab`（05:04:44）、`session_016zxHxZtmZrxE1GBT4hKD1y`（05:04:52）、`session_01D9S92btzJnBoNCJshMWEP6`（05:05:57）。`session_016zxHxZtmZrxE1GBT4hKD1y` 最先把本文件推到 main，由它担任协调员；另外两个会话不启动任何章节会话，以免同一章被启动两次。`session_011PiP9AgzhoU64wsMpBk4Ab` 已经退出。
+
 - 同时最多 5 个章节会话；第 11–15 章按章号顺序补位启动。
 - 一章完成的标志：`main` 上出现 `chK: done` 提交。完成后协调员检查登记点、JS 语法、本地资源 200、参考代码，结果写进下表。
 - 状态：未开始 / 进行中 / 已完成 / 已检查 / 失败
