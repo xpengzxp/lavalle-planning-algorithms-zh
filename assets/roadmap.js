@@ -30,7 +30,7 @@
       desc: "也叫精确算法：构造离散表示而不丢失信息，是完备的（有解必找到，否则报告失败）。", key: "", pre: [4] },
     { n: 7, part: "II", title: "基本运动规划的扩展", en: "Extensions of Basic Motion Planning",
       desc: "第 5、6 章方法的许多扩展问题与算法。", key: "7.4（闭链）需要 4.4。", pre: [5, 6] },
-    { n: 8, part: "II", title: "反馈运动规划", en: "Feedback Motion Planning",
+    { n: 8, part: "II", title: "反馈运动规划", en: "Feedback Motion Planning", href: "part2/ch8-feedback-motion-planning.html",
       desc: "过渡性章节：把反馈引入运动规划，但还不引入微分约束。开环计划 vs 闭环计划。", key: "", pre: [5, 6] },
     { n: 9, part: "III", title: "基本决策论", en: "Basic Decision Theory", href: "part3/ch9-basic-decision-theory.html",
       desc: "单步决策：在其他决策者（真实对手或用来建模不确定性的「自然」）的干扰下做出最好的决策。", key: "", pre: [2] },
