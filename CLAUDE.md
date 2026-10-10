@@ -28,7 +28,11 @@ Planning Algorithm/
 
 ## 2. 新增一章的固定流程（逐项做完，缺一不可）
 
-1. **下载原书 PDF** 到 `book/`：`https://lavalle.pl/planning/chK.pdf`（单章）或 `parN.pdf`（整部分）。这台 Mac 没有 `pdftotext`，用临时 venv 装 `pypdf` 提取文字；没有 `node`，JS 语法用浏览器加载检查。
+1. **下载并阅读原书 PDF**：下载到 `book/`，地址是 `https://lavalle.pl/planning/chK.pdf`（单章）或 `parN.pdf`（整部分）。读的时候 PDF 页面和提取的文字**两者都要用**：
+   - **提取文字**：用临时 venv 装 `pypdf`，把全文提取成 txt，用来通读和搜索。这台 Mac 没有 `pdftotext`。
+   - **直接看 PDF**：用 Read 工具读 PDF 页面（`pages` 参数，每次最多 20 页）。txt 里看不到图，公式的上下标、分式、希腊字母也常常错乱，所以写每一节之前，都要直接看这一节的 PDF 原页，确认图、公式、式号、图号。
+   - **原书笔误**：要标「原书笔误」的地方，必须对着 PDF 原页确认过，不能只凭 txt 下结论，因为很多「笔误」其实是文字提取出的错。
+   - **JS 检查**：这台 Mac 没有 `node`，JS 语法靠在浏览器里加载页面来检查。
 2. **写章节页** `partN/chK-<slug>.html`，遵守第 3 节的写法约定。
 3. **登记到主页** `index.html`：在对应 Part 的 `<div class="chapter-cards">` 里加一张 `<a class="chapter-card" href="partN/chK-….html">` 卡片（结构照抄已有卡片：`.num` 章号、`<h3>中文 <span class="en">English</span></h3>`、一段 `<p>` 概述、`.tags` 列出该章的互动图）。若该 Part 的标题还写着「进行中 / 未开始」，按实际情况更新。
 4. **登记到路线图** `assets/roadmap.js`：在 `CHAPTERS` 里找到该章的条目，填上 `href: "partN/chK-….html"`（条目已预先存在，只缺 href）。
@@ -65,7 +69,7 @@ Planning Algorithm/
   - 登记点只做「插入一行 / 一张卡片」这样的局部修改，按章号顺序插入，不要重新排版整个文件。
   - 推送步骤：`git fetch origin && git rebase origin/main`。有冲突时只会出现在登记点：**两边的内容都保留**（别人的卡片、表格行一行都不能丢），按章号排好。然后重新做一遍检查，再 `git push origin HEAD:main`。如果因为别人刚推过而被拒，重复 fetch、rebase、push，最多重试 10 次。绝对不要 `--force`。
   - 中途可以多次提交、推送，好让进度保存在远端；最后一个提交信息写 `chK: done`。
-- **PDF**：`book/` 在 `.gitignore` 里（版权原因，原书 PDF 不进 `main`）。云端访问 lavalle.pl 会返回 403，所以从 `book-pdfs` 分支取：`git fetch origin book-pdfs && git show origin/book-pdfs:book/chK.pdf > book/chK.pdf`。不要把 PDF 提交进 `main`。页面里的原书链接一律指向 `https://lavalle.pl/planning/chK.pdf`。
+- **PDF**：`book/` 在 `.gitignore` 里（版权原因，原书 PDF 不进 `main`）。云端访问 lavalle.pl 会返回 403，所以从 `book-pdfs` 分支取：`git fetch origin book-pdfs && git show origin/book-pdfs:book/chK.pdf > book/chK.pdf`。不要把 PDF 提交进 `main`。页面里的原书链接一律指向 `https://lavalle.pl/planning/chK.pdf`。阅读方法见第 2 节第 1 步：txt 用来通读和搜索，图、公式、笔误都要用 Read 直接看 PDF 原页确认。
 - **新的 Part**：主页上 Part III、Part IV 的分区已经建好，往对应的 `.chapter-cards` 里加卡片即可。`part3/`、`part4/` 目录可能是你第一个建的，也可能别人已经建好，两种情况都正常。每章的共用库命名为 `partN/js/chK-lib.js`，不要建不带章号前缀、多章共用的文件，以免并行会话之间互相覆盖。
 - **验证**：云端没有浏览器面板。用 `node --check` 检查每个 JS 文件，用 `python3 -m http.server` 加 `curl` 确认页面引用的本地文件都返回 200，参考代码用 `python3` 跑通。浏览器里的实际渲染和交互检查由本地协调会话完成。
 - **收尾**：在对话最后用中文写一段总结：做了哪些互动图、哪些地方标了「补充」、原书有哪些笔误、还有哪些没验证的地方。
