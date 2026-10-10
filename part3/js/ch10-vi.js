@@ -299,8 +299,8 @@
       [["pi-on", "var(--accent)"], ["pi-off", "var(--border-strong)"]].forEach(([id, c]) => defs.append(s("marker", { id, viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: "auto" }, s("path", { d: "M0,0 L10,5 L0,10 z", fill: c }))));
       svg.append(defs);
       [1, 2].forEach((u, panel) => {
-        const ox = panel * 310, pos = { a: [ox + 40, 95], b: [ox + 150, 95], c: [ox + 265, 95] };
-        svg.append(s("text", { x: ox + 150, y: 168, "text-anchor": "middle", "font-size": 12, fill: "var(--muted)" }, `u = ${u}`));
+        const ox = panel * 310, pos = { a: [ox + 70, 95], b: [ox + 175, 95], c: [ox + 285, 95] };
+        svg.append(s("text", { x: ox + 175, y: 168, "text-anchor": "middle", "font-size": 12, fill: "var(--muted)" }, `u = ${u}`));
         for (const x of ["a", "b"]) {
           const on = this.pi[x] === u, col = on ? "var(--accent)" : "var(--border-strong)", mk = on ? "url(#pi-on)" : "url(#pi-off)";
           const q = this.P[`${x},${u}`];

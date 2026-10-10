@@ -40,7 +40,7 @@
   class GameTree {
     constructor(root) {
       this.key = "fig1013"; this.mode = "upper"; this.level = 0; this.ab = null;
-      const body = C.frame(root, "博弈树与安全计划", "P1（蓝）想让代价小，P2（紫）想让代价大；值自底向上传播");
+      const body = C.frame(root, "博弈树与安全计划", "P1（蓝）想让代价小，P2（橙）想让代价大；值自底向上传播");
       this.selP = C.select(Object.entries(PRESETS).map(([k, p]) => [k, p.name]), this.key, (k) => { this.key = k; this.load(); });
       this.segM = C.seg([["upper", "上值：P1 的安全计划（图 10.14）"], ["lower", "下值：P2 先行（图 10.15）"], ["ab", "alpha-beta 剪枝（图 10.16）"]], this.mode, (k) => { this.mode = k; this.restart(); });
       this.inp = h("input", { type: "text", style: "width:min(340px,100%)", title: "从左到右的叶子代价，用逗号分隔" });
@@ -51,7 +51,7 @@
         h("div", { class: "controls" }, this.segM),
         h("div", { class: "controls" }, C.button("一步", () => this.step(), "small primary"), C.button("算完", () => { for (let g = 0; g < 200 && this.step(true); g++); this.render(); }, "small"), C.button("重来", () => this.restart(), "small")),
         this.svgWrap, this.msg,
-        C.legend([[C.cv("accent"), "P1 的决策顶点（取最小）", true], [C.cv("alive2"), "P2 的决策顶点（取最大）", true], [C.cv("warn"), "alpha-beta 访问过的叶子", true], [C.cva("muted", 0.35), "被剪掉、不用看的部分"]]));
+        C.legend([[C.cv("accent"), "P1 的决策顶点（取最小）", true], [C.cv("warn"), "P2 的决策顶点（取最大）", true], [C.cv("text"), "alpha-beta 访问过的叶子", true], [C.cva("muted", 0.35), "被剪掉、不用看的部分"]]));
       this.load();
     }
     load() { this.p = JSON.parse(JSON.stringify(PRESETS[this.key])); this.inp.value = this.p.leaves.join(", "); this.restart(); }
@@ -123,7 +123,7 @@
         for (let l = 0; l < D; l++) { const ch = vals[l + 1].slice(i * b, i * b + b); const c = ch.indexOf(vals[l][i]); bold.add(`${l + 1},${i * b + c}`); i = i * b + c; }
       }
       for (let l = 0; l < D; l++) {
-        svg.append(s("text", { x: 6, y: ys(l) + 4, "font-size": 12, fill: order[l] === "min" ? "var(--accent-text)" : "var(--c-alive2)" }, `${order[l] === "min" ? "P₁" : "P₂"} 行动`));
+        svg.append(s("text", { x: 6, y: ys(l) + 4, "font-size": 12, fill: order[l] === "min" ? "var(--accent-text)" : "var(--warn)" }, `${order[l] === "min" ? "P₁" : "P₂"} 行动`));
         for (let i = 0; i < Math.pow(b, l); i++) for (let c = 0; c < b; c++) {
           const j = i * b + c, isB = bold.has(`${l + 1},${j}`), pr = pruned(l + 1, j);
           svg.append(s("line", { x1: xs(l, i), y1: ys(l), x2: xs(l + 1, j), y2: ys(l + 1), stroke: pr ? C.cva("muted", 0.3) : isB ? "var(--text)" : "var(--border-strong)", "stroke-width": isB ? 3 : 1 }));
@@ -135,13 +135,13 @@
         const x = xs(l, i), y = ys(l), pr = pruned(l, i);
         if (l === D) {
           const vis = this.ab && this.ab.visited.has(i);
-          svg.append(s("circle", { cx: x, cy: y, r: 5, fill: pr ? C.cva("muted", 0.3) : vis ? "var(--warn)" : "var(--bad)" }));
+          svg.append(s("circle", { cx: x, cy: y, r: 5, fill: pr ? C.cva("muted", 0.3) : vis ? "var(--text)" : "var(--surface)", stroke: pr ? "none" : "var(--text-2)", "stroke-width": 1.4 }));
           svg.append(s("text", { x, y: y + 19, "text-anchor": "middle", "font-size": 12.5, fill: pr ? "var(--muted)" : "var(--text)" }, leaves[i]));
           continue;
         }
         const isP1 = order[l] === "min";
-        svg.append(s("circle", { cx: x, cy: y, r: 6.5, fill: pr ? C.cva("muted", 0.3) : isP1 ? "var(--accent)" : "var(--surface)", stroke: isP1 ? "var(--accent)" : "var(--c-alive2)", "stroke-width": 2 }));
-        if (this.mode !== "ab" && l >= this.level) svg.append(s("text", { x: x + 10, y: y + 4, "font-size": 12.5, "font-weight": 650, fill: isP1 ? "var(--accent-text)" : "var(--c-alive2)" }, vals[l][i]));
+        svg.append(s("circle", { cx: x, cy: y, r: 6.5, fill: pr ? C.cva("muted", 0.3) : isP1 ? "var(--accent)" : "var(--surface)", stroke: isP1 ? "var(--accent)" : "var(--warn)", "stroke-width": 2 }));
+        if (this.mode !== "ab" && l >= this.level) svg.append(s("text", { x: x + 10, y: y + 4, "font-size": 12.5, "font-weight": 650, fill: isP1 ? "var(--accent-text)" : "var(--warn)" }, vals[l][i]));
       }
       if (this.ab && this.ab.pruned.length) {
         for (const [pl, pi, cnt] of this.ab.pruned) {
@@ -176,11 +176,11 @@
     const o = Object.assign({ saddle: true, mixed: true, fmtCell: (v) => C.niceFrac(v, 60) }, opts);
     const dv = C.detValues(A), mg = C.matrixGame(A), sad = Math.abs(dv.upper - dv.lower) < 1e-9;
     const t = h("table", { class: "data ch10-mini", style: "width:auto;font-size:13px;margin:4px 0" });
-    t.append(h("tr", null, h("th", null, ""), ...colNames.map((c) => h("th", { class: "c", style: "color:var(--c-alive2)" }, c)), o.mixed ? h("th", { class: "c" }, "w") : null));
+    t.append(h("tr", null, h("th", null, ""), ...colNames.map((c) => h("th", { class: "c", style: "color:var(--warn)" }, c)), o.mixed ? h("th", { class: "c", style: "color:var(--c-alive2)" }, "w") : null));
     A.forEach((r, i) => t.append(h("tr", null, h("th", { style: "color:var(--accent-text)" }, rowNames[i]),
       ...r.map((v, j) => h("td", { class: "c", style: o.saddle && sad && i === dv.ui && j === dv.lj ? "background:var(--ok-soft);font-weight:700" : "" }, o.fmtCell(v))),
-      o.mixed ? h("td", { class: "c muted" }, pct(mg.w[i])) : null)));
-    if (o.mixed) t.append(h("tr", null, h("th", null, "z"), ...mg.z.map((v) => h("td", { class: "c muted" }, pct(v))), h("td", null, "")));
+      o.mixed ? h("td", { class: "c", style: "color:var(--c-alive2)" }, pct(mg.w[i])) : null)));
+    if (o.mixed) t.append(h("tr", null, h("th", { style: "color:var(--c-alive2)" }, "z"), ...mg.z.map((v) => h("td", { class: "c", style: "color:var(--c-alive2)" }, pct(v))), h("td", null, "")));
     return { el: h("div", { style: "overflow-x:auto" }, t), dv, mg, sad };
   }
 
@@ -312,8 +312,8 @@
         return h("div", { class: "panel" }, h("div", { class: "panel-title" }, title), h("div", { class: "panel-body", style: "overflow-x:auto" }, t));
       };
       this.maps.append(mk("上值 L̄*（10.110）：P1 先亮出动作", V.Up, "--accent", (v) => String(v)),
-        mk("下值 L̲*（10.111）：P2 先亮出动作", V.Lo, "--c-alive2", (v) => String(v)),
-        mk("随机化值 𝓛*（10.113）", V.Ra, "--warn", (v) => v.toFixed(2)));
+        mk("下值 L̲*（10.111）：P2 先亮出动作", V.Lo, "--warn", (v) => String(v)),
+        mk("随机化值 𝓛*（10.113）", V.Ra, "--c-alive2", (v) => v.toFixed(2)));
       // 选中状态在第一个阶段（剩 K 个阶段）的 3×3 矩阵
       const last = this.hist[this.hist.length - 1];
       const M = this.mat(sa, sb, last.Ra), names = ["−1", "0", "+1"];

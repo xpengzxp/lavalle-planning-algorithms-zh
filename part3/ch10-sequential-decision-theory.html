@@ -120,9 +120,9 @@
     <li><b>10.5 序贯博弈</b>：自然换成理性的对手：博弈树、安全计划、alpha-beta、三种信息模型、状态空间上的博弈。</li>
     <li><b>10.6 连续状态空间</b>：带插值的值迭代用于「与自然对抗」的运动规划与混合系统。</li>
   </ul>
-  <p style="margin:.6em 0 0">前置知识：第 2 章的值迭代（2.3 节，见 <a href="../part1/ch2-discrete-planning.html">第 2 章教程</a>）、第 9 章的自然与零和博弈（9.2、9.3 节）；10.1.3 和 10.6 节还会用到第 8 章的反馈计划（8.2.1、8.4.1、8.5.2 节）。第一遍读的话，10.1、10.2.1 是核心；10.2.2–10.2.3、10.3、10.4 相对独立；10.5 可以和第 9 章的博弈论一起读。</p>
+  <p style="margin:.6em 0 0">前置知识：第 2 章的值迭代（2.3 节，见 <a href="../part1/ch2-discrete-planning.html">第 2 章教程</a>）、第 9 章的自然与零和博弈（9.2、9.3 节，见 <a href="ch9-basic-decision-theory.html">第 9 章教程</a>）；10.1.3 和 10.6 节还会用到第 8 章的反馈计划（8.2.1、8.4.1、8.5.2 节）。第一遍读的话，10.1、10.2.1 是核心；10.2.2–10.2.3、10.3、10.4 相对独立；10.5 可以和第 9 章的博弈论一起读。</p>
 </div>
-<p class="small muted">本页颜色约定（Part III）：<span class="color-key"><i style="background:var(--accent)"></i>蓝 = 决策者 / P1 的动作与计划</span>，<span class="color-key"><i style="background:var(--warn)"></i>琥珀 = 自然（可能的下一状态、前向投影）</span>，<span class="color-key"><i style="background:var(--c-alive2)"></i>紫 = 对手 P2</span>，<span class="color-key"><i style="background:var(--ok)"></i>绿 = 目标集 \(X_G\) 与执行轨迹</span>，灰 = 障碍；代价热图里越深代价越大。参考代码 <a href="code/ch10_sequential_decision.py"><code>part3/code/ch10_sequential_decision.py</code></a> 核对了页面上出现的全部数值（下文「参考代码第 N 项」指它打印的第 N 项）。</p>
+<p class="small muted">颜色沿用第 9 章定下的 Part III 约定：<span class="color-key"><i style="background:var(--accent)"></i>蓝 = 机器人 / P₁ 的动作与计划</span>，<span class="color-key"><i style="background:var(--warn)"></i>橙 = 自然 / P₂（可能的下一状态、前向投影）</span>，<span class="color-key"><i style="background:var(--ok)"></i>绿 = 最优 / 鞍点，也用于目标集 \(X_G\) 与执行轨迹</span>，<span class="color-key"><i style="background:var(--bad)"></i>红 = 最坏情况 / ∞</span>，<span class="color-key"><i style="background:var(--c-alive2)"></i>紫 = 概率分布 / 随机化策略</span>，灰 = 障碍；代价热图里越深代价越大。参考代码 <a href="code/ch10_sequential_decision.py"><code>part3/code/ch10_sequential_decision.py</code></a> 核对了页面上出现的全部数值（下文「参考代码第 N 项」指它打印的第 N 项）。</p>
 </section>
 
 <!-- ============================================================ 10.1 -->
@@ -228,7 +228,7 @@
 <p>注意 \(\mathrm{SB}(S,u)\) <b>不能</b>由 \(\mathrm{SB}(x,u)\) 对 \(x\in S\) 取并得到（习题 1）。另一个观察：对每个 \(x_k\in\mathrm{SB}(S,u_k)\) 都有 \(X_{k+1}(x_k,u_k)\subseteq S\)。再去掉对 \(u\) 的依赖，得到「存在某个动作可能到达 \(S\)」的状态——\(S\) 的弱反向投影和强反向投影：</p>
 <div class="eq">$$\mathrm{WB}(S) = \{x'\in X \mid \exists u\in U(x') \text{ 使得 } x'\in\mathrm{WB}(S,u)\}, \tag{10.25}$$</div>
 <div class="eq">$$\mathrm{SB}(S) = \{x'\in X \mid \exists u\in U(x') \text{ 使得 } x'\in\mathrm{SB}(S,u)\}. \tag{10.26}$$</div>
-<p>同样 \(\mathrm{SB}(S)\subseteq\mathrm{WB}(S)\)。<span class="small muted">（原书 (10.25)(10.26) 把这里的 \(x'\) 写成了 \(x\)：「\(\exists u\in U(x)\) 使得 \(x\in\mathrm{WB}(S,u)\)」，按上下文应为 \(x'\)，本页按 \(x'\) 写。）</span></p>
+<p>同样 \(\mathrm{SB}(S)\subseteq\mathrm{WB}(S)\)。<sup class="fn"><a href="#fn-1025" id="fn-1025-ref">1</a></sup></p>
 <p><b>例 10.5（反向投影）</b>：仍是例 10.1 的第一个模型。\(\mathrm{WB}(0,2)\) 是能施加 \(u = 2\) 且<b>可能</b>到达 \(x = 0\) 的状态：\(\{-3,-2,-1\}\)；但从其中任何一个都不能<b>确保</b>到达 0，所以 \(\mathrm{SB}(0,2) = \emptyset\)。再看目标 \(X_G = \{-1,0,1\}\) 在 \(u = 2\) 下的反向投影：</p>
 <div class="eq">$$\mathrm{WB}(X_G,2) = \mathrm{WB}(-1,2)\cup\mathrm{WB}(0,2)\cup\mathrm{WB}(1,2) = \{-4,-3,-2,-1,0\}. \tag{10.27}$$</div>
 <p>强反向投影是 \(\mathrm{SB}(X_G,2) = \{-2\}\)：从 \(\mathrm{WB}(X_G,2)\) 里的其它状态出发，自然都可能让目标落空。注意 \(\mathrm{SB}(X_G,2)\) 不能由各个 \(\mathrm{SB}(x,2)\) 取并得到。最后看不依赖动作的反向投影：\(\mathrm{WB}(X_G) = \{-4,-3,\ldots,4\}\)，\(\mathrm{SB}(X_G) = X_G\)——后者里 \(X_G\) 的所有状态都在，因为可以施加 \(u_T\)；不允许 \(u_T\) 的话 \(\mathrm{SB}(X_G) = \{-2,2\}\)。</p>
@@ -249,7 +249,7 @@
 <h4>固定计划下的前向投影</h4>
 <p>前向投影现在可以在「执行某个特定计划」的约束下定义：动作序列被 \(\pi\) 取代，每次需要在 \(x\) 处选动作就用 \(\pi(x)\)。在这种写法里，不同的 \(x\) 可以有不同的 \(U(x)\)，只要 \(\pi\) 只用 \(U(x)\) 中实际可用的动作。非确定情形：已知 \(x_1\) 和 \(\pi\)，\(u_1 = \pi(x_1)\) 代入 (10.10) 得到一步前向投影；第二步的 \(u_2\) 由 \(\pi(x_2)\) 决定，代入 (10.11)。递归形式是</p>
 <div class="eq">$$\begin{aligned}X_{k+1}(x_1,\pi) = \{x_{k+1}\in X \mid\ &\exists\theta_k\in\Theta(x_k,\pi(x_k)) \text{ 使得 } \\ &x_k\in X_k(x_1,\pi) \text{ 且 } x_{k+1} = f(x_k,\pi(x_k),\theta_k)\}.\end{aligned} \tag{10.28}$$</div>
-<p>把概率前向投影 (10.13)<sup class="fn"><a href="#fn-1010" id="fn-1010-ref">1</a></sup>改成用 \(\pi\)：</p>
+<p>把概率前向投影 (10.13)<sup class="fn"><a href="#fn-1010" id="fn-1010-ref">2</a></sup>改成用 \(\pi\)：</p>
 <div class="eq">$$P(x_{k+2}\mid x_k,\pi) = \sum_{x_{k+1}\in X} P(x_{k+2}\mid x_{k+1},\pi(x_{k+1}))\,P(x_{k+1}\mid x_k,\pi(x_k)). \tag{10.29}$$</div>
 <p>重复 \(k-1\) 次就得到 \(P(x_k\mid x_1,\pi)\)。状态转移矩阵也可以用：(10.15) 中所有列对应同一个动作 \(u\)；而固定计划下的 \(M_\pi\) 每一列可以对应不同的动作，因为每一列代表不同的状态 \(x_k\)：</p>
 <div class="eq">$$m_{i,j} = P(x_{k+1} = i \mid x_k = j,\ \pi(x_k)). \tag{10.30}$$</div>
@@ -291,7 +291,7 @@
 <div class="eq">$$G^*_k(x_k) = \min_{u_k}\max_{\theta_k}\Big\{\min_{u_{k+1}}\max_{\theta_{k+1}}\cdots\min_{u_K}\max_{\theta_K}\Big\{l(x_k,u_k,\theta_k) + \sum_{i=k+1}^{K} l(x_i,u_i,\theta_i) + l_F(x_F)\Big\}\Big\}. \tag{10.37}$$</div>
 <p>第二组 min、max 不影响 \(l(x_k,u_k,\theta_k)\)，可以把它提出来（对照 (2.10)）：</p>
 <div class="eq">$$G^*_k(x_k) = \min_{u_k}\max_{\theta_k}\Big\{l(x_k,u_k,\theta_k) + \min_{u_{k+1}}\max_{\theta_{k+1}}\cdots\min_{u_K}\max_{\theta_K}\Big\{\sum_{i=k+1}^{K} l(x_i,u_i,\theta_i) + l_F(x_F)\Big\}\Big\}. \tag{10.38}$$</div>
-<p>里面那组 min 和 max 正是 \(G^*_{k+1}\)<sup class="fn"><a href="#fn-lf" id="fn-lf-ref">2</a></sup>，于是得到递推式（对照 (2.11)）</p>
+<p>里面那组 min 和 max 正是 \(G^*_{k+1}\)<sup class="fn"><a href="#fn-lf" id="fn-lf-ref">3</a></sup>，于是得到递推式（对照 (2.11)）</p>
 <div class="eq">$$G^*_k(x_k) = \min_{u_k\in U(x_k)}\Big\{\max_{\theta_k}\Big\{l(x_k,u_k,\theta_k) + G^*_{k+1}(x_{k+1})\Big\}\Big\}. \tag{10.39}$$</div>
 <h4>概率情形</h4>
 <p>再次对照 2.3.1.1 节就能得到值迭代方法。对 \(k\) 从 1 到 \(F\)，令 \(G^*_k\) 为最优计划从阶段 \(k\) 执行到 \(F\) 的期望代价（对照 (2.5)）：</p>
@@ -355,7 +355,7 @@
 <p>前两种之前已经出现过：第一种发生在存在一个 \(\mathcal{G}_\pi\) 没有环的计划时；第二种发生在存在负环或正环、且环上所有边的概率都是 1 时——这本质上与非确定情形相同：最坏情况分析假定自然总施加最坏的动作，概率情形则是用概率 1 「强迫」了自然的动作。第三种是概率情形<b>特有</b>的：\(\mathcal{G}_\pi\) 中有正环或负环，但环上的边概率在 \((0,1)\) 之间；最优计划本身甚至都可能有这样的环。随着值迭代考虑越来越长的路径，环可能被多绕几圈，但每绕一圈概率就变小：概率随阶段数<b>指数</b>衰减，而代价只是<b>线性</b>累积。代价到目标函数的变化逐渐变小，只在迭代次数趋于无穷时才收敛到平稳值。如果可以接受一些近似误差，当整个 \(X\) 上的最大变化小于某个阈值 \(\epsilon\) 时就可以停止。得到所需质量的解要多少次迭代，取决于沿环走的概率和环的代价：概率越低，收敛越快。</p>
 <p><b>例 10.6（转移图中的环）</b>：设选定的计划 \(\pi\) 给出图 10.3 那样的基于计划的状态转移图，用概率模型，概率标在边上；为简单起见每次转移代价都是 1。从 \(x_I\) 出发的期望代价很好算：以概率 \(1/2\) 到达 \(x_G\) 的代价是 3；以概率 \(1/4\) 是 7；以概率 \(1/8\) 是 11。每多绕一圈代价增加 4，概率减半，于是得到无穷级数</p>
 <div class="eq">$$G_\pi(x_I) = 3 + 4\sum_{i=1}^{\infty}\frac{1}{2^i} = 7. \tag{10.47}$$</div>
-<p>这是标准的几何级数，和为 1，所以 (10.47) 收敛到 7。<span class="small muted">（补充：直接按定义写是 \(\sum_{i\ge1}2^{-i}(3+4(i-1))\)；(10.47) 用的是「绕圈次数 \(N\) 的期望 = \(\sum_{i\ge1}P(N\ge i)\)」这一尾和公式，\(P(N\ge i) = 2^{-i}\)，两者相等。）</span>尽管代价收敛到有限值，这只在极限下发生：理论上需要无穷多次值迭代。大多数应用里近似解就够了，很少几次迭代就能得到很高的精度（书中举的例子是 20 次迭代后变化约十亿分之一）<sup class="fn"><a href="#fn-20it" id="fn-20it-ref">3</a></sup>，所以一般在最大变化小于某个基于精度的阈值时终止。注意如果用非确定不确定性，值迭代不收敛：最坏情况下自然会让状态永远绕圈。尽管目标不是保证可达，概率不确定性模型仍允许得到合理的解。</p>
+<p>这是标准的几何级数，和为 1，所以 (10.47) 收敛到 7。<span class="small muted">（补充：直接按定义写是 \(\sum_{i\ge1}2^{-i}(3+4(i-1))\)；(10.47) 用的是「绕圈次数 \(N\) 的期望 = \(\sum_{i\ge1}P(N\ge i)\)」这一尾和公式，\(P(N\ge i) = 2^{-i}\)，两者相等。）</span>尽管代价收敛到有限值，这只在极限下发生：理论上需要无穷多次值迭代。大多数应用里近似解就够了，很少几次迭代就能得到很高的精度（书中举的例子是 20 次迭代后变化约十亿分之一）<sup class="fn"><a href="#fn-20it" id="fn-20it-ref">4</a></sup>，所以一般在最大变化小于某个基于精度的阈值时终止。注意如果用非确定不确定性，值迭代不收敛：最坏情况下自然会让状态永远绕圈。尽管目标不是保证可达，概率不确定性模型仍允许得到合理的解。</p>
 
 <div class="widget wide" data-widget="cycle"></div>
 <div class="box intuition"><div class="box-title">试一试</div><ul>
@@ -382,7 +382,7 @@
 <p>策略迭代反复需要计算给定计划 \(\pi\) 的代价到目标，即 (10.32) 的 \(G_\pi\)。先假设没有不确定性，状态转移方程是 \(x' = f(x,u)\)。2.3.2 节的动态规划方程 (2.18) 可以用来推导执行 \(\pi\) 时每个状态的代价到目标：对每个 \(x\in X\) 抄一份 (2.18)，并把其中的 min 换成给定的动作 \(u = \pi(x)\)：</p>
 <div class="eq">$$G_\pi(x) = l(x,\pi(x)) + G_\pi(f(x,\pi(x))). \tag{10.50}$$</div>
 <p>这里用 \(G_\pi\) 代替 \(G^*\)，因为已经没有变量需要优化（它只是执行 \(\pi\) 的代价）。可以把 (10.50) 看成一种平凡的动态规划：可选的计划被限制为单个 \(\pi\)；动态规划递推在所有计划的空间上成立，在只含一个计划的空间上当然也成立。若有 \(n\) 个状态，(10.50) 给出 \(n\) 个方程，每个都表达某个状态的 \(G_\pi(x)\)。对 \(x\in X_G\) 已知 \(G_\pi(x) = 0\)；于是一步能到达 \(X_G\) 的所有状态的代价可以用 (10.50) 及 \(G_\pi(f(x,\pi(x))) = 0\) 算出；接着又能算出一步能到达这些状态的状态……这一过程持续到所有状态的代价都算完，与 Dijkstra 算法的行为类似。这并不神秘：(10.50) 说明了状态转移图中相邻状态之间代价的差；所有差都给定、\(X_G\) 上又有初始条件，其它值就都能把这些差加起来得到。类似的想法出现在 Hamilton–Jacobi–Bellman 方程和 Pontryagin 极小值原理中（15.2 节）。</p>
-<p>现在转到概率情形。(2.18) 的概率版本对应 (10.49)<sup class="fn"><a href="#fn-218" id="fn-218-ref">4</a></sup>。为简单起见考虑 \(l(x,u,\theta)\) 不依赖 \(\theta\) 的特殊情形：</p>
+<p>现在转到概率情形。(2.18) 的概率版本对应 (10.49)<sup class="fn"><a href="#fn-218" id="fn-218-ref">5</a></sup>。为简单起见考虑 \(l(x,u,\theta)\) 不依赖 \(\theta\) 的特殊情形：</p>
 <div class="eq">$$\pi^*(x) = \operatorname*{argmin}_{u\in U(x)}\Big\{l(x,u) + \sum_{x'\in X} G^*(x')P(x'\mid x,u)\Big\}, \tag{10.51}$$</div>
 <p>其中 \(x' = f(x,u)\)。代价到目标函数 \(G^*\) 满足动态规划递推式</p>
 <div class="eq">$$G^*(x) = \min_{u\in U(x)}\Big\{l(x,u) + \sum_{x'\in X} G^*(x')P(x'\mid x,u)\Big\}. \tag{10.52}$$</div>
@@ -410,10 +410,9 @@
 <div class="eq">$$G_\pi(b) = 1 + \tfrac13 G_\pi(a) + \tfrac13 G_\pi(b). \tag{10.59}$$</div>
 <p>解得 \(G_\pi(a) = G_\pi(b) = 3\)。现在用 \(G_\pi(a) = G_\pi(b) = 3\)、\(G_\pi(c) = 0\) 对每个状态用 (10.54) 找更好的计划 \(\pi'\)。在状态 \(a\) 处求解</p>
 <div class="eq">$$\pi'(a) = \operatorname*{argmin}_{u\in U}\Big\{l(x,a) + \sum_{x'\in X} G_\pi(x')P(x'\mid x,a)\Big\}. \tag{10.60}$$</div>
-<p class="small muted">（(10.60) 照抄原书：这里的 \(l(x,a)\)、\(P(x'\mid x,a)\) 按意思应读作 \(l(a,u)\)、\(P(x'\mid a,u)\)。）</p>
-<p>最好的动作是 \(u = 2\)，代价为 5/2：</p>
+<p>最好的动作是 \(u = 2\)，代价为 5/2<sup class="fn"><a href="#fn-1060" id="fn-1060-ref">6</a></sup>：</p>
 <div class="eq">$$l(x,2) + \sum_{x'\in X} G_\pi(x')P(x'\mid x,2) = 1 + 0 + (3)\tfrac12 + (0)\tfrac12 = \tfrac52. \tag{10.61}$$</div>
-<p>所以 \(\pi'(a) = 2\)<sup class="fn"><a href="#fn-1061" id="fn-1061-ref">5</a></sup>。类似地 \(\pi'(b) = 2\)，代价 7/4；\(\pi'(c) = u_T\)，这就确定了一个改进的计划。既然找到了改进的计划，用 \(\pi'\) 取代 \(\pi\)，回到第 2 步。新计划给出方程</p>
+<p>所以 \(\pi'(a) = 2\)<sup class="fn"><a href="#fn-1061" id="fn-1061-ref">7</a></sup>。类似地 \(\pi'(b) = 2\)，代价 7/4；\(\pi'(c) = u_T\)，这就确定了一个改进的计划。既然找到了改进的计划，用 \(\pi'\) 取代 \(\pi\)，回到第 2 步。新计划给出方程</p>
 <div class="eq">$$G_\pi(a) = 1 + \tfrac12 G_\pi(b) \tag{10.62}$$</div>
 <div class="eq">$$G_\pi(b) = 1 + \tfrac14 G_\pi(a). \tag{10.63}$$</div>
 <p>解得 \(G_\pi(a) = 12/7\)、\(G_\pi(b) = 10/7\)。下一步试图用 (10.54) 找更好的计划，但发现当前计划无法再改进，策略迭代正确地报告 \(\pi^* = \pi\) 并终止。</p>
@@ -492,7 +491,7 @@
 <div class="box intuition"><div class="box-title">试一试</div><ul>
   <li>「反向投影算法」点「跑完」：23 遍后 S 覆盖全部 124 个非目标状态；勾选「只检查 WB(S)∖S」再跑，结果完全相同，被检查的状态从 1381 个降到 194 个（参考代码第 6 项）。鼠标停在冰面格子上：横滑使前向投影变成 3 个格子，要它们<b>全部</b>在 S 里才能加入。</li>
   <li>切到「非确定 Dijkstra」一步步走：每弹出一个 x_s，橙色的前沿就是图 10.9 里的那些状态。跑完后 G 与最坏情况值迭代完全一致（最大 G* = 23）；Dijkstra 总共只做了约 190 次 (10.64) 求值，而值迭代要 24 遍 × 133 个状态。</li>
-  <li>勾选「对比：期望代价计划」：紫色箭头是概率模型（横滑 0.2）下的最优计划，紫框是两者选了不同动作的状态。最坏情况计划更愿意贴墙走、绕开冰面；左下角 (0, 0) 的最坏代价 23，期望代价只有约 18.3（无自然时 18）。</li>
+  <li>勾选「对比：期望代价计划」：紫色三角是概率模型（横滑 0.2）下的最优计划，紫框是两者选了不同动作的状态。最坏情况计划更愿意贴墙走、绕开冰面；左下角 (0, 0) 的最坏代价 23，期望代价只有约 18.3（无自然时 18）。</li>
 </ul></div>
 </section>
 
@@ -552,7 +551,7 @@
 <h4>折扣代价的值迭代</h4>
 <p>后向值迭代的解自然地沿用 10.2.1 节的方法。为了记号方便，令第一个阶段为 \(k = 0\)，这样 \(\alpha^{k-1}\) 可以换成 \(\alpha^k\)。概率情形下的期望最优代价到目标是</p>
 <div class="eq">$$G^*(x) = \lim_{K\to\infty}\Big(\min_{\tilde{u}}\Big\{E_{\tilde\theta}\Big[\sum_{k=1}^{K}\alpha^k l(x_k,u_k,\theta_k)\Big]\Big\}\Big). \tag{10.70}$$</div>
-<p>期望取遍所有自然历史，每个都是自然动作的无穷序列。非确定情形对应的表达式是<sup class="fn"><a href="#fn-k0" id="fn-k0-ref">6</a></sup></p>
+<p>期望取遍所有自然历史，每个都是自然动作的无穷序列。非确定情形对应的表达式是<sup class="fn"><a href="#fn-k0" id="fn-k0-ref">8</a></sup></p>
 <div class="eq">$$G^*(x) = \lim_{K\to\infty}\Big(\min_{\tilde{u}}\Big\{\max_{\tilde\theta}\Big\{\sum_{k=1}^{K}\alpha^k l(x_k,u_k,\theta_k)\Big\}\Big\}\Big). \tag{10.71}$$</div>
 <p>概率情形更常见，下面只讲它；非确定版本类似处理（习题 17）。和以前一样用后向值迭代，因为它们更容易表达。折扣因子带来一个小麻烦，要修正之后动态规划递推才能正常工作。困难在于阶段编号现在以 \(\alpha^k\) 的形式出现在代价函数里，2.3.1.1 节的平移不变性不再成立，必须小心对待阶段编号——而后向值迭代的最终阶段编号原本是未知且不重要的。</p>
 <p>考虑一系列折扣决策问题，最大阶段编号依次为 \(K = 0, 1, 2, \ldots\)。看图 10.10 中相邻两行：求 \(K+1\) 阶段问题和 \(K\) 阶段问题的最优代价到目标有什么区别？\(K = 4\) 那一行的后四项，可以把 \(K = 3\) 那一行的所有项乘以 \(\alpha\) 再加一个新项 \(l_0\) 得到；唯一的不同是从 \(K = 3\) 借来的每个 \(l_i\) 的下标要平移一位。一般地，\(K\) 阶段优化问题的最优代价乘以 \(\alpha\) 后，就能充当 \(K+1\) 阶段问题的最优代价：\(K+1\) 阶段问题可以通过优化「第一阶段代价 + 折扣 \(\alpha\) 后的 \(K\) 阶段最优代价」来求解。用直接的动态规划论证可以推出：设 \(K\) 固定，对 \(k\) 从 0 到 \(K\)，代价到目标可以递归地写成</p>
@@ -650,7 +649,7 @@
 <div class="eq">$$\begin{aligned}\hat{G}_\pi(x_1) &:= \hat{G}_\pi(x_1) + \frac{1}{v_1}d_1 + \frac{1}{v_1}d_2 \\ &= \hat{G}_\pi(x_1) + \frac{1}{v_1}\Big(l(x_1,u_1) + \hat{G}_\pi(x_2) - \hat{G}_\pi(x_1) + l(x_2,u_2) + \hat{G}_\pi(x_3) - \hat{G}_\pi(x_2)\Big) \\ &= \hat{G}_\pi(x_1) + \frac{1}{v_1}\Big(l(x_1,u_1) + l(x_2,u_2) - \hat{G}_\pi(x_1) + \hat{G}_\pi(x_3)\Big).\end{aligned} \tag{10.90}$$</div>
 <p>到达 \(x_4\) 时做类似的更新。到达 \(x_{k+1}\) 时的更新是</p>
 <div class="eq">$$\hat{G}_\pi(x_1) := \hat{G}_\pi(x_1) + \frac{1}{v_1}d_k,\quad \hat{G}_\pi(x_2) := \hat{G}_\pi(x_2) + \frac{1}{v_2}d_k,\quad\ldots,\quad \hat{G}_\pi(x_k) := \hat{G}_\pi(x_k) + \frac{1}{v_k}d_k. \tag{10.91}$$</div>
-<p>这样一直更新到到达 \(x_F\in X_G\)。现在看对每个 \(x_k\) 实际算了什么：时间差分构成一个望远镜式的、会坍缩的和，就像 (10.90) 里两次迭代之后那样。所有迭代完成后，\(x_k\) 处的值被更新为<sup class="fn"><a href="#fn-1092" id="fn-1092-ref">7</a></sup></p>
+<p>这样一直更新到到达 \(x_F\in X_G\)。现在看对每个 \(x_k\) 实际算了什么：时间差分构成一个望远镜式的、会坍缩的和，就像 (10.90) 里两次迭代之后那样。所有迭代完成后，\(x_k\) 处的值被更新为<sup class="fn"><a href="#fn-1092" id="fn-1092-ref">9</a></sup></p>
 <div class="eq">$$\begin{aligned}\hat{G}_\pi(x_k) &:= \hat{G}_\pi(x_k) + \frac{1}{v_k}\big(d_k + d_{k+1} + \cdots + d_K\big) \\ &= \hat{G}_\pi(x_k) + \frac{1}{v_k}\Big(l(x_k,u_k) + l(x_{k+1},u_{k+1}) + \cdots + l(x_K,u_K) - \hat{G}_\pi(x_k) + \hat{G}_\pi(x_F)\Big) \\ &= \hat{G}_\pi(x_k) + \frac{1}{v_k}\Big(l(x_k,u_k) + l(x_{k+1},u_{k+1}) + \cdots + l(x_K,u_K) - \hat{G}_\pi(x_k)\Big).\end{aligned} \tag{10.92}$$</div>
 <p>最后的 \(\hat{G}_\pi(x_F)\) 被删掉了，因为假设计划在 \(x_F\) 施加终止动作，它的值为零。若序列中每个被访问的状态都互不相同，最后的表达式就等价于 (10.85)。通常并非如此，这使上面的方法与 (10.85) 略有不同，因为在时间差分方案中，计数 \(v_k\) 可能在试验过程中变化。不过这个差别可以忽略，时间差分方法算出的估计会收敛到 \(G_\pi\)。</p>
 <p>上面的时间差分方法可以推广，实践中常常收敛得更快。令 \(\lambda\in[0,1]\) 为给定参数，<b>TD(λ)</b> 时间差分方法把 (10.91) 换成</p>
@@ -692,7 +691,7 @@
 <div class="eq">$$Q_\pi(x,u) = l(x,u) + \sum_{x'\in X} P(x'\mid x,u)G_\pi(x'). \tag{10.103}$$</div>
 <p>转移概率无需已知，Q 因子通过模拟和平均算出。计划可以这样改进：</p>
 <div class="eq">$$\pi'(x) = \operatorname*{argmin}_{u\in U(x)}\Big\{Q_\pi(x,u)\Big\}, \tag{10.104}$$</div>
-<p>它基于 (10.97)<sup class="fn"><a href="#fn-10104" id="fn-10104-ref">8</a></sup>。</p>
+<p>它基于 (10.97)<sup class="fn"><a href="#fn-10104" id="fn-10104-ref">10</a></sup>。</p>
 
 <div class="widget wide" data-widget="q-learning"></div>
 <div class="box intuition"><div class="box-title">试一试</div><ul>
@@ -741,7 +740,7 @@
 <div class="widget wide" data-widget="game-tree"></div>
 <div class="box intuition"><div class="box-title">试一试</div><ul>
   <li>「图 10.13」+「上值」一步步点：P₂ 那层得到 4, 0, 1, 3, 3, 2, 4, 3，P₁ 那层 0, 1, 2, 3，再往上 1, 3，根 1；粗线就是图 10.14d 的路径 (L, L) / (R, L)（参考代码第 12 项）。</li>
-  <li>切到「下值：P2 先行」：叶子被重排成 4 0 2 0 2 1 3 2 1 3 0 2 4 3 1 2（图 10.15），下值也是 1——确定性鞍点。改几个叶子（例如把第一个 4 改成 −3）看鞍点消失。</li>
+  <li>切到「下值：P2 先行」：叶子被重排成 4 0 2 0 2 1 3 2 1 3 0 2 4 3 1 2（图 10.15），下值也是 1——确定性鞍点。换成「图 10.23」预设再分别算上值、下值：两者不再相等。</li>
   <li>「alpha-beta」：图 10.13 只看 16 个叶子中的 9 个；「像图 10.16」预设先保证 c = 1，下一个 P₂ 顶点的第一个孩子就是 2 ≥ 1，剩下的不用看。图 10.12 按这个顺序一个也剪不掉——剪枝效果强烈依赖于孩子的顺序。</li>
 </ul></div>
 
@@ -788,7 +787,7 @@
 <div class="eq">$$\overline{L}^*(x_1) = \min_{u_1}\max_{v_1}\min_{u_2}\max_{v_2}\cdots\min_{u_K}\max_{v_K}\Big\{L(\tilde{x}_F,\tilde{u}_K,\tilde{v}_K)\Big\}, \tag{10.108}$$</div>
 <p>若把 P₂ 换成自然，它与 (10.33) 相同；(10.108) 也把 (9.44) 推广到多阶段。从 \(x_1\) 出发的<b>下值</b>推广了 (9.46)：</p>
 <div class="eq">$$\underline{L}^*(x_1) = \max_{v_1}\min_{u_1}\max_{v_2}\min_{u_2}\cdots\max_{v_K}\min_{u_K}\Big\{L(\tilde{x}_F,\tilde{u}_K,\tilde{v}_K)\Big\}. \tag{10.109}$$</div>
-<p>若 \(\overline{L}^*(x_1) = \underline{L}^*(x_1)\)<sup class="fn"><a href="#fn-x2" id="fn-x2-ref">9</a></sup>，则从 \(x_1\) 出发存在确定性鞍点。这意味着在每个阶段内部 max 和 min 的次序都可以交换。</p>
+<p>若 \(\overline{L}^*(x_1) = \underline{L}^*(x_1)\)<sup class="fn"><a href="#fn-x2" id="fn-x2-ref">11</a></sup>，则从 \(x_1\) 出发存在确定性鞍点。这意味着在每个阶段内部 max 和 min 的次序都可以交换。</p>
 <h4>值迭代</h4>
 <p>把用于 (10.33) 的推导改用于 (10.108)，就得到值迭代方法，即动态规划递推</p>
 <div class="eq">$$\overline{L}^*_k(x_k) = \min_{u_k\in U(x_k)}\Big\{\max_{v_k\in V(x_k)}\Big\{l(x_k,u_k,v_k) + \overline{L}^*_{k+1}(x_{k+1})\Big\}\Big\}, \tag{10.110}$$</div>
@@ -824,7 +823,7 @@
 <div class="eq">$$\begin{array}{c|cc} & V & \\ \hline U & 3 & -2 \\ & -6 & 3 \end{array} \tag{10.117}$$</div>
 <p>以概率 2/3 是</p>
 <div class="eq">$$\begin{array}{c|cc} & V & \\ \hline U & 3 & -1 \\ & 6 & 0 \end{array} \tag{10.118}$$</div>
-<p>遗憾的是，P₁ 和 P₂ 不知道自己实际在玩哪个矩阵博弈。如果博弈在许多独立试验中进行，遗憾可以在期望意义下消除。令 \(A_1\)、\(A_2\) 分别表示 (10.117) 和 (10.118)，定义新的代价矩阵 \(A = (1/3)A_1 + (2/3)A_2\)（标量乘矩阵即每个元素乘以它）。得到的矩阵是<sup class="fn"><a href="#fn-10119" id="fn-10119-ref">10</a></sup></p>
+<p>遗憾的是，P₁ 和 P₂ 不知道自己实际在玩哪个矩阵博弈。如果博弈在许多独立试验中进行，遗憾可以在期望意义下消除。令 \(A_1\)、\(A_2\) 分别表示 (10.117) 和 (10.118)，定义新的代价矩阵 \(A = (1/3)A_1 + (2/3)A_2\)（标量乘矩阵即每个元素乘以它）。得到的矩阵是<sup class="fn"><a href="#fn-10119" id="fn-10119-ref">12</a></sup></p>
 <div class="eq">$$\begin{array}{c|cc} & V & \\ \hline U & 3 & -4/3 \\ & 2 & 1 \end{array} \tag{10.119}$$</div>
 <p>这个矩阵博弈有确定性鞍点：P₁ 选 \(R\)（第 2 行）、P₂ 选 \(L\)（第 1 列），代价为 2。这意味着如果在许多独立试验上平均，它们可以用确定性策略得到期望代价 2。如果这个矩阵没有确定性鞍点，就需要随机化策略。有趣的是，这个例子不需要随机化，尽管 P₁ 和 P₂ 各自都在同时对抗自然和一个聪明的对手。</p>
 <p>还可能有若干其它变体。如果用非确定方式对自然建模，可以构造一个最坏情况遗憾的矩阵，来判断是否可能消除遗憾。也可以考虑图 10.19 那种博弈的序贯版本：每个阶段有三个子阶段，自然、P₁、P₂ 都行动。10.5.1 节的自底向上方法可以把树分解成许多单阶段博弈，它们的代价可以像以前一样向上传播到根，得到均衡解。Formulation 10.4 也可以很容易地推广到在状态空间上的博弈中引入自然：对每个 \(x\)，定义一个自然动作集合 \(\Theta(x)\)，状态转移方程定义为</p>
@@ -860,7 +859,7 @@
 <h3 id="s10-6-2">10.6.2 与自然对抗的运动规划</h3>
 <p>回忆 8.5.2 节：带插值的值迭代可以用于以离散时间近似的运动规划问题。自然甚至也可以引入离散时间近似。例如 (8.62) 可以换成</p>
 <div class="eq">$$x(t+\Delta t) = x(t) + \Delta t\,(u + \theta), \tag{10.124}$$</div>
-<p>其中 \(\theta\) 从有界集合 \(\Theta(x,u)\) 中选取。用 (10.124) 可以像上面那样做值迭代。图 10.20 是这个模型下用概率不确定性的一个二维运动规划问题的例子：自然是概率的（在一个角度区间上均匀分布），可以干扰运动方向；这个问题中实际上允许与障碍接触<sup class="fn"><a href="#fn-fig1020" id="fn-fig1020-ref">11</a></sup>。有趣的是，从固定初始状态执行计划时，每次得到的轨迹都不同；但多次执行的平均代价接近期望最优值。</p>
+<p>其中 \(\theta\) 从有界集合 \(\Theta(x,u)\) 中选取。用 (10.124) 可以像上面那样做值迭代。图 10.20 是这个模型下用概率不确定性的一个二维运动规划问题的例子：自然是概率的（在一个角度区间上均匀分布），可以干扰运动方向；这个问题中实际上允许与障碍接触<sup class="fn"><a href="#fn-fig1020" id="fn-fig1020-ref">13</a></sup>。有趣的是，从固定初始状态执行计划时，每次得到的轨迹都不同；但多次执行的平均代价接近期望最优值。</p>
 
 <div class="widget wide" data-widget="continuous-nature"></div>
 <div class="box intuition"><div class="box-title">试一试</div><ul>
@@ -939,7 +938,7 @@
   <li><b>把「可能可达」当「保证可达」</b>：最坏情况下只要 \(\mathcal{G}_\pi\) 有一个不经过目标的环，代价就是 ∞，而期望代价可能很小。</li>
   <li><b>等值迭代「完全不变」再停</b>：概率情形常常只是渐近收敛（例 10.6），要用阈值 \(\epsilon\)。</li>
   <li><b>转移矩阵的方向</b>：(10.16) 的 \(M_u\) 是<b>列</b>随机的，\(v' = M_u v\) 里 \(v\) 是列向量；很多书用行随机矩阵和行向量。</li>
-  <li><b>折扣时混用阶段编号</b>：书中折扣部分令第一阶段 \(k = 0\)，与 Formulation 10.1 的 \(k = 1\) 不同；(10.70)(10.71) 的求和下标还与此不一致（脚注 6）。</li>
+  <li><b>折扣时混用阶段编号</b>：书中折扣部分令第一阶段 \(k = 0\)，与 Formulation 10.1 的 \(k = 1\) 不同；(10.70)(10.71) 的求和下标还与此不一致（脚注 8）。</li>
   <li><b>对概率问题直接套 Dijkstra</b>：只有存在以概率 1 单调前进的计划时才行，否则代价变化的区域不是一条传播带。</li>
   <li><b>TD / Q-learning 的步长</b>：用 \(1/v\) 递减步长、初值又差得远时，自举方法可能非常慢；常数 \(\rho\) 更快但有噪声（(10.95) 后的讨论）。</li>
   <li><b>忽略信息模型</b>：同一棵博弈树，交替行动、阶段式、开环给出不同的值（图 10.13：1、1、2）。</li>
@@ -977,22 +976,24 @@
 <section id="notes">
 <h2>脚注</h2>
 <div class="box small">
-  <p id="fn-1010" style="margin:0 0 6px"><sup>1</sup> 原书写「The probabilistic forward projection in (10.10) can be adapted to use π」，但 (10.10) 是<b>非确定</b>的前向投影；按 (10.29) 的形式，被改造的应是概率前向投影 (10.13)。<a href="#fn-1010-ref">↩</a></p>
-  <p id="fn-lf" style="margin:0 0 6px"><sup>2</sup> 原书 (10.38) 和 (10.44) 里最内层写的是 \(l(x_F)\)，按 (10.37)(10.43) 应为 \(l_F(x_F)\)；本页按 \(l_F\) 写。<a href="#fn-lf-ref">↩</a></p>
-  <p id="fn-20it" style="margin:0 0 6px"><sup>3</sup> 补充：这句话不能拿图 10.3 本身去对。对这个例子做初值为 0 的值迭代，第 \(n\) 次迭代的变化量恰好是「\(n\) 步内还没到达」的概率 \((1/2)^{\lceil (n-3)/4\rceil}\)：第 20 次迭代约为 0.0625，到第 121 次迭代才小于 \(10^{-9}\)（参考代码第 7 项）。书中「20 次迭代后约十亿分之一」应理解为一般情形下的量级说法。<a href="#fn-20it-ref">↩</a></p>
-  <p id="fn-218" style="margin:0 0 6px"><sup>4</sup> 原书写「The probabilistic analog of (2.18) is (10.49)」。但 (2.18) 是平稳的动态规划方程 \(G^*(x) = \min_u\{l(x,u) + G^*(f(x,u))\}\)，(2.19) 才是求动作的 argmin；(10.49) 是 argmin 形式，对应 (2.19)，(2.18) 的概率版本是 (10.52)。属引用笔误，不影响内容。<a href="#fn-218-ref">↩</a></p>
-  <p id="fn-1061" style="margin:0 0 6px"><sup>5</sup> 原书 (10.61) 写作 \(1 + 0 + (3)\tfrac12 + (0)\tfrac14 = \tfrac52\)：最后一项乘的是 \(P(c\mid a,2)\)，按图 10.5 它是 \(1/2\) 而不是 \(1/4\)（\(1/4\) 是 \(P(a\mid b,2)\)）。因为 \(G_\pi(c) = 0\)，结果 5/2 不受影响；本页已改为 \(\tfrac12\)。<a href="#fn-1061-ref">↩</a></p>
-  <p id="fn-k0" style="margin:0 0 6px"><sup>6</sup> 原书在 (10.70)(10.71) 之前刚说「令第一个阶段为 \(k = 0\)」，(10.67) 的求和也从 \(k = 0\) 开始，但 (10.70)(10.71) 的求和印成了从 \(k = 1\) 开始。按上下文应从 \(k = 0\) 开始（否则第一阶段的代价被漏掉）。本页照抄原式，在此指出。<a href="#fn-k0-ref">↩</a></p>
-  <p id="fn-1092" style="margin:0 0 6px"><sup>7</sup> 原书 (10.92) 第一行写成 \(\frac{1}{v_k}d_k + \frac{1}{v_{k+1}}d_{k+1} + \cdots + \frac{1}{v_K}d_K + \frac{1}{v_F}d_F\)，第二、三行的代价和写成从 \(l(x_1,u_1)\) 开始。按 (10.91)，\(x_k\) 收到的每次更新系数都是 \(1/v_k\)（第二行也正是把 \(1/v_k\) 提了出来），所以第一行的系数都应是 \(1/v_k\)；望远镜求和 \(d_k + \cdots + d_K\) 得到的代价和应从 \(l(x_k,u_k)\) 开始（\(k = 1\) 时才与原书相同）；\(d_F\) 项本来就是 0。本页已按此改写。<a href="#fn-1092-ref">↩</a></p>
-  <p id="fn-10104" style="margin:0 0 6px"><sup>8</sup> 原书 (10.104) 写的是 \(\operatorname{argmin}_u\{Q^*(x,u)\}\)。这里是策略迭代的改进步，手里只有用 (10.103) 算出的 \(Q_\pi\)（\(Q^*\) 正是要求的未知量），所以应为 \(Q_\pi(x,u)\)；本页按 \(Q_\pi\) 写。<a href="#fn-10104-ref">↩</a></p>
-  <p id="fn-x2" style="margin:0 0 6px"><sup>9</sup> 原书写「If \(\overline{L}^*(x_1) = \underline{L}^*(x_2)\)」，下值的参数应为 \(x_1\)。<a href="#fn-x2-ref">↩</a></p>
-  <p id="fn-10119" style="margin:0 0 6px"><sup>10</sup> 原书 (10.119) 第一行第二列印成 0，但 \((1/3)(-2) + (2/3)(-1) = -4/3\)；随后又说「P₁ 选 \(L\)（第 2 行）、P₂ 选 \(R\)（第 1 列）」，按 (10.117) 的排法第 2 行是 \(R\)、第 1 列是 \(L\)。改正后行最大值为 3、2，列最小值为 2、−4/3，鞍点仍在（第 2 行，第 1 列），值仍为 2，结论不变（参考代码第 13 项）。<a href="#fn-10119-ref">↩</a></p>
-  <p id="fn-fig1020" style="margin:0"><sup>11</sup> 原书图 10.20 的第二幅小图标成了「(a) Optimal navigation function」，按图注应为 (b)。另有两处小问题不单独标注：图 10.10 图注把 decrease 印成了 decease；(10.77)(10.84) 中的 \(u\) 应理解为 \(\pi(x)\)。<a href="#fn-fig1020-ref">↩</a></p>
+  <p id="fn-1025" style="margin:0 0 6px"><sup>1</sup> 原书 (10.25)(10.26) 写作 \(\{x'\in X \mid \exists u\in U(x) \text{ such that } x\in\mathrm{WB}(S,u)\}\)（SB 同理），集合的元素记作 \(x'\)，条件里却写成了 \(x\)；按上下文应统一为 \(x'\)，本页 (10.25)(10.26) 已按 \(x'\) 写。<a href="#fn-1025-ref">↩</a></p>
+  <p id="fn-1010" style="margin:0 0 6px"><sup>2</sup> 原书写「The probabilistic forward projection in (10.10) can be adapted to use π」，但 (10.10) 是<b>非确定</b>的前向投影；按 (10.29) 的形式，被改造的应是概率前向投影 (10.13)。<a href="#fn-1010-ref">↩</a></p>
+  <p id="fn-lf" style="margin:0 0 6px"><sup>3</sup> 原书 (10.38) 和 (10.44) 里最内层写的是 \(l(x_F)\)，按 (10.37)(10.43) 应为 \(l_F(x_F)\)；本页按 \(l_F\) 写。<a href="#fn-lf-ref">↩</a></p>
+  <p id="fn-20it" style="margin:0 0 6px"><sup>4</sup> 补充：这句话不能拿图 10.3 本身去对。对这个例子做初值为 0 的值迭代，第 \(n\) 次迭代的变化量恰好是「\(n\) 步内还没到达」的概率 \((1/2)^{\lceil (n-3)/4\rceil}\)：第 20 次迭代约为 0.0625，到第 121 次迭代才小于 \(10^{-9}\)（参考代码第 7 项）。书中「20 次迭代后约十亿分之一」应理解为一般情形下的量级说法。<a href="#fn-20it-ref">↩</a></p>
+  <p id="fn-218" style="margin:0 0 6px"><sup>5</sup> 原书写「The probabilistic analog of (2.18) is (10.49)」。但 (2.18) 是平稳的动态规划方程 \(G^*(x) = \min_u\{l(x,u) + G^*(f(x,u))\}\)，(2.19) 才是求动作的 argmin；(10.49) 是 argmin 形式，对应 (2.19)，(2.18) 的概率版本是 (10.52)。属引用笔误，不影响内容。<a href="#fn-218-ref">↩</a></p>
+  <p id="fn-1060" style="margin:0 0 6px"><sup>6</sup> (10.60) 照抄原书：\(\pi'(a) = \operatorname{argmin}_{u\in U}\{l(x,a) + \sum_{x'} G_\pi(x')P(x'\mid x,a)\}\)。这里 argmin 的变量是 \(u\)，所以按意思应读作 \(l(a,u)\) 与 \(P(x'\mid a,u)\)；(10.61) 左边的 \(l(x,2)\)、\(P(x'\mid x,2)\) 同理应为 \(l(a,2)\)、\(P(x'\mid a,2)\)。<a href="#fn-1060-ref">↩</a></p>
+  <p id="fn-1061" style="margin:0 0 6px"><sup>7</sup> 原书 (10.61) 写作 \(1 + 0 + (3)\tfrac12 + (0)\tfrac14 = \tfrac52\)：最后一项乘的是 \(P(c\mid a,2)\)，按图 10.5 它是 \(1/2\) 而不是 \(1/4\)（\(1/4\) 是 \(P(a\mid b,2)\)）。因为 \(G_\pi(c) = 0\)，结果 5/2 不受影响；本页已改为 \(\tfrac12\)。<a href="#fn-1061-ref">↩</a></p>
+  <p id="fn-k0" style="margin:0 0 6px"><sup>8</sup> 原书在 (10.70)(10.71) 之前刚说「令第一个阶段为 \(k = 0\)」，(10.67) 的求和也从 \(k = 0\) 开始，但 (10.70)(10.71) 的求和印成了从 \(k = 1\) 开始。按上下文应从 \(k = 0\) 开始（否则第一阶段的代价被漏掉）。本页照抄原式，在此指出。<a href="#fn-k0-ref">↩</a></p>
+  <p id="fn-1092" style="margin:0 0 6px"><sup>9</sup> 原书 (10.92) 第一行写成 \(\frac{1}{v_k}d_k + \frac{1}{v_{k+1}}d_{k+1} + \cdots + \frac{1}{v_K}d_K + \frac{1}{v_F}d_F\)，第二、三行的代价和写成从 \(l(x_1,u_1)\) 开始。按 (10.91)，\(x_k\) 收到的每次更新系数都是 \(1/v_k\)（第二行也正是把 \(1/v_k\) 提了出来），所以第一行的系数都应是 \(1/v_k\)；望远镜求和 \(d_k + \cdots + d_K\) 得到的代价和应从 \(l(x_k,u_k)\) 开始（\(k = 1\) 时才与原书相同）；\(d_F\) 项本来就是 0。本页已按此改写。<a href="#fn-1092-ref">↩</a></p>
+  <p id="fn-10104" style="margin:0 0 6px"><sup>10</sup> 原书 (10.104) 写的是 \(\operatorname{argmin}_u\{Q^*(x,u)\}\)。这里是策略迭代的改进步，手里只有用 (10.103) 算出的 \(Q_\pi\)（\(Q^*\) 正是要求的未知量），所以应为 \(Q_\pi(x,u)\)；本页按 \(Q_\pi\) 写。<a href="#fn-10104-ref">↩</a></p>
+  <p id="fn-x2" style="margin:0 0 6px"><sup>11</sup> 原书写「If \(\overline{L}^*(x_1) = \underline{L}^*(x_2)\)」，下值的参数应为 \(x_1\)。<a href="#fn-x2-ref">↩</a></p>
+  <p id="fn-10119" style="margin:0 0 6px"><sup>12</sup> 原书 (10.119) 第一行第二列印成 0，但 \((1/3)(-2) + (2/3)(-1) = -4/3\)；随后又说「P₁ 选 \(L\)（第 2 行）、P₂ 选 \(R\)（第 1 列）」，按 (10.117) 的排法第 2 行是 \(R\)、第 1 列是 \(L\)。改正后行最大值为 3、2，列最小值为 2、−4/3，鞍点仍在（第 2 行，第 1 列），值仍为 2，结论不变（参考代码第 13 项）。<a href="#fn-10119-ref">↩</a></p>
+  <p id="fn-fig1020" style="margin:0"><sup>13</sup> 原书图 10.20 的第二幅小图标成了「(a) Optimal navigation function」，按图注应为 (b)。另有两处小问题不单独标注：图 10.10 图注把 decrease 印成了 decease；(10.77)(10.84) 中的 \(u\) 应理解为 \(\pi(x)\)。<a href="#fn-fig1020-ref">↩</a></p>
 </div>
 </section>
 
 <nav class="pager">
-  <a href="../index.html"><span class="dir">← 回到首页</span>全书路线图与进度</a>
+  <a href="ch9-basic-decision-theory.html"><span class="dir">← 上一章</span>第 9 章 基本决策论</a>
   <a class="next" href="../index.html"><span class="dir">回到首页 →</span>全书路线图与进度</a>
 </nav>
 
