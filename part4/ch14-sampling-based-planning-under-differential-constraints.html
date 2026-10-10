@@ -1,0 +1,940 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>微分约束下的采样规划 · 第 14 章</title>
+<meta name="description" content="LaValle《Planning Algorithms》第 14 章的中文互动教程：微分约束下的运动规划问题、相空间里的障碍与不可避免碰撞区、可达集与可达图、离散时间模型与运动基元、系统模拟器与局部规划、格点搜索、单元剪枝搜索、RDT、带插值的值迭代、先规划再变换、路径约束轨迹规划（bang-bang）、打靶法。">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<link rel="stylesheet" href="../assets/style.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+<script src="../assets/common.js"></script>
+<script defer src="js/ch14-lib.js"></script>
+<script defer src="js/ch14-intro.js"></script>
+<script defer src="js/ch14-reach.js"></script>
+<script defer src="js/ch14-sim.js"></script>
+<script defer src="js/ch14-lattice.js"></script>
+<script defer src="js/ch14-search.js"></script>
+<script defer src="js/ch14-feedback.js"></script>
+<script defer src="js/ch14-decoupled.js"></script>
+<script defer src="js/ch14-trajopt.js"></script>
+<style>
+  .ch14-stage { width: 100%; }
+  .ch14-stage canvas { margin: 0 auto; border-radius: 6px; }
+  .box.intuition ul { margin: 0; padding-left: 1.2em; }
+  .fig14 { max-width: 660px; margin: 0 auto; display: block; }
+  .fn { font-size: .8em; }
+  .terms td:first-child { white-space: nowrap; }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <a class="brand" href="../index.html">Planning Algorithms 学习站</a>
+  <span class="crumbs"><a href="../index.html">首页</a> › Part IV › 第 14 章 微分约束下的采样规划</span>
+  <button class="icon-btn" id="theme-toggle" type="button" aria-label="切换深浅色">☾</button>
+</header>
+
+<div class="layout">
+<nav class="toc" aria-label="目录">
+  <p class="toc-title">本章目录</p>
+  <ol>
+    <li><a href="#overview">本章导读</a></li>
+    <li><a href="#s14-1">14.1 引言</a>
+      <ol>
+        <li><a href="#s14-1-1">问题表述</a></li>
+        <li><a href="#s14-1-2">不同种类的规划问题</a></li>
+        <li><a href="#s14-1-3">相空间里的障碍</a></li>
+      </ol>
+    </li>
+    <li><a href="#s14-2">14.2 可达性与完备性</a>
+      <ol>
+        <li><a href="#s14-2-1">可达集</a></li>
+        <li><a href="#s14-2-2">离散时间模型</a></li>
+        <li><a href="#s14-2-3">运动基元</a></li>
+      </ol>
+    </li>
+    <li><a href="#s14-3">14.3 重访采样规划</a>
+      <ol>
+        <li><a href="#s14-3-1">基本组件</a></li>
+        <li><a href="#s14-3-2">系统模拟器</a></li>
+        <li><a href="#s14-3-3">局部规划</a></li>
+        <li><a href="#s14-3-4">通用框架</a></li>
+      </ol>
+    </li>
+    <li><a href="#s14-4">14.4 增量采样与搜索</a>
+      <ol>
+        <li><a href="#s14-4-1">在格点上搜索</a></li>
+        <li><a href="#s14-4-2">引入状态空间离散</a></li>
+        <li><a href="#s14-4-3">基于 RDT 的方法</a></li>
+        <li><a href="#s14-4-4">其它方法</a></li>
+      </ol>
+    </li>
+    <li><a href="#s14-5">14.5 微分约束下的反馈规划</a>
+      <ol>
+        <li><a href="#s14-5-1">问题定义</a></li>
+        <li><a href="#s14-5-2">带插值的动态规划</a></li>
+      </ol>
+    </li>
+    <li><a href="#s14-6">14.6 解耦的规划方法</a>
+      <ol>
+        <li><a href="#s14-6-1">拆分大问题</a></li>
+        <li><a href="#s14-6-2">先规划、再变换</a></li>
+        <li><a href="#s14-6-3">路径约束轨迹规划</a></li>
+      </ol>
+    </li>
+    <li><a href="#s14-7">14.7 基于梯度的轨迹优化</a></li>
+    <li><a href="#reading">延伸阅读</a></li>
+    <li><a href="#cheatsheet">本章速查表</a></li>
+    <li><a href="#pitfalls">常见陷阱</a></li>
+    <li><a href="#exercises">习题导引</a></li>
+    <li><a href="#notes">脚注</a></li>
+  </ol>
+</nav>
+
+<main class="content">
+
+<p class="kicker">Part IV · 第 14 章</p>
+<h1>微分约束下的采样规划 <span class="en">Sampling-Based Planning Under Differential Constraints</span></h1>
+<p class="lede">读完第 13 章就会发现：车轮在滚、飞机在飞、只要考虑机械系统的动力学，微分约束就无处不在。这让第 II 部分「只管 C-space 里的障碍」的基本模型（Formulation 4.1）对很多应用失效了。这一章把第 13 章的微分模型 \(\dot x = f(x,u)\) 放进<b>基于采样</b>的运动规划里——有微分约束时，组合方法几乎无能为力；没有障碍时则有强大的解析工具，那是第 15 章的内容。</p>
+
+<section id="overview">
+<h2 style="border-top:0;margin-top:1em">本章导读</h2>
+<p>第 5 章的采样规划器只需要两样东西：在 \(\mathcal{C}\) 上采样，以及判断「两个位形之间能不能直接走过去」。有了微分约束，第二件事变得极其困难——连接两个给定状态本身就是一个<b>两点边值问题 BVP</b>。所以这一章的主线是：<b>不再在 \(X\) 里直接采样路径，而是在动作轨迹的空间里采样</b>，靠积分 \(\dot x = f(x,u)\) 得到状态轨迹，再想办法尽量少解 BVP。</p>
+
+<div class="box">
+  <div class="box-title">本章地图与读法</div>
+  <ul style="margin:0">
+    <li><b>14.1</b>：Formulation 14.1；文献里的「非完整规划」「动力学规划 kinodynamic」「轨迹规划」到底指什么；漂移、欠驱动、对称；相空间里的障碍与<b>不可避免碰撞区</b> \(X_{ric}\)。</li>
+    <li><b>14.2</b>：可达集；<b>离散时间模型</b>（把动作轨迹采样成分段常值）、可达树与可达图；分辨率完备性怎样定义（含「交错探索」）；更一般的<b>运动基元</b>。</li>
+    <li><b>14.3</b>：把第 5 章的组件（度量、采样、碰撞检测、LPM）搬到 \(X\) 上，再加一个新组件——<b>系统模拟器</b>；通用框架与 BVP 出现在哪里。</li>
+    <li><b>14.4</b>：三类具体算法：<b>格点搜索</b>（双积分器、动力学规划的近似算法）、<b>单元剪枝搜索</b>（Barraquand–Latombe）、<b>RDT/RRT</b>。</li>
+    <li><b>14.5</b>：需要反馈时，用第 8 章「带插值的值迭代」。</li>
+    <li><b>14.6</b>：解耦：先找无碰路径，再<b>变换</b>成满足约束的路径，或者固定路径、只规划<b>速度</b>（路径约束相平面、bang-bang）。</li>
+    <li><b>14.7</b>：轨迹优化（打靶、配点）——改进已有的解，而不是从零找解。</li>
+  </ul>
+  <p style="margin:.6em 0 0">前置知识：第 13 章的 \(\dot x = f(x,u)\)、简单车 / Dubins 车 / Reeds–Shepp 车、双积分器、相空间（13.1–13.3 节，见 <a href="ch13-differential-models.html">第 13 章教程</a>）；第 5 章的采样规划（尤其 5.4、5.5 节，见 <a href="../part2/ch5-sampling-based-planning.html">第 5 章教程</a>）；第 8 章的带插值值迭代（8.5.2 节，见 <a href="../part2/ch8-feedback-motion-planning.html">第 8 章教程</a>）。只想尽快会用的话，先读 14.1.1、14.1.3、14.2.2、14.3.2、14.3.4、14.4.3，再按兴趣读其它小节。</p>
+</div>
+<p class="small muted">本页颜色：沿用<a href="ch13-differential-models.html">第 13 章</a>定下的 Part IV 约定——深灰 = 障碍 \(X_{obs}\)，粉 = 目标 \(x_G\)，红 = 违反约束（这里包括不可避免碰撞区与 \(S_{obs}\)），橙 = 动作 / 当前样本 \(\alpha(i)\)；规划特有的颜色沿用第 5 章：蓝 = 从 \(x_I\) 出发的前向树 / 前向可达集，紫 = 从 \(x_G\) 出发的反向树 / 反向可达集，绿 = 解轨迹；热图里蓝色由浅到深 = 代价由小到大。参考代码 <a href="code/ch14_differential.py"><code>part4/code/ch14_differential.py</code></a> 用来核对页面上出现的数值。</p>
+</section>
+
+<!-- ============================================================ 14.1 -->
+<section id="s14-1">
+<h2>14.1 引言 <span class="en">Introduction</span></h2>
+
+<h3 id="s14-1-1">14.1.1 问题表述 <span class="en">Problem Formulation</span></h3>
+<p>微分约束下的运动规划可以看成经典<b>两点边值问题 two-point boundary value problem (BVP)</b> 的变体：给定初始和目标状态，求一条连接它们、又满足微分约束的状态路径。运动规划额外要躲开障碍——而解 BVP 的经典方法并不是为处理障碍设计的，障碍往往让它们低效或不完备。<b>本章说「BVP」时，专指没有障碍、只有微分约束的连接问题。</b>（多于两点的边值问题也有，书中不讨论。）</p>
+<p>约束写成光滑流形 \(X\)（<b>状态空间 state space</b>，可以是 \(\mathcal{C}\) 或它的相空间）上的状态转移方程 \(\dot x = f(x,u)\)。动作空间 \(U\) 是 \(\mathbb{R}^m\) 的有界子集。规划算法要算出一条<b>动作轨迹 action trajectory</b> \(\tilde u : [0,\infty) \to U\)，\(u(t)\) 表示时刻 \(t\) 的动作（书中有意这样「滥用」记号，以便和离散阶段的 \(u_k\) 对应）。动作空间依赖状态时还要求 \(u(t)\in U(x(t))\)。约定在某个时刻 \(t_F\) 施加<b>终止动作</b> \(u_T\)，所以动作轨迹总可以定义在整个 \([0,\infty)\) 上。从 \(x(0)\) 出发，状态轨迹由积分得到：</p>
+<div class="eq">$$x(t) = x(0) + \int_0^t f\big(x(t'), u(t')\big)\,dt', \tag{14.1}$$</div>
+<p>记作 \(\tilde x(x(0), \tilde u)\)。对 (14.1) 求导就回到 \(\dot x = f(x,u)\)；\(u\) 固定时它是一个向量场，(14.1) 就是第 8 章 (8.14) 的积分曲线。</p>
+
+<div class="box def formulation">
+  <div class="box-title">Formulation 14.1（微分约束下的运动规划 Motion Planning Under Differential Constraints）</div>
+  <ol>
+    <li>世界 \(\mathcal{W}\)、机器人 \(\mathcal{A}\)（或连杆 \(\mathcal{A}_1,\ldots,\mathcal{A}_m\)）、障碍区域 \(\mathcal{O}\)、C-space \(\mathcal{C}\)，与 Formulation 4.1 相同。</li>
+    <li>无界的时间区间 \(T = [0,\infty)\)。</li>
+    <li>光滑流形 \(X\)，称为<b>状态空间</b>：可以是 \(X = \mathcal{C}\)，考虑动力学时是 \(\mathcal{C}\) 的相空间（13.2 节）。\(\kappa : X \to \mathcal{C}\) 给出状态 \(x\) 对应的位形 \(q = \kappa(x)\)。</li>
+    <li>障碍区域 \(X_{obs}\)：\(X = \mathcal{C}\) 时 \(X_{obs} = \mathcal{C}_{obs}\)；一般相空间的情形见 14.1.3 节。\(X_{free} = X \setminus X_{obs}\) 是既不碰撞、也满足其它全局约束的状态。</li>
+    <li>对每个 \(x \in X\)，有界的动作空间 \(U(x) \subseteq \mathbb{R}^m \cup \{u_T\}\)，含终止动作；\(m\) 是固定的整数，叫<b>动作变量的个数</b>。\(U\) 是所有 \(U(x)\) 的并。</li>
+    <li>系统由状态转移方程 \(\dot x = f(x,u)\) 给出（可以是第 13 章的任何微分模型）。施加终止动作时 \(f(x,u_T) = 0\)（若有代价泛函，也不再累积代价）。</li>
+    <li>初始状态 \(x_I \in X_{free}\)。</li>
+    <li>目标区域 \(X_G \subset X_{free}\)。</li>
+    <li>完备的算法要算出动作轨迹 \(\tilde u : T \to U\)，使得积分 (14.1) 得到的状态轨迹满足：1) \(x(0) = x_I\)；2) 存在 \(t > 0\)，\(u(t) = u_T\) 且 \(x(t) \in X_G\)。</li>
+  </ol>
+</div>
+<p>还可以对 \(\tilde u\) 加更多限制。至少要让 (14.1) 的被积函数可积；记 \(\mathcal{U}\) 为 \(T\) 上所有<b>允许的动作轨迹</b>，默认是任何可积的动作轨迹。需要连续或光滑时，可以引入新的相变量——在动作变量前面「串联积分器」（13.2.4 节）。要优化代价时可以用 (8.39) 那样的代价泛函；最优解存在要求 \(U\) 有界且是闭集。</p>
+<p>关于终止动作：一旦施加 \(u_T\)，代价不再累积、状态被「冻住」。对有动量的系统这看起来怪，但它只是让表述成立的技巧。很多情况下目标里速度为零，没有问题；若目标里允许非零速度，物理系统在 \(u_T\) 之后可能还在运动，但代价泛函不再计入——「若系统之后因为动量撞上了东西，那是指定这个目标状态的用户的问题」。</p>
+<p>绝大多数解法都是基于采样的，因为这个问题<b>极难</b>：标准的钢琴搬运工问题是 Formulation 14.1 的特例，已经是 PSPACE-hard；即使没有微分约束，三维多面体环境里一个点的<b>最优</b>规划也是 NP-hard。有障碍时，已知的精确算法只针对双积分器 \(\ddot q = u\)，且只有 \(\mathcal{C} = \mathbb{R}\) 和 \(\mathcal{C} = \mathbb{R}^2\) 两种情形。</p>
+
+<h3 id="s14-1-2">14.1.2 不同种类的规划问题 <span class="en">Different Kinds of Planning Problems</span></h3>
+<p>先注意<b>任务怎样分解</b>：经典机器人学（图 1.19）把运动规划从机器人的力学里抽象出来，第 II 部分的方法才用得上。这种分解是任意的——可以直接在规划里考虑全部力学，也可以只考虑一部分（比如只考虑车轮的滚动约束，动力学交给另一个模块）。所以规划问题里出现哪些微分约束，<b>既取决于机械系统，也取决于任务怎样分解</b>。</p>
+<div class="table-wrap">
+<table class="data terms">
+  <thead><tr><th>术语</th><th>含义（本书的用法）</th></tr></thead>
+  <tbody>
+    <tr><td>非完整规划<br><span class="en">nonholonomic planning</span></td><td>Laumond 提出，最初指轮式移动机器人。<b>非完整</b>指不能完全积分（不能化成不含导数的约束）的微分约束，正式定义在 15.4 节。多数研究针对 \(\mathcal{C}\) 上的速度约束（13.1 节的模型），也叫<b>运动学约束 kinematic constraints</b>。力学里非完整也可以指相空间上的不可积速度约束；本书里非完整规划指 \(\mathcal{C}\) <b>或任何相空间</b> \(X\) 上不可积速度约束下的规划。对采样规划来说，完全可积与否其实不重要：例如闭链的约束理论上可积，但参数化往往拿不到；把闭合约束求导得到 \(\mathcal{C}\) 上的速度约束，就可以当作非完整约束来处理。</td></tr>
+    <tr><td>动力学规划<br><span class="en">kinodynamic planning</span></td><td>Canny、Donald、Reif、Xavier 提出，指要满足速度和加速度界的规划——\(\mathcal{C}\) 上的<b>二阶</b>约束；最初的工作用 \(\mathcal{C} = \mathbb{R}^2, \mathbb{R}^3\) 上的双积分器 \(\ddot q = u\)（标量版本见例 13.3）。现在泛指涉及动力学的规划：只要 \(x\) 含速度变量，就是 kinodynamic。它不一定是非完整的；两者兼有的例子是带约束的拉格朗日系统（13.4.3 节）和带动力学的车（13.3.3 节）。</td></tr>
+    <tr><td>轨迹规划<br><span class="en">trajectory planning</span></td><td>机器人学里用了几十年，指为机械臂（如 PUMA 560）同时求路径和速度函数，即在 \(x = (q,\dot q)\) 的相空间 \(X\) 里找路径。通常用 1.4 节的「逐步细化」：先在 \(\mathcal{C}_{free}\) 里找路径，再给每个位形配一个满足约束的速度，必要时再解逆控制问题求 \(u(t)\)。这叫路径的<b>时间缩放 time scaling</b>。如今它几乎和 kinodynamic 同义，只是保留着「先在 \(\mathcal{C}_{free}\) 规划路径」的历史色彩（14.6 节）。</td></tr>
+    <tr><td>（控制论中的）运动规划 / 转向问题<br><span class="en">steering problem</span></td><td>控制论里「motion planning」常指<b>没有障碍</b>的非完整规划，也就是一种 BVP，也叫转向问题（15.5 节）。本书把「运动规划」留给涉及避障的问题。</td></tr>
+    <tr><td>开环控制律<br><span class="en">open-loop control law</span></td><td>第 13 章的微分模型在控制论里叫<b>控制系统</b>（线性 / 非线性，13.2.2、13.2.3 节）。Formulation 14.1 就是在非凸状态约束下设计一个开环控制律：只给出动作轨迹，没有反馈（反馈叫闭环，8.1 节）。满足所有约束的叫<b>可行</b>开环控制律；还可以要求<b>最优</b>——这极难，即使看起来很简单的问题也是；只有某些受限情形（线性系统、某些轮式车，且没有障碍）有漂亮的解（第 15 章）。</td></tr>
+    <tr><td>漂移<br><span class="en">drift</span></td><td>13.2.1 节：某些状态下不可能立刻停下（动量）。kinodynamic 和轨迹规划一般有漂移；只有 \(\mathcal{C}\) 上速度约束的非完整问题可以无漂移（13.1.2 节的模型都是无漂移的）。<b>有漂移的系统通常更难规划。</b></td></tr>
+    <tr><td>欠驱动<br><span class="en">underactuation</span></td><td>动作变量常叫<b>执行器 actuators</b>；执行器个数严格小于 \(\dim\mathcal{C}\) 时称为<b>欠驱动</b>，相等时称<b>完全驱动 fully actuated</b>。欠驱动的非线性系统通常是非完整的。例：\(\mathbb{R}^3\) 里自由漂浮、只有三个推进器的航天器，\(\dim\mathcal{C} = 6\)。kinodynamic 规划主要研究完全驱动系统。</td></tr>
+    <tr><td>对称系统<br><span class="en">symmetric</span></td><td>若任何一条把系统从 \(x_I\) 带到 \(x_G\) 的动作轨迹，都存在另一条动作轨迹把系统从 \(x_G\) 沿同样的点、按相反的时间顺序带回 \(x_I\)，就说 \(\dot x = f(x,u)\) 是对称的。等价地：每一点的速度都能被另一个动作取反。有漂移的系统一般做不到。例：差速驱动对称；Reeds–Shepp 车对称，Dubins 车不对称（不能倒车）。<span class="muted">（书中脚注：控制论里「对称」有时指 Lie 群上的不变性，如车的动力学不应依赖车头朝向，那是另一个概念。）</span></td></tr>
+  </tbody>
+</table>
+</div>
+
+<div class="widget wide" data-widget="velocity-sets"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>Dubins 车 vs Reeds–Shepp 车：实线（\(f(x,U)\)）和虚线（\(-f(x,U)\)）重合吗？这就是「对称」最直观的判据。</li>
+  <li>双积分器：把 q̇ 从 0 拖开，原点立刻离开速度集——这一刻系统<b>停不下来</b>，这就是漂移。</li>
+  <li>差速驱动的菱形是对称的，但它只有两个动作变量，\(\dim\mathcal{C} = 3\)：对称不等于完全驱动，它仍然不能侧移。</li>
+</ul></div>
+
+<h3 id="s14-1-3">14.1.3 相空间里的障碍 <span class="en">Obstacles in the Phase Space</span></h3>
+<p>\(X = \mathcal{C}\) 时 \(X_{obs} = \mathcal{C}_{obs}\)（刚体见 (4.34)，多连杆见 (4.36)）。更有意思的是 \(X\) 是含速度变量的相空间：只要对应的位形在 \(\mathcal{C}_{obs}\) 里，状态就在 \(X_{obs}\) 里——在 \(\mathcal{W}\) 里撞了，速度是多少都无关紧要：</p>
+<div class="eq">$$X_{obs} = \{x \in X \mid \kappa(x) \in \mathcal{C}_{obs}\}. \tag{14.2}$$</div>
+<p>若 \(X\) 的前 \(n\) 个变量就是位形参数，\(X_{obs}\) 对其余变量呈<b>柱状</b>（图 14.1）；\(\kappa\) 更复杂时不一定是柱状，但 (14.2) 仍然给出正确的 \(X_{obs}\)。</p>
+<svg class="fig14" viewBox="0 0 520 210" role="img" aria-label="图 14.1：C_obs 在相变量方向上生成柱状的 X_obs">
+  <path d="M60 170 L320 170 L460 120 L200 120 Z" fill="var(--surface-2)" stroke="var(--border-strong)"/>
+  <text x="440" y="160" font-size="14" fill="var(--text)">𝒞</text>
+  <ellipse cx="260" cy="145" rx="60" ry="14" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="260" y="150" text-anchor="middle" font-size="13" fill="var(--accent-text)">𝒞_obs</text>
+  <path d="M200 145 L200 30 M320 145 L320 30" stroke="var(--c-wall)" stroke-width="1.6"/>
+  <ellipse cx="260" cy="30" rx="60" ry="14" fill="color-mix(in srgb, var(--c-wall) 25%, transparent)" stroke="var(--c-wall)"/>
+  <rect x="200" y="30" width="120" height="115" fill="color-mix(in srgb, var(--c-wall) 18%, transparent)"/>
+  <text x="260" y="85" text-anchor="middle" font-size="13" fill="var(--text)">X_obs</text>
+  <text x="100" y="60" font-size="14" fill="var(--text)">X</text>
+  <path d="M480 165 L480 40" stroke="var(--muted)" stroke-width="1.2" marker-end="url(#f141a)"/>
+  <defs><marker id="f141a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker></defs>
+  <text x="488" y="100" font-size="11.5" fill="var(--muted)">相变量</text>
+</svg>
+<p class="small muted" style="text-align:center">图 14.1 的重画：\(\mathcal{C}_{obs}\subset\mathcal{C}\) 在相变量方向上生成柱状的障碍区域 \(X_{obs}\subset X\)。</p>
+
+<h4>相变量上的附加约束 <span class="en">Additional constraints on phase variables</span></h4>
+<p>很多应用对相变量还有约束，叫<b>相约束 phase constraints</b>，一般写成 \(h_i(x) \le 0\)。例如车或气垫船有安全限速 \(\|\dot q\| \le \dot q_{max}\)，\(\dot q_{max}\in(0,\infty)\)；这种简单的界往往直接放进 \(X\) 的定义。也有复杂得多的：NASA/洛克希德·马丁 X-33 可重复使用航天器的再入轨迹（图 14.2；书中脚注说该项目 2001 年取消，但类似的飞行器仍在研制）必须待在相空间里一个复杂、狭窄的区域内——没有传统意义上的「障碍」，但进错了相空间的区域，飞行器可能过热或剧烈振动。更日常的例子：SUV 或伦敦双层观光巴士转弯时不能侧翻。判断一个状态在 \(X_{free}\) 还是 \(X_{obs}\) 时要把它代入每个约束；在 \(X_{free}\) 里的状态叫<b>无违规 violation-free</b>：既无碰撞，也不违反相约束。</p>
+
+<h4>不可避免碰撞区 <span class="en">The region of inevitable collision</span></h4>
+<p>规划最大的难点之一可以用<b>不可避免碰撞区</b> \(X_{ric}\) 来形象地理解：从其中的状态出发，无论施加什么动作，最终都会进入 \(X_{obs}\)。想象一辆以 100 km/h 驶向一堵墙、只差 2 米的车——它注定要撞。速度低时 \(X_{ric}\) 和 \(X_{obs}\) 差不多；速度一高，\(X_{ric}\) 急剧变大。记 \(\mathcal{U}_\infty\) 为所有<b>从不</b>施加终止动作的动作轨迹（不能靠 \(u_T\) 把系统「冻住」来逃避碰撞），则</p>
+<div class="eq">$$X_{ric} = \{x(0) \in X \mid \text{对任何 } \tilde u \in \mathcal{U}_\infty,\ \exists t > 0 \text{ 使得 } x(t) \in X_{obs}\}, \tag{14.3}$$</div>
+<p>其中 \(x(t)\) 由 (14.1) 从 \(x(0)\) 积分得到。它<b>不</b>包含「最终被困住」的情形：例如 Dubins 车开进死胡同、又不能倒出来，它可以停下来一直不动以避免碰撞；继续动的话迟早会撞——这更像「被困」，按定义不算 \(X_{ric}\)。<b>对无漂移系统，\(X_{ric} = X_{obs}\)。</b></p>
+<p><b>例 14.1（不可避免碰撞区）</b>：\(\mathcal{W} = \mathbb{R}\)，机器人是质点，按双积分器 \(\ddot q = u\) 运动（取质量 1），\(u\) 是作用力，\(U = [-1,1]\)。\(\mathcal{C} = \mathbb{R}\)，相空间 \(X = \mathbb{R}^2\)，\(x = (q,\dot q)\)。\(\mathcal{C}\) 里有两个障碍：一个点和一个区间；它们上方的柱体就是 \(X_{obs}\)。在 \(\dot q = 0\) 的切片上 \(X_{ric} = X_{obs} = \mathcal{C}_{obs}\)；\(\dot q\) 增大时 \(X_{ric}\) 变大（\(X_{obs}\) 不变）。\(\dot q > 0\) 表示向正方向运动，所以 \(X_{ric}\) 只向障碍<b>左边</b>长：动量越大，停下需要的距离按<b>平方</b>增长——从速度 \(\dot q = v\) 出发，施加 \(u = -1\) 积分两次，最短刹车距离是 \(v^2/2\)。若 \(\dot q > 0\) 而 \(q\) 在障碍右边，无论速度多大都安全。\(\dot q < 0\) 时 \(X_{ric}\) 改为向右延伸。</p>
+
+<div class="widget wide" data-widget="xric"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>把 x(0) 放在 (0, 1)：刹车距离 0.5，正好够停在区间障碍 [1, 2] 前面；往上拖到 q̇ = 1.5，刹车距离 1.125，就进了 \(X_{ric}\)（参考代码第 1 项）。</li>
+  <li>把刹车能力 a_max 调大：红色区域的抛物线边界变「扁」——\(X_{ric}\) 的宽度是 \(\dot q^2/(2a_{max})\)。</li>
+  <li><b>补充</b>的数值：100 km/h ≈ 27.8 m/s，以 1 g 刹车需要约 39.3 m；要在 2 m 内停住需要约 19.7 g（参考代码第 1 项）。</li>
+</ul></div>
+<p>在更高维、更一般的系统里，事情复杂得多：在 \(\mathbb{R}^2\) 里机器人可以<b>转向</b>绕开小障碍，运动方向变得重要；\(X_{ric}\) 的拓扑也可能和 \(X_{obs}\) 很不一样。想象一架小飞机飞进一个由复杂通道组成的洞穴：一旦进去，可能已经没有任何动作能避免碰撞，洞穴里的整个状态集都属于 \(X_{ric}\)；甚至连「无法避免进入洞穴」的状态也属于它。</p>
+<p>在采样规划里<b>并不计算</b> \(X_{ric}\)，因为太复杂了（书中脚注：也许可以算出粗糙的近似来用）；连给 \(X_{ric}\) 做一个「碰撞检测器」都不知道怎么做。只用 \(X_{obs}\) 工作，动量就会带来麻烦：状态空间里可能有大片区域根本不值得探索，因为它们在 \(X_{ric}\) 里——可目前没有实用的办法准确判断。动量和障碍越多，这个问题越严重。</p>
+</section>
+
+<!-- ============================================================ 14.2 -->
+<section id="s14-2">
+<h2>14.2 可达性与完备性 <span class="en">Reachability and Completeness</span></h2>
+<p>第 5 章最重要的是让样本序列在 \(\mathcal{C}_{free}\) 里<b>稠密</b>。有微分约束时，解由动作轨迹给出，而不是 \(X_{free}\) 里的路径。要让算法分辨率完备，在动作轨迹空间上的采样与搜索必须以某种方式在 \(X_{free}\) 中导出一个稠密集。</p>
+
+<h3 id="s14-2-1">14.2.1 可达集 <span class="en">Reachable Sets</span></h3>
+<p>第 5 章的完备性依赖在 \(\mathcal{C}\) 上稠密的采样序列；这里就需要在 \(X\) 上稠密采样，但微分约束让采样复杂得多：一般不能规定 \(X\) 里必须到达的精确样本，因为到达它们可能根本不可能，或者要解 BVP。既然 \(X\) 里的路径是通过动作轨迹间接得到的，完备性分析就从「积分动作轨迹能到达哪些点」开始。</p>
+<p>暂时假设没有障碍：\(X_{free} = X\)。从每个 \(\tilde u \in \mathcal{U}\)，由 (14.1) 得到状态轨迹 \(\tilde x(x_0,\tilde u)\)。<b>可达集 reachable set</b> \(R(x_0,\mathcal{U}) \subseteq X\) 是从 \(x_0\) 出发、积分某条 \(\tilde u\in\mathcal{U}\) 能经过的所有状态：</p>
+<div class="eq">$$R(x_0, \mathcal{U}) = \{x_1 \in X \mid \exists\, \tilde u \in \mathcal{U} \text{ 且 } \exists\, t \in [0,\infty) \text{ 使得 } x(t) = x_1\}, \tag{14.4}$$</div>
+<p>其中 \(x(t)\) 由 (14.1) 给出，要求 \(x(0) = x_0\)。</p>
+<p><b>例 14.2（简单不等式约束下的可达集）</b>：\(X = \mathcal{C} = \mathbb{R}^2\)，回忆 13.1.1 节的几个简单约束；\(q = (x,y)\)，\(\dot x = u_1\)、\(\dot y = u_2\)，\((u_1,u_2)\in U = \mathbb{R}^2\)。要求 \(u_1 > 0\)（即 13.1.1 节的 \(\dot x > 0\)）时，从任何 \(q_0 = (x_0,y_0)\) 出发的可达集是竖线 \(x = x_0\) 右边的开半平面；\(u_1 \le 0\) 时是这条竖线左边的闭半平面；\(u_1 > 0\) 且 \(u_2 > 0\) 时是一个象限。约束 \(au_1 + bu_2 = 0\) 下，可达集是一条法向量为 \((a,b)\) 的直线，具体哪条由 \(q_0\) 决定——不同初始状态得到一族平行线，这在微分几何里叫<b>叶状结构 foliation</b>，每条线叫一片<b>叶 leaf</b>。\(u_1^2 + u_2^2 \le 1\) 时，从任何 \((x_0,y_0)\) 出发的可达集都是 \(\mathbb{R}^2\)：任何状态都能到达任何状态。</p>
+
+<div class="widget wide" data-widget="reach-simple"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>「u₁ > 0」和「u₁ ≤ 0」：一个边界是虚线（开集），一个是实线（闭集）——差别就在 u₁ = 0 允许不允许。</li>
+  <li>「a u₁ + b u₂ = 0」：拖动 q₀ 换到另一片叶上；所有随机轨迹都被困在过 q₀ 的那条直线上。</li>
+  <li>「u₁² + u₂² ≤ 1」：拖时间滑块，橙色圆盘就是时间受限可达集——一圈向外传播的「波前」。</li>
+</ul></div>
+
+<p>考虑障碍：记 \(\mathcal{U}_{free}\subseteq\mathcal{U}\) 为状态轨迹落在 \(X_{free}\) 里的那些动作轨迹（去掉在某个 \(t > 0\) 进入 \(X_{obs}\) 的）。考虑障碍的可达集记为 \(R(x_0,\mathcal{U}_{free})\)，即把 (14.4) 里的 \(\mathcal{U}\) 换成 \(\mathcal{U}_{free}\)。这里假设 \(\mathcal{U}_{free}\) 中的轨迹可以靠终止动作避开由动量造成的不可避免碰撞（也可以定义更小的可达集，把不施加 \(u_T\) 就会不可避免碰撞的轨迹也去掉）。</p>
+<p>完备性可以用可达集表达：对任何 \(x_I, x_G \in X_{free}\)，完备的算法若 \(x_G \in R(x_I,\mathcal{U}_{free})\) 就报告一条解动作轨迹，否则报告失败。除了非常有限的情形，完备性太难做到；所以基于采样的完备性概念更有价值。</p>
+
+<h4>时间受限可达集 <span class="en">Time-limited reachable set</span></h4>
+<p>在不超过时间 \(t\) 内能到达的状态：</p>
+<div class="eq">$$R(x_0, \mathcal{U}, t) = \{x_1 \in X \mid \exists\, \tilde u \in \mathcal{U} \text{ 且 } \exists\, t' \in [0,t] \text{ 使得 } x(t') = x_1\}. \tag{14.5}$$</div>
+<p>例 14.2 的最后一种情形里，时间受限可达集是以 \((x_0,y_0)\) 为圆心、半径 \(t\) 的闭圆盘。考虑障碍的版本记作 \(R(x_0,\mathcal{U}_{free},t)\)。想象一段动画：\(t\) 从 0 逐渐增大，\(R(x_0,\mathcal{U},t)\) 的边界就像一道从 \(x_0\) 出发向外传播的<b>波前</b>，最终到达 \(R(x_0,\mathcal{U})\) 的边界（若它有边界）。这个边界其实是以经过时间为代价泛函时、从 \(x_0\) 出发的最优<b>代价到达 cost-to-come</b> 的等值线；它也是一种<b>前向投影</b>（10.1.2 节）——那里是自然的不确定性，这里是机器人自己尚未指定的动作；不是往前看 \(k\) 个阶段，而是往前看时长 \(t\)，本质上是阶段的连续统。</p>
+<p><b>例 14.3（简单车的可达集）</b>：用 13.1.2 节的简单车，\(X = \mathcal{C} = \mathbb{R}^2\times\mathbb{S}^1\)，\(X_{obs} = \emptyset\)。Dubins 车只能前进；时间受限可达集如图 14.4a（\(t\) 小到车最多转过 \(\pi/2\)）。注意那只是可达集在平移部分上的二维投影，真正的可达集是 \(\mathcal{C}\) 里的三维区域。\(t > 2\pi\) 时车可以绕一整圈；\(t \to \infty\) 时 \(R(q,\mathcal{U}) = \mathcal{C}\)：在无限大的空地上，先沿圆弧开、再直行一段、再沿圆弧开，就能到达任何位形。没有倒挡只是意味着有些位形需要更大的回旋余地。Reeds–Shepp 车可以倒车：它的时间受限可达集一定包含 Dubins 车的（只加了动作、没删动作）。很容易以为它长得像图 14.4b——把 Dubins 车的可达集和它的镜像拼起来——<b>但这是错的</b>：在任意短的时间（或空间）里，有倒挡的车都可以像侧方停车那样「蹭」着横挪。结果 \(R(q,\mathcal{U},t)\) 总包含 \(q\) 的一个开集，也就是说它向所有方向生长（15.3.2 节）。这个性质叫<b>小时间可控性 small-time controllability</b>（15.4 节）。</p>
+
+<div class="widget wide" data-widget="car-reach"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>t ≤ π/2：蓝色就是图 14.4a 那块向右鼓出的区域。</li>
+  <li>打开「Reeds–Shepp 的真实可达集」：原点左右两侧出现了绿色——这是「Dubins ∪ 镜像」（橙色轮廓，图 14.4b）里没有的部分，来自来回蹭的多段动作。</li>
+  <li>把 t 拉到 2π 以上：Dubins 车的可达集也把原点整个包住了。<span class="muted">（这里是蒙特卡罗：随机采样最多 6 段的分段常值动作，投影到 xy 平面。）</span></li>
+</ul></div>
+
+<h4>反向可达集 <span class="en">Backward reachable sets</span></h4>
+<p>可达性的定义关于时间有很好的对称性：不描述「从 \(x\) 能到哪里」，同样容易描述「从哪里能到 \(x\)」，就像 10.1.2 节前向投影与反向投影的关系。<b>反向可达集</b>定义为</p>
+<div class="eq">$$B(x_f, \mathcal{U}) = \{x_0 \in X \mid \exists\, \tilde u \in \mathcal{U} \text{ 且 } \exists\, t \in [0,\infty) \text{ 使得 } x(t) = x_f\}, \tag{14.6}$$</div>
+<p>其中 \(x(t)\) 由 (14.1) 给出且 \(x(0) = x_0\)——有意和 (14.4) 写得很像。<b>时间受限反向可达集</b>：</p>
+<div class="eq">$$B(x_f, \mathcal{U}, t) = \{x_0 \in X \mid \exists\, \tilde u \in \mathcal{U} \text{ 且 } \exists\, t' \in [0,t] \text{ 使得 } x(t') = x_f\}, \tag{14.7}$$</div>
+<p>同样要求 (14.1) 中 \(x(0) = x_0\)。完备性也可以用反向可达集定义（对 \(\mathcal{U}\) 定义一个反向时间的对应物）。到这里，和第 2 章的前向、反向、双向搜索的类比已经很清楚：微分约束下的采样规划也有同样的可能性，前向和反向可达集指出了在这些方案下能到达的状态，算法探索的是它们的子集。</p>
+
+<h3 id="s14-2-2">14.2.2 离散时间模型 <span class="en">The Discrete-Time Model</span></h3>
+<p>这一节介绍一种对动作轨迹空间采样的简单而有效的办法（更一般的情形见 14.2.3 节）。在微分约束下，采样规划算法都是对动作轨迹的空间采样，得到一个缩小了的动作轨迹集合。为了某种完备性，算法应当仔细构造并加密这个样本集。和第 5 章一样，样本集的好坏可以用分散度和稠密性表达；区别是这里在 \(\mathcal{U}\) 上采样，而不是在 \(\mathcal{C}\) 上——因为解不能再直接表示在 \(\mathcal{C}\)（或 \(X\)）上。</p>
+<p><b>离散时间模型 discrete-time model</b>（图 14.5）由三点刻画：</p>
+<ol>
+  <li>时间 \(T\) 被分成长度为 \(\Delta t\) 的区间，于是可以给出阶段：第 \(k\) 阶段表示已经过了 \((k-1)\Delta t\)。</li>
+  <li>选一个有限子集 \(U_d\subseteq U\)；若 \(U\) 本来有限，可以取 \(U_d = U\)。</li>
+  <li>每个时间区间内动作 \(u(t)\in U_d\) 保持常值。</li>
+</ol>
+<p>前两条离散化时间和动作空间，第三条把时间离散和动作轨迹空间联系起来。记 \(\mathcal{U}_d\) 为给定时间离散下允许的所有动作轨迹，\(\mathcal{U}_d\subset\mathcal{U}\)，它完全确定了离散时间模型。有些问题里 \(U\) 本来就有限，例如自由漂浮航天器上几个推进器的开 / 关；更一般地 \(U\) 是连续集，可以用 5.2 节的采样方法选 \(U_d\)。\(\mathcal{U}_d\) 里的任何动作轨迹都可以写成一个<b>动作序列</b> \((u_1, u_2, \ldots, u_k)\)，\(u_i\in U_d\) 从 \((i-1)\Delta t\) 施加到 \(i\Delta t\)；第 \(k\) 阶段之后施加终止动作。</p>
+<svg class="fig14" viewBox="0 0 560 170" role="img" aria-label="图 14.5：连续的动作轨迹与离散时间模型下的分段常值动作轨迹">
+  <path d="M30 140 L260 140 M30 140 L30 20 M300 140 L530 140 M300 140 L300 20" stroke="var(--text-2)" stroke-width="1.3"/>
+  <path d="M30 110 C80 95 120 50 160 50 C200 50 220 120 255 112" fill="none" stroke="var(--c-start)" stroke-width="2"/>
+  <path d="M300 105 H330 V92 H360 V62 H390 V52 H420 V58 H450 V120 H480 V112 H520" fill="none" stroke="var(--c-start)" stroke-width="2"/>
+  <g fill="var(--muted)"><circle cx="300" cy="120" r="2.2"/><circle cx="300" cy="105" r="2.2"/><circle cx="300" cy="92" r="2.2"/><circle cx="300" cy="80" r="2.2"/><circle cx="300" cy="62" r="2.2"/><circle cx="300" cy="52" r="2.2"/><circle cx="300" cy="40" r="2.2"/></g>
+  <g fill="var(--muted)"><circle cx="330" cy="140" r="2"/><circle cx="360" cy="140" r="2"/><circle cx="390" cy="140" r="2"/><circle cx="420" cy="140" r="2"/><circle cx="450" cy="140" r="2"/><circle cx="480" cy="140" r="2"/></g>
+  <text x="40" y="22" font-size="12" fill="var(--text-2)">U</text><text x="310" y="22" font-size="12" fill="var(--text-2)">U</text>
+  <text x="250" y="156" font-size="12" fill="var(--text-2)">T</text><text x="520" y="156" font-size="12" fill="var(--text-2)">T</text>
+  <text x="145" y="166" text-anchor="middle" font-size="12" fill="var(--text)">𝒰 中的一条轨迹</text>
+  <text x="415" y="166" text-anchor="middle" font-size="12" fill="var(--text)">𝒰_d 中的一条轨迹</text>
+</svg>
+<p class="small muted" style="text-align:center">图 14.5 的重画：离散时间模型把时间分成等长区间、每个区间里施加有限集 \(U_d\) 中的一个常值动作，于是 \(\mathcal{U}_d\subset\mathcal{U}\)（左轴上的点是 \(U_d\)，下轴上的点是区间端点）。</p>
+
+<h4>可达图 <span class="en">Reachability graph</span></h4>
+<p>时间离散之后，可达集变成 \(R(x_0,\mathcal{U}_d)\)。有意思的问题是：在可达集上采样会带来什么影响？\(R(x_0,\mathcal{U})\) 和 \(R(x_0,\mathcal{U}_d)\) 有何不同？这可以用规划算法逐步揭示的可达图来回答。记 \(T_r(x_0,\mathcal{U}_d)\) 为<b>可达树 reachability tree</b>，它编码了从 \(x_0\) 出发、用 \(\mathcal{U}_d\) 中的轨迹能得到的所有轨迹：每个顶点是一个可达状态 \(x\in R(x_0,\mathcal{U}_d)\)；每条边是有向的，起点是出发状态，终点是施加某个常值动作 \(u\in U_d\) 走 \(\Delta t\) 后的状态。每条边 \(e\) 代表一段动作轨迹 \(e:[0,\Delta t]\to U\)，从起点积分 (14.1) 得到状态轨迹 \(\tilde x_e\)。于是可以把 \(T_r\) 看作 \(X\) 里的拓扑图（例 4.6），它的 <b>swath</b>（5.5.1 节）是</p>
+<div class="eq">$$S(T_r) = \bigcup_{e\in E}\ \bigcup_{t\in[0,\Delta t]} x_e(t), \tag{14.8}$$</div>
+<p>\(x_e(t)\) 是边 \(e\) 在时刻 \(t\) 的状态。</p>
+<p><b>例 14.4（Dubins 车的可达树）</b>：设有三个动作（直行、右转、左转），\(\Delta t\) 取得使左转或右转恰好转过 \(\pi/2\)。第二阶段后树上有 9 片叶子（图 14.6a）；每个阶段新增 \(3^k\) 个顶点，第 \(k = 4\) 阶段新增 81 个，共 \(81 + 27 + 9 + 3 + 1\) 个顶点（图 14.6b）。很多情况下，同一个状态被不同的动作序列到达。前四个阶段后的 swath 就是到目前为止访问过的所有点：所有顶点和每条边的 \(\tilde x_e\) 经过的点之并。</p>
+<p>由此可见，有时可以用两条或更多条不同的动作轨迹到达同一状态。既然每条动作轨迹都能写成动作序列，就出现了经典 AI 搜索里熟悉的问题：判断同一状态是否已经由不同的动作序列到达过。对某些系统，利用这一点可以把可达性问题极大地简化：同一状态只用一个顶点表示。这就从 \(T_r(x_0,\mathcal{U}_d)\) 得到有向的<b>可达图 reachability graph</b> \(\mathcal{G}_r(x_0,\mathcal{U}_d)\)。若每个动作序列都到达不同的状态，可达图就退化为可达树。之后主要使用可达图，它的 swath \(S(\mathcal{G}_r)\) 由 (14.8) 类推。</p>
+
+<div class="widget wide" data-widget="reach-tree"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>Dubins 车、k = 4：树有 121 个顶点；切到「可达图」，合并重复状态后只剩 98 个（参考代码第 2 项）。鼠标移到原点附近的顶点上，看它被几条序列到达。</li>
+  <li>「曼哈顿模型」：可达图就是熟悉的二维网格（例 2.1），而树仍然是 4<sup>k</sup> 爆炸——合并重复状态在这里收益最大。</li>
+  <li>Reeds–Shepp（习题 3）和差速驱动（习题 6）：同样的阶段数，可达图比树小得多。</li>
+</ul></div>
+<p>最简单的「到达同一状态」的情形在例 2.1 里见过：平面上的离散网格用第 13 章的语言就是 \(\dot x = u_1\)、\(\dot y = u_2\)，\(X = \mathbb{R}^2\)，\(U_d = \{(1,0),(0,1),(-1,0),(0,-1)\}\)，\(\Delta t = 1\)。这时可达图就是熟悉的二维网格；从 \((0,0)\) 出发，顶点是所有坐标为整数的状态。随意离散一般系统时，得不到这样整齐的网格；但很多情况下可以精心选择离散方式，让状态被困在一个网格或<b>格 lattice</b> 上，这在采样规划里有好处（14.4.1 节对 \(\ddot q = u\) 利用了这一点；只要系统能写成 \(\ddot q = g(q,\dot q,u)\) 且不是欠驱动，就能推广；最近还发现，通过巧妙的离散，一大类非完整系统——书中脚注说是所有无漂移的幂零系统，幂零在 15.5 节定义——也能被强制落在格上）。这通常不容易做到，大多数离散方式下可达图的顶点在可达集里是稠密的。</p>
+<p>可达树和可达图同样可以定义反向版本（就像反向可达集）：它们给出能到达给定目标状态的初始状态和动作序列，定义和计算都不比前向版本难。看起来似乎更难，但初始状态并不固定，所以不出现 BVP；初始状态可以用状态转移方程的<b>反向时间积分</b>得到（14.3.2 节）。</p>
+
+<h4>\(\dot x = u\) 的分辨率完备性 <span class="en">Resolution completeness for ẋ = u</span></h4>
+<p>采样意义下的完备性可以用可达集和可达图表达：要求对 \(\mathcal{U}\) 采样，使可达图的顶点最终在可达集里稠密，同时保证可达图被<b>系统地</b>搜索。所有完备性概念都可以用前向或反向可达图表达，这里只讲前向。为了衔接第 II 部分，设：1) \(X = \mathcal{C} = \mathbb{R}^2\)；2) 状态记作 \(q = (x,y)\)；3) \(U = [-1,1]^2\)；4) \(\dot x = u_1\)、\(\dot y = u_2\)。用离散时间模型，取 \(\Delta t = 1\) 和</p>
+<div class="eq">$$U_d = \{(-1,0),\ (0,-1),\ (1,0),\ (0,1)\}, \tag{14.9}$$</div>
+<p>这就是例 7.4 的曼哈顿运动模型，产生图 7.40 那样的阶梯路径；从 \(x_I\) 出发的可达图表示所有单位步长的阶梯路径。设 \(X_{free}\) 是 \(\mathbb{R}^2\) 的有界开子集。对任何固定的 \(\Delta t\)，可达图隐式地定义了一个一定分辨率的网格；任务是在留在 \(X_{free}\) 里的前提下，找到一个通向目标（或目标附近的顶点）的动作序列。用 2.2 节的系统搜索就能找到；搜索是系统的，所以能正确判断可达图里有没有解。没有解就把 \(\Delta t\) 缩小一个常数倍（例如 2）再搜。这个过程无限重复，直到找到解；无解时算法永远运行下去（实践中当然会提前放弃）。这正是第 5 章意义下的分辨率完备——尽管所有路径都用动作序列表示。</p>
+
+<div class="widget wide" data-widget="staircase"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>点「自动」：Δt = 0.25、0.125、0.0625 都失败（缝没对上网格），Δt = 0.03125 时找到（参考代码第 4 项是同一类实验）。</li>
+  <li>拖动 x_I：网格以 x_I 为原点，有时运气好，粗网格也能钻过缝——这就是第 5 章说的网格与走廊对齐问题。</li>
+  <li>看「路径长度 / 欧氏下界」：Δt 越小，阶梯路径越贴近直线，但长度不会趋于直线长度。</li>
+</ul></div>
+<p>对这个简单模型，和普通运动规划的联系很清楚：动作轨迹积分出的运动沿着网格走；时间离散加细时，阶梯路径可以任意接近某条解路径。看图 14.5 也能看出：随着关于 \(U\) 和 \(T\) 的采样分辨率提高，离散时间近似得到的轨迹收敛到积分某个 \(\tilde u\) 能得到的任何轨迹。一般地，<b>\(\Delta t\) 和 \(U\) 上采样的分散度都趋于零时就会收敛</b>。\(\dot x = u\)、\(X\) 是任意光滑流形时也一样：想象在 \(X\) 上铺一张网格，通过减小 \(\Delta t\) 任意加密。</p>
+
+<h4>\(\dot x = f(x,u)\) 的分辨率完备性 <span class="en">Resolution completeness for ẋ = f(x,u)</span></h4>
+<p>除了 \(\dot x = u\) 这种平凡情形，可达图通常不是简单的网格。即使 \(X\) 有界、\(\Delta t\) 固定、\(U_d\) 有限，可达图也可能有无穷多个顶点。一个简单的例子：Dubins 车、\(\Delta t = 1\)，对所有 \(t\in T\) 固定一个左转的动作<sup class="fn"><a href="#fn-left" id="fn-left-ref">1</a></sup>。仅这一条分支就在可达图里产生可数无穷多个顶点：圆周长是 \(2\pi\rho_{min}\)（\(\rho_{min}\) 是最小转弯半径），取 \(\rho_{min} = 1\)，周长是无理数，所以走整数秒 \(k\) 不可能回到起点，甚至不可能回到圆上任何一个已到过的点——可达图的顶点在圆上是<b>稠密</b>的。图 14.6 没有出现这种情况，是因为 \(\Delta t\) 与周长有理相关（一个能由另一个乘一个有理数得到）。书中留了个小问题：\(\rho_{min} = 1/\pi\)、\(\Delta t = 1\) 时会怎样？</p>
+
+<div class="widget" data-widget="dense-circle"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>ρ_min = 1/π：周长 2，两步就回到起点——书里那个小问题的答案（参考代码第 3 项）。</li>
+  <li>ρ_min = 1：把步数拉到几百，点越来越密，「最大角间隙」一直在变小，但永远不会出现重合。</li>
+</ul></div>
+
+<p>设 \(\dot x = f(x,u)\)，采用离散时间模型。要保证离散时间近似收敛，\(f\) 必须「性质良好」：例如要求 \(f\) 对 \(u\) 和 \(x\) 的所有导数都上下有界。更一般地假设 \(f\) 是 <b>Lipschitz</b> 的——导数存在时这是等价条件，但它也适用于不可微的点。若 \(U\) 有限，Lipschitz 条件是：存在某个 \(c\in(0,\infty)\)，使得</p>
+<div class="eq">$$\|f(x,u) - f(x',u)\| \le c\,\|x - x'\| \tag{14.10}$$</div>
+<p>对所有 \(x,x'\in X\)、所有 \(u\in U\) 成立，\(\|\cdot\|\) 是 \(X\) 上的范数。若 \(U\) 无限，条件是存在某个 \(c\in(0,\infty)\)，使得</p>
+<div class="eq">$$\|f(x,u) - f(x',u')\| \le c\,\big(\|x - x'\| + \|u - u'\|\big) \tag{14.11}$$</div>
+<p>对所有 \(x,x'\in X\) 和所有 \(u,u'\in U\) 成立。直观地说：用 \(x'\)、\(u'\) 近似 \(x\)、\(u\) 时，代入 \(f\) 的误差可控。若要收敛到关于代价泛函的最优轨迹，\(l(x,u)\) 也需要 Lipschitz 条件。在这些温和的假设下，\(\Delta t\) 和 \(U_d\) 的分散度都趋于零时，积分离散动作序列得到的轨迹会任意接近解轨迹；换句话说，动作序列能任意好地近似任何 \(\tilde u\in\mathcal{U}\)，而 \(f\) Lipschitz 时，对 \(\tilde u\) 和近似它的动作序列积分 (14.14) 得到的结果也近似相同。</p>
+<p>在 \(\Delta t\) 和 \(U_d\) 分散度趋于零的极限下，可达图在 \(R(x_I,\mathcal{U})\) 中稠密。网格情形下保证系统搜索不难，因为每个分辨率下只有有限个顶点；麻烦在于：即使 \(X\) 有界，对固定的离散时间模型，可达图一般也可能有<b>可数无穷</b>个顶点。</p>
+<p>即使如此，分辨率完备的算法仍然存在。回忆证明 \(\mathbb{N}\times\mathbb{N}\) 可数的<b>三角形枚举 triangular enumeration</b>：从 \((0,0)\) 开始，沿对角线在第一象限里来回扫，极限下所有点都被覆盖。同样的思路可以得到分辨率完备的算法：取一串 \(\Delta t\) 和 \(U\) 的采样分散度趋于零的离散时间模型，每个都产生一张可数个顶点的可达图；像证明 \(\mathbb{N}\times\mathbb{N}\) 可数那样之字形地走（图 14.7）。设 \(U\) 有限、\(U_d = U\)：横轴是一串越来越好的离散时间模型，每个产生自己的可达图，系统搜索最终会探索它的所有顶点；设探索每次前进一步、到达一个新顶点，纵轴就是搜索到目前为止到达的顶点数。可数无穷台计算机可以并行地探索所有可达图；只有一台计算机时，按图示之字形走也能保证一切最终都被探索到。于是 \(U\) 有限时分辨率完备的算法总是存在；\(U\) 无限时，减小时间步的同时也要加密 \(U_d\)。当然还有很多别的系统化方式，难点是找到一种在实践中表现好的。</p>
+
+<div class="widget wide" data-widget="dovetail"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>点「单步」几次，对照左图：(1,1) → (1,2) → (2,1) → (3,1) → (2,2) → (1,3) → (1,4) …，正是图 14.7 的箭头。</li>
+  <li>「快进」：第 1 列（Δt = 1.6）转弯太大，钻过缝之后转不到目标里；更细的列在一千多步后找到解。</li>
+  <li>每一列都在各自做 BFS，谁也不需要「先搜完」——这正是可数无穷图也能分辨率完备的关键。</li>
+</ul></div>
+<p>到目前为止都假设算法能揭示可达图的一个子图，忽略了算术精度和数值积分误差这类数值问题；它们也可以纳入分辨率完备性的分析（P. Cheng 的博士论文）。</p>
+
+<h3 id="s14-2-3">14.2.3 运动基元 <span class="en">Motion Primitives</span></h3>
+<p>离散时间模型只是离散动作轨迹空间的众多方式之一；下面把它看作指定<b>运动基元 motion primitives</b> 的特例。很多应用里，「固定时长的常值动作」限制太大。比如要为电子游戏或电影里的数字演员自动生成动作：可以有一个有意思的运动基元数据库，例如从动作捕捉数据中提取。若演员是为功夫格斗设计的，每段动作序列可能对应一个基本动作，比如一次踢或一次拳——它们不太可能对应固定时长的常值动作，时长也各不相同。</p>
+<p>这类模型可以用更一般的离散来处理。离散时间模型给出离散时间的状态转移方程</p>
+<div class="eq">$$x_{k+1} = f_d(x_k, u_k), \tag{14.12}$$</div>
+<p>其中 \(x_k = x((k-1)\Delta t)\)、\(x_{k+1} = x(k\Delta t)\)，\(u_k\in U_d\) 从 \((k-1)\Delta t\) 施加到 \(k\Delta t\)。于是 \(f_d : X\times U_d\to X\) 是原状态转移函数 \(f\) 的近似。每个持续 \(\Delta t\) 的常值动作 \(u\in U_d\) 都可以看作一个运动基元。</p>
+<p>推广到更一般的运动基元：记 \(\tilde u^p\) 为一个运动基元，它是从一个时间区间到 \(U\) 的函数，区间从 0 开始、到依赖于具体基元的终止时间 \(t_F(\tilde u^p)\) 结束。设从任何 \(x\in X_{free}\) 有一个可用的运动基元集合 \(\mathcal{U}^p(x)\)（它甚至可以是无穷的，这时局部规划方法最终还要在运动基元空间上采样）。在离散阶段上运行的状态转移方程为</p>
+<div class="eq">$$x_{k+1} = f_p(x_k, \tilde u^p_k), \tag{14.13}$$</div>
+<p>\(\tilde u^p_k\) 必须从 \(\mathcal{U}^p(x_k)\) 中选。时间离散模型和 (14.12) 是基元全在固定区间 \([0,\Delta t)\) 上取常值的特例。注意 (14.13) 中阶段号 \(k\) 不一定对应时刻 \((k-1)\Delta t\)：它只表示已经施加了 \(k-1\) 个基元、现在要决定第 \(k\) 个；当前时刻是前 \(k-1\) 个基元时长之和。若对所有 \(x\in X\) 都给定了 \(\mathcal{U}^p(x)\)，可达图和它的 swath 可以由离散时间情形简单推广得到；离散时间模型 \(\mathcal{U}_d\) 就是一组特殊的运动基元。</p>
+<p>有些运动基元不能直接首尾相接，中间需要过渡运动。例如自主直升机飞行中定义了两种运动基元：<b>配平轨迹 trim trajectories</b> 对应稳态运动，<b>机动 maneuvers</b> 对应在稳态运动之间过渡所需的非稳态运动；从一个配平轨迹到另一个，只能经由执行一个机动。这可以很好地建模为一个<b>混合系统</b>（7.3、8.3.1、10.6 节），每个运动基元是一个模式；扩充状态空间是 \(X\times M\)，\(M\) 是模式集，(14.13) 可以推广到扩充状态空间上，使运动基元既改变原状态也改变模式。直升机可能的轨迹沿着一个叫<b>机动自动机 maneuver automaton</b> 的图走（图 14.8，Frazzoli 提出）：每条边和每个顶点都对应自动机的一个模式，而且实际上对应一族带参数的运动基元，从中选取具体的一个。动画人物里也有类似的状态机，那里的运动基元叫<b>行为 behaviors</b>。</p>
+
+<div class="widget wide" data-widget="maneuver"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>从悬停出发：只有「前飞」能点。进入前飞后才能去左转、右转；左右转之间可以直接切换（图 14.8 里那两条竖着的边）。</li>
+  <li>调「配平轨迹时长」：同一个模式其实是一族运动基元，时长就是它的参数。</li>
+</ul></div>
+<p>基于一般运动基元的离散提供了很大的灵活性，很多情况下能让采样规划算法的性能大幅提升；主要缺点是证明分辨率完备性的负担更重了。</p>
+</section>
+
+<!-- ============================================================ 14.3 -->
+<section id="s14-3">
+<h2>14.3 重访采样规划 <span class="en">Sampling-Based Motion Planning Revisited</span></h2>
+<p>概念准备好了，下面把第 5 章的采样规划方法推广到微分约束：主要是推广 5.4 节的增量采样与搜索框架，14.4 节的几种常用方法都是它的特例。若有高效的 BVP 求解器，也可以推广 5.6 节的采样路线图。</p>
+
+<h3 id="s14-3-1">14.3.1 基本组件 <span class="en">Basic Components</span></h3>
+<p>这一节说明 5.1–5.3 节怎样改造成适用于相空间和微分约束。</p>
+<h4>\(X\) 上的距离和体积</h4>
+<p>第 5 章很多采样算法都依赖在 \(\mathcal{C}\) 里量距离或体积。若 \(X = \mathcal{C}\)（例如 13.1.2 节的轮式系统），5.1 节的概念直接可用。一般的 \(X\) 除了位形变量还可能有相变量；多数情况下相变量的拓扑是平凡的，例如 \(x = (q,\dot q)\) 时每个 \(\dot q_i\) 被限制在 \(\mathbb{R}\) 的一个区间里，速度分量就构成 \(\mathbb{R}^{n/2}\)（\(n = \dim X\)）中一个轴对齐的矩形区域，把测度和度量从 \(\mathcal{C}\) 推广到 \(X\) 只需取笛卡儿积。度量可以用 (5.4) 的笛卡儿积方法定义；老问题是要把不同分量随意加权成一个标量——在 \(\mathcal{C}\) 上要把平移和转动揉到一起，在 \(X\) 上还多了速度分量，更难选有意义的权重。</p>
+<p><b>黎曼度量 Riemannian metrics</b>：在光滑流形上严格定义度量的办法是定义一个<b>度量张量</b>（黎曼张量）——两个切向量的二次函数，可以看作 \(X\) 上的内积，能量角度；由它定义基于最短路径（<b>测地线 geodesics</b>）的黎曼度量。13.4.1 节拉格朗日力学里见过一个例子：动能 (13.70) 就是所需的度量张量，测地线是动力系统在能量守恒下的运动；度量定义为连接两点的测地线长度。若选的黎曼度量有物理意义（如拉格朗日力学），得到的度量就有意义；可惜它的值可能难算或很贵。</p>
+<p><b>理想的距离函数</b>：在 \(X\) 上定义距离最理想的方式是用代价泛函，把从 \(x\in X_{free}\) 到 \(x'\in X_{free}\) 的距离定义为<b>留在 \(X_{free}\) 里时、从 \(x\) 到 \(x'\) 的最优代价到达</b>（optimal cost-to-go）。某些情形下它也叫<b>非完整度量 nonholonomic metric</b>、<b>Carnot–Carathéodory 度量</b>或<b>次黎曼度量 sub-Riemannian metric</b>。注意它不是 5.1.2 节意义下真正的度量，因为<b>不对称</b>：Dubins 车往前开一小段比往后挪一小段近得多；有障碍时甚至可能根本到不了车后的某些位形。这个概念应当让人有点不安：它要求最优地解 Formulation 14.1 的运动规划问题，所以在规划算法里没法高效地用。然而理解这个理想的距离，对设计实用的距离函数很有帮助。例如对 Dubins 车，与其用加权欧氏度量（常叫 Mahalanobis 度量），不如用两个位形之间最短路径的长度——这个长度很容易算，基于 15.3 节的最优曲线族；它忽略了障碍，但仍然比加权欧氏度量给出好得多的距离信息。它对带动力学的车模型也可能有用。总的想法是：在不做昂贵计算的前提下，尽量接近最优 cost-to-go；常常可以通过忽略一部分约束（障碍或动力学）得到最优 cost-to-go 的一个有用的<b>下估计</b>，这对 A* 启发式也有帮助。</p>
+
+<div class="widget wide" data-widget="metric-dubins"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>把鼠标放在车正后方 0.1 处：ρ(q₀, q) ≈ 6.38（要绕一圈），而欧氏距离只有 0.1；反过来 ρ(q, q₀) 只有 0.1（参考代码第 9 项）。</li>
+  <li>切到「加权欧氏」，再怎么调权重 c，车后方和侧方的点都显得「很近」。</li>
+  <li>把目标朝向 θ 转到 180°：颜色图整个变了——距离是定义在 (x, y, θ) 上的，图里只是 θ 固定的一个切片。<span class="muted">（补充：Dubins 最短路径来自 15.3.1 节，这里先拿来当距离函数用。）</span></li>
+</ul></div>
+
+<p><b>定义测度</b>：前面说过，若相变量的拓扑平凡，把 \(\mathcal{C}\) 上的测度推广到 \(X\) 很直接；但可能得不到<b>不变</b>测度。多数情况下 \(\mathcal{C}\) 是变换群，存在 Haar 测度，给出不受 \(\mathcal{C}\) 参数化影响的「真」体积（5.1.4 节的 SO(3)）。一般的状态空间 \(X\) 上 Haar 测度不一定存在；若定义了黎曼度量，就有内蕴的曲面积分和体积，但可能难以在采样规划算法里利用。</p>
+<p><b>采样理论</b>：14.2.2 节已经讲了一些采样问题。至少有两个连续空间：\(X\) 和时间区间 \(T\)；多数情况下动作空间 \(U\) 也是连续的。每个连续空间都要以某种方式采样，极限下采样序列在所采的空间里稠密——这是 14.2.2 节分辨率完备性所需要的。\(T\) 和 \(U\) 可以直接用 5.2 节的随机或确定性方法采样：时间就是 \(\mathbb{R}\) 的一个区间，\(U\) 通常是 \(\mathbb{R}^m\) 的凸子集（常是轴对齐的矩形）。有些规划方法需要在 \(X\) 上采样：5.2 节的差异和分散度可以推广到任何测度空间和度量空间，但定义一个好的准则容易，生成优化这个准则的样本可能很难甚至做不到。一个方便的办法是在 \(X\) 的一个<b>坐标邻域</b>里工作，流形看起来就像 \(\mathbb{R}^n\) 里的一块（常是矩形），可以直接用 5.2 节的采样；采样质量取决于定义坐标邻域所用的参数化，还要注意恰当的等同（比如把 \(X\) 想象成一个立方体时）。</p>
+<p><b>碰撞检测</b>：和第 5 章一样，高效的碰撞检测是采样规划的关键。若 \(X = \mathcal{C}\)，5.3 节的方法直接可用；若 \(X\) 有相约束，还要做额外的测试。这些约束通常是给定的，容易计算（回忆 4.3 节：对 \(\mathcal{C}\) 上的障碍约束这样做并不高效，因为 \(\mathcal{W}\) 里的障碍和 \(\mathcal{C}\) 里的障碍之间映射复杂）。只做逐点测试，不能保证点之间的轨迹段留在 \(X_{free}\) 里——5.3.4 节用碰撞检测给出的距离信息解决了这个问题；对一般形式的相约束 \(h_i(x)\le 0\)，没有额外的信息能保证 \(x\) 的某个邻域在 \(X_{free}\) 里。好在多数应用里相约束并不复杂，可以保证 \(x\) 离约束边界至少有一段距离；一般而言要仔细分析每个相约束，才能确保状态轨迹段无违规。总之，判断 \(x\in X_{free}\) 包括：</p>
+<ol>
+  <li>用 5.3 节的碰撞检测算法确保 \(\kappa(x)\in\mathcal{C}_{free}\)；</li>
+  <li>检查 \(x\)，确保其它形如 \(h_i(x)\le 0\) 的约束都满足。</li>
+</ol>
+<p>理论上应当检查整条轨迹段；实践中常常只检查个别点——更高效，但技术上不正确。</p>
+
+<h3 id="s14-3-2">14.3.2 系统模拟器 <span class="en">System Simulator</span></h3>
+<p>由于 (14.1)，微分约束下的采样规划需要一个新组件：运动现在用动作轨迹表示，但碰撞检测和约束检查必须在 \(X\) 里做，所以规划过程中要频繁积分 \(\dot x = f(x,u)\)。和把碰撞检测建模成「黑盒」类似，把积分过程建模成一个叫<b>系统模拟器 system simulator</b> 的模块（图 14.9）。本章的系统都是时不变的，所以任何积分都可以平移到从 \(t = 0\) 开始。它实现 (14.1)：给定初始状态 \(x(0)\)、动作轨迹 \(\tilde u_t\) 和时间 \(t\)，算出状态轨迹。增量式模拟器封装了积分状态转移方程的细节，规划算法的设计不必操心——不过特定状态转移方程的信息对设计规划算法可能仍然重要。</p>
+<svg class="fig14" viewBox="0 0 560 130" role="img" aria-label="图 14.9 与图 14.10：系统模拟器与两点边值求解器">
+  <defs><marker id="f149a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker></defs>
+  <g font-size="13" fill="var(--text)">
+    <text x="20" y="38">x(0)</text><text x="20" y="66">ũ_t</text><text x="20" y="94">t</text>
+    <path d="M55 34 L98 50 M55 62 L98 62 M55 90 L98 74" stroke="var(--muted)" stroke-width="1.4" marker-end="url(#f149a)"/>
+    <rect x="100" y="38" width="110" height="48" rx="6" fill="var(--surface-2)" stroke="var(--border-strong)"/>
+    <text x="155" y="60" text-anchor="middle">系统模拟器</text><text x="155" y="77" text-anchor="middle" font-size="11" fill="var(--muted)">System Simulator</text>
+    <path d="M210 62 L248 62" stroke="var(--muted)" stroke-width="1.4" marker-end="url(#f149a)"/><text x="254" y="66">x̃_t</text>
+    <text x="320" y="48">x_I</text><text x="320" y="82">x_G</text>
+    <path d="M345 44 L378 56 M345 78 L378 68" stroke="var(--muted)" stroke-width="1.4" marker-end="url(#f149a)"/>
+    <rect x="380" y="38" width="120" height="48" rx="6" fill="var(--accent-soft)" stroke="var(--accent)"/>
+    <text x="440" y="60" text-anchor="middle">两点边值求解器</text><text x="440" y="77" text-anchor="middle" font-size="11" fill="var(--muted)">BVP Solver</text>
+    <path d="M500 62 L532 62" stroke="var(--muted)" stroke-width="1.4" marker-end="url(#f149a)"/><text x="536" y="66">ũ_t</text>
+  </g>
+  <text x="155" y="118" text-anchor="middle" font-size="11.5" fill="var(--muted)">图 14.9</text><text x="440" y="118" text-anchor="middle" font-size="11.5" fill="var(--muted)">图 14.10</text>
+</svg>
+<p class="small muted" style="text-align:center">图 14.9：用系统模拟器，从 \(x(0)\) 以 \(\tilde u_t:[0,t]\to U\) 积分 \(\dot x = f(x,u)\)，得到状态轨迹 \(\tilde x_t:[0,t]\to X\)；有时 \(\tilde x\) 是参数化的路径，但大多数时候它被近似成 \(X\) 里的一串样本。图 14.10：第 15 章的一些方法能在没有 \(X_{obs}\) 时解两点边值问题；对多数系统这很难得到，但它比系统模拟器强大得多，对构造满足微分约束的采样路线图非常有用。</p>
+
+<p><b>闭式解</b>：按 (14.1)，动作轨迹要积分才能得到状态轨迹。有时积分有闭式表达：例如系统是积分器链时，\(x(t)\) 是多项式。设 \(q\) 是标量、\(\ddot q = u\)，若 \(q(0) = \dot q(0) = 0\)、施加常值动作 \(u = 1\)，则 \(x(t) = t^2/2\)。若 \(\dot x = f(x,u)\) 是线性系统（含积分器链，13.2.2 节），总能用矩阵指数得到状态轨迹的闭式表达。</p>
+<p><b>Euler 方法</b>：多数系统要数值积分。把 \(t\) 分成更小的区间，迭代经典的常微分方程数值解法，就能构造出系统模拟器；Euler 方法最简单。记 \(\Delta t\) 为做近似的一个小时间区间——它可以看作系统模拟器的内部参数，实践中通常远小于 14.2.2 节离散时间模型里的 \(\Delta t\)。设已知 \(x(0)\) 和 \(u(0)\)，要估计 \(x(\Delta t)\)。对时间积分，状态转移方程就能确定经过固定时长后的状态：若已知 \(x(0)\) 和区间 \(t'\in[0,\Delta t]\) 上的 \(u(t')\)，则</p>
+<div class="eq">$$x(\Delta t) = x(0) + \int_0^{\Delta t} f\big(x(t),u(t)\big)\,dt. \tag{14.14}$$</div>
+<p>积分不能直接算，因为被积函数里有 \(t > 0\) 时未知的 \(x(t)\)。利用</p>
+<div class="eq">$$f(x,u) = \dot x = \frac{dx}{dt} \approx \frac{x(\Delta t) - x(0)}{\Delta t}, \tag{14.15}$$</div>
+<p>解出 \(x(\Delta t)\) 就得到经典的 <b>Euler 积分方法</b></p>
+<div class="eq">$$x(\Delta t) \approx x(0) + \Delta t\, f\big(x(0),u(0)\big). \tag{14.16}$$</div>
+<p>近似误差取决于 \(x(t)\) 随时间变化的快慢和区间 \(\Delta t\) 的长短。若规划算法把运动基元 \(\tilde u^p\) 的时长 \(t_F(\tilde u^p)\) 作为时间输入，系统模拟器可以把区间细分以保持精度，于是规划算法的开发者可以不管数值精度问题。</p>
+<p><b>Runge–Kutta 方法</b>：Euler 积分高效易懂，但近似一般很差。对 \(\tilde x\) 在 \(t = 0\) 处做 Taylor 展开：</p>
+<div class="eq">$$x(\Delta t) = x(0) + \Delta t\,\dot x(0) + \frac{(\Delta t)^2}{2!}\ddot x(0) + \frac{(\Delta t)^3}{3!}x^{(3)}(0) + \cdots. \tag{14.17}$$</div>
+<p>与 (14.16) 比较：Euler 方法只用了 Taylor 级数（\(\tilde x\) 解析时它是精确表示）的第一项，被忽略的项反映了近似误差。若 \(x(t)\) 大致是线性的，误差可能很小；若 \(\dot x(t)\) 或更高阶导数变化很快，近似就很差。Runge–Kutta 方法基于 Taylor 展开的高阶项，最常用、最高效的之一是<b>四阶 Runge–Kutta 方法</b>：易于实现，在多数应用里数值表现好，一般推荐用它代替 Euler 积分。它可以由在 \(x(\tfrac12\Delta t)\) 处展开推导，而这个状态本身也在近似过程中被估计：</p>
+<div class="eq">$$x(\Delta t) \approx x(0) + \frac{\Delta t}{6}\big(w_1 + 2w_2 + 2w_3 + w_4\big), \tag{14.18}$$</div>
+<p>其中</p>
+<div class="eq">$$\begin{aligned} w_1 &= f\big(x(0),\ u(0)\big)\\ w_2 &= f\big(x(0) + \tfrac12\Delta t\,w_1,\ u(\tfrac12\Delta t)\big)\\ w_3 &= f\big(x(0) + \tfrac12\Delta t\,w_2,\ u(\tfrac12\Delta t)\big)\\ w_4 &= f\big(x(0) + \Delta t\,w_3,\ u(\Delta t)\big). \end{aligned} \tag{14.19}$$</div>
+<p>它比 Euler 积分贵，但精度的提高在实践中通常值得。注意动作要在三个不同时刻取值：\(0\)、\(\tfrac12\Delta t\)、\(\Delta t\)；若动作在 \([0,\Delta t)\) 上为常值，三处取同一个值。近似误差取决于 \(\tilde x\) 的高阶导数变化多快，可以用 Taylor 级数的余项表示。实践中可以在相继的 Runge–Kutta 迭代中自适应地调整 \(\Delta t\)，例如有文献建议把 \(\Delta t\) 按 \((\Delta t/\Delta x)^{1/5}\) 缩放，\(\Delta x = \|x(\Delta t) - x(0)\|\) 是 \(\mathbb{R}^n\) 中的欧氏距离。</p>
+<p><b>多步法 multistep methods</b>：Runge–Kutta 在简单与高效之间取得了流行的折中。但更仔细地关注积分问题，往往还能更高效。Euler 和 Runge–Kutta 常被称为<b>单步法</b>；也有<b>多步法</b>，它利用「要做一连串积分」这一事实，类似 5.3.3 节的增量碰撞检测。关键问题是正确初始化、保证随时间的数值稳定、估计误差以自适应调整步长；最流行的一族是 <b>Adams 方法</b>。多步法需要更多的投入去理解和实现；是否值得，要看规划、碰撞检测、数值积分的相对代价：若积分占主导、效率又至关重要，多步法可能比 Runge–Kutta 大幅缩短运行时间。</p>
+<p><b>黑盒模拟器</b>：有些问题里可能根本没有状态转移方程，但仍然能从当前状态和动作轨迹算出未来状态——例如模拟汽车动力学、或一堆零件在桌上弹跳的复杂软件系统；计算机图形学里的模拟可能来自动作捕捉；有些模拟器内部甚至用隐式微分约束 \(g_i(x,\dot x,u) = 0\) 而不是 \(\dot x = f(x,u)\)。这些情况下很多采样规划器仍然适用，因为它们只依赖系统模拟器的存在；规划算法与系统的具体表示和积分方式隔离开了。</p>
+<p><b>反向时间的系统模拟</b>：有些规划算法要在反向时间方向积分。给定 \(x(0)\) 和从 \(-\Delta t\) 到 0 的动作轨迹，<b>反向系统模拟器</b>算出状态轨迹 \(\tilde x:[-t,0]\to X\)，使得在 \(\tilde u_t\) 下从 \(-\Delta t\) 积分到 0 恰好得到 \(x(0)\)。这看起来像<b>逆控制问题</b>或图 14.10 那样的 BVP，但其实简单得多：给定初始和目标状态求动作轨迹才复杂；反向积分时，动作轨迹和终点状态都给定了，初始状态不必固定。(14.14) 的反向版本是</p>
+<div class="eq">$$x(-\Delta t) = x(0) + \int_0^{-\Delta t} f\big(x(t),u(t)\big)\,dt = x(0) + \int_0^{\Delta t} -f\big(x(t),u(t)\big)\,dt, \tag{14.20}$$</div>
+<p>这依赖于 \(\dot x = f(x,u)\) 是时不变的。于是反向积分只需把状态转移方程取负，照常对 \(-f(x(t),u(t))\) 用 Euler 或 Runge–Kutta。</p>
+
+<div class="widget wide" data-widget="integrators"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>「弹簧」：Δt = 0.3（一圈 21 步）时 Euler 转一圈后半径变成约 2.46，RK4 几乎看不出误差；20 步一圈时 Euler 半径正好是 \((1+h^2)^{N/2} \approx 2.56\)（参考代码第 7 项）。</li>
+  <li>三种积分器链（习题 8）：右图的两条折线斜率约为 1 和 4——Euler 是一阶方法，RK4 是四阶方法。</li>
+  <li>「正向再反向」的误差在 \(10^{-15}\) 量级：对 \(-f\) 积分 (14.20) 就是反向模拟器，没有任何额外困难。</li>
+</ul></div>
+
+<h3 id="s14-3-3">14.3.3 局部规划 <span class="en">Local Planning</span></h3>
+<p>第 5 章的方法依赖一个简单高效的局部规划方法（LPM），它是 5.4 节增量框架和 5.6 节路线图框架的重要部分。没有障碍和微分约束时，定义连接两个位形的 LPM 很平凡，例如沿 \(\mathcal{C}\) 中的最短路径（测地线）连接。有微分约束时，连接两个位形或状态的 LPM 变得困难得多——回忆 14.1 节，这正是经典的 BVP，对多数系统很难解。采样规划算法里处理这个困难主要有两条路：</p>
+<ol>
+  <li>设计采样方案（可能包括精心选择运动基元），让 BVP 可以平凡地解出。</li>
+  <li>设计规划算法，让需要解的 BVP 尽量少；这时 LPM 不指定必须到达的精确目标状态。</li>
+</ol>
+<p>第一条路下，BVP 求解器可以看作图 14.10 那样的黑盒：没有障碍时高效地把 \(x_I\) 连到 \(x_G\)。钢琴搬运工问题里，它就是沿 \(\mathcal{C}\) 中的最短路径走。13.1.2 节的很多轮式车有<b>转向方法 steering methods</b> 可以充当高效的 BVP 求解器（15.5 节）；线性系统也有高效的技术（15.2.2 节）。若 BVP 能高效求解，第 5 章几乎任何采样规划算法都可以推广到微分约束——只要用图 14.10 的模块当 LPM。例如采样路线图可以用算出来的解代替 \(\mathcal{C}\) 中的最短路径。若 BVP 求解器不够高效，这条路就不实用，因为构造路线图通常要用它成千上万次。图 14.10 那样的高效模块一旦存在，微分约束带来的大部分复杂性就神奇地消失了；剩下唯一的担忧是求解器给出的解可能比无约束时的最短路径长得多（例如：Dubins 车为了往后挪一点点，要开多远？）。</p>
+<p>第二条路下，假设解 BVP 很贵，规划方法应尽量避免解 BVP。有些规划算法只需要一个<b>近似</b>到达中间目标状态的 LPM，这对某些系统简单些；有些算法根本不需要 LPM 做任何连接——LPM 可能返回一个看起来能让搜索有进展、但不打算连到指定状态的运动基元。这通常涉及增量规划方法，见 14.4 节，它推广了 5.4、5.5 节以处理微分约束。</p>
+
+<h3 id="s14-3-4">14.3.4 微分约束下的通用框架 <span class="en">General Framework Under Differential Constraints</span></h3>
+<p>这里的框架是 5.4.1 节采样与搜索框架的直接推广，还吸收了 5.5 节「可以选 swath 中任何一点」的推广：把<b>顶点选择方法 VSM</b> 换成 <b>swath 点选择方法 SSM</b>。它也自然地推广了 2.2.4 节的离散搜索框架。组成部分如下：</p>
+<div class="box algo">
+  <div class="box-title">14.3.4 节的通用框架</div>
+  <ol style="margin:0">
+    <li><b>初始化</b>：令 \(\mathcal{G}(V,E)\) 为一个无向的<b>搜索图</b>，\(V\) 含 \(x_I\) 对应的顶点（可能还有 \(X_{free}\) 中的其它状态），\(E\) 为空。图可以看作带 swath \(S(\mathcal{G})\) 的拓扑图。</li>
+    <li><b>swath 点选择方法（SSM）</b>：选一个 \(x_{cur}\in S(\mathcal{G})\) 来扩展。</li>
+    <li><b>局部规划方法（LPM）</b>：生成一个运动基元 \(\tilde u^p : [0,t_F]\to U\)，使其从 \(x(0) = x_{cur}\) 积分得到的状态轨迹满足 \(x(t_F) = x_r\)，\(x_r\in X_{free}\) 可以是也可以不是 \(\mathcal{G}\) 的顶点<sup class="fn"><a href="#fn-lpm" id="fn-lpm-ref">2</a></sup>。用系统模拟器、碰撞检测算法并检查相约束，验证 \(\tilde u^p\) 无违规。若这一步失败，回到第 2 步。</li>
+    <li><b>向图中插边</b>：把 \(\tilde u^p\) 插入 \(E\)。积分后 \(\tilde u^p\) 给出从 \(x_{cur}\) 到 \(x_r\) 的状态轨迹。若 \(x_r\) 不在 \(V\) 里就加进去；若 \(x_{cur}\) 在某条边 \(e\in E\) 的轨迹内部，就在 \(x_{cur}\) 处插入新顶点、把 \(e\) 分成两段。</li>
+    <li><b>检查解</b>：判断 \(\mathcal{G}\) 是否编码了一条解路径。有些应用可以容忍状态轨迹上的一个小缺口。</li>
+    <li><b>回到第 2 步</b>：迭代，直到找到解或满足某个终止条件；后者报告失败。</li>
+  </ol>
+</div>
+<p>通用框架可以像 5.4.1 节那样得到单向、双向、多方向搜索；钢琴搬运工问题里的那些问题也延续下来，例如虫子陷阱造成同样的困难，树越多越难协调搜索。</p>
+<p>主要的新麻烦是 <b>BVP</b>（图 14.11）。回忆 14.1.1 节：对多数系统，减少要解的 BVP 很重要。设精确连到指定状态很难。图 14.11a 是最好的情况：前向单向搜索进入一个大的目标区域，不需要解任何 BVP。目标区域缩小时问题变难；\(X_G\) 是单点 \(\{x_G\}\) 的极限情形（图 14.11b）要求规划算法至少解一个 BVP。</p>
+<svg class="fig14" viewBox="0 0 640 300" role="img" aria-label="图 14.11：BVP 出现的四种情形">
+  <g fill="none" stroke-width="1.4">
+    <g stroke="var(--c-start)"><path d="M30 80 L130 80 M60 80 Q60 40 95 30 M60 80 Q65 115 95 120 M95 80 Q110 55 135 50"/></g>
+    <circle cx="170" cy="80" r="34" fill="color-mix(in srgb, var(--c-goal) 30%, transparent)" stroke="var(--c-goal)"/>
+    <path d="M130 80 L175 80" stroke="var(--c-start)"/>
+    <g stroke="var(--c-start)"><path d="M350 80 L440 80 M370 80 Q370 40 405 30 M370 80 Q375 115 405 120 M405 80 Q420 55 445 50"/></g>
+    <path d="M440 80 L520 62" stroke="var(--bad)" stroke-width="2.4" stroke-dasharray="5 4"/>
+    <g stroke="var(--c-alive2)"><path d="M90 230 L200 230 M200 230 Q200 190 165 180 M200 230 Q195 265 165 272 M160 230 Q145 205 120 200"/></g>
+    <path d="M30 205 L90 230" stroke="var(--bad)" stroke-width="2.4" stroke-dasharray="5 4"/>
+    <g stroke="var(--c-start)"><path d="M350 270 L440 270 M380 270 Q380 235 410 222"/></g>
+    <g stroke="var(--c-alive2)"><path d="M470 225 L590 225 M560 225 Q560 195 530 188 M520 225 Q515 255 500 262"/></g>
+    <path d="M410 222 L470 225" stroke="var(--bad)" stroke-width="2.4" stroke-dasharray="5 4"/>
+  </g>
+  <g font-size="12" fill="var(--text)">
+    <text x="22" y="72">x_I</text><text x="160" y="74">X_G</text><text x="340" y="72">x_I</text><text x="520" y="54">x_G</text>
+    <text x="20" y="198">x_I</text><text x="200" y="222">x_G</text><text x="340" y="262">x_I</text><text x="585" y="218">x_G</text>
+    <text x="470" y="80" fill="var(--bad)">BVP</text><text x="44" y="236" fill="var(--bad)">BVP</text><text x="420" y="212" fill="var(--bad)">BVP</text>
+  </g>
+  <g font-size="12" fill="var(--muted)" text-anchor="middle"><text x="110" y="150">(a)</text><text x="430" y="150">(b)</text><text x="110" y="295">(c)</text><text x="470" y="295">(d)</text></g>
+</svg>
+<p class="small muted" style="text-align:center">图 14.11 的示意重画：(a) 前向单向搜索，避开了 BVP；(b) 精确到达目标就要解 BVP；(c) 反向单向搜索同样要解 BVP；(d) 双向搜索时，连接两棵树处出现 BVP。</p>
+<p>图 14.11c 是反向单向搜索：它把 BVP 挪到了 \(x_I\) 那边。由于 \(x_I\) 是精确给定的（没有「初始区域」），不能像前向那样避开 BVP。若算法给出的解 \(\tilde u\) 的 \(x(0)\) 很接近 \(x_I\)、且 \(X_G\) 很大，也许能挽救：从 \(x_I\) 而不是 \(x(0)\) 用系统模拟器施加 \(\tilde u\)。已知 \(\tilde x(x(0),\tilde u)\) 无违规，而 \(\tilde x(x_I,\tilde u)\) 可能始终贴近它——这要求 \(f\) 对 \(x\) 的变化只变化很小（Lipschitz 常数小），并且 \(\|x_I - x(0)\|\) 很小。问题是两条轨迹上点之间的距离通常随时间增大。若系统模拟器验证 \(\tilde x(x_I,\tilde u)\) 无违规、且终态仍在 \(X_G\) 里，就可以宣布找到解。</p>
+<p>双向搜索要在一条轨迹的中间某处解 BVP（图 14.11d），这让判断两棵树能否相连变得复杂。目标区域大时，也许可以移动反向树所给轨迹的起点来消除中间的缺口。记 \(\tilde u_1\) 和 \(\tilde u_2\) 为前向树和反向树给出的动作轨迹，终止时刻分别为 \(t_1\)、\(t_2\)。把 \(\tilde u_2\) 的定义域从 \([0,t_2]\) 平移到 \([t_1, t_1+t_2]\)，就能把它们拼成 \(\tilde u : [0,t_1+t_2]\to U\)：\(t\le t_1\) 时 \(u(t) = u_1(t)\)，否则 \(u(t) = u_2(t - t_1)\)。若有缺口，新的状态轨迹 \(\tilde x(x_I,\tilde u)\) 必须用系统模拟器检查是否无违规、是否终止于 \(X_G\)。多方向搜索更难，因为产生的 BVP 更多；原则上可以推广上面的想法，把一串动作轨迹拼起来，试图消除所有缺口。</p>
+<p>考虑搜索图与可达图的关系：单向搜索时，搜索图总是某张可达图的子集（假设精度完美、没有数值积分误差）；前向时可达图从 \(x_I\) 出发，反向时从 \(x_G\) 出发。双向搜索时有两张可达图，若两者有顶点重合，也是避开 BVP 的一种方式——可惜这种情况很少见，除非刻意选择 \(x_I\) 和 \(x_G\)（例如把 \(x_G\) 选成从 \(x_I\) 出发的可达图的一个顶点），而对多数系统很难强制做到。所以一般而言，<b>BVP 的出现，是因为这些可达图没有公共顶点</b>；多方向搜索时有很多张可达图在被探索，谁的顶点都不一定和别人的重合。</p>
+</section>
+
+<!-- ============================================================ 14.4 -->
+<section id="s14-4">
+<h2>14.4 增量采样与搜索方法 <span class="en">Incremental Sampling and Searching Methods</span></h2>
+<p>下面把 14.3.4 节的通用框架具体化，得到微分约束下的三种重要方法。</p>
+
+<h3 id="s14-4-1">14.4.1 在格点上搜索 <span class="en">Searching on a Lattice</span></h3>
+<p>这一节延续 5.4.2 节把网格搜索用于运动规划的思路。难点是选一种离散，让它产生一个能用 2.2 节的搜索技术搜索的格。本节主要受动力学规划工作的启发。</p>
+<h4>双积分器的格 <span class="en">A double-integrator lattice</span></h4>
+<p>先看例 13.3 的双积分器：\(\mathcal{C} = \mathcal{C}_{free} = \mathbb{R}\)，\(\ddot q = u\)，它模拟 \(\mathbb{R}\) 中自由漂浮的质点（13.3.2 节）。相空间 \(X = \mathbb{R}^2\)，\(x = (q,\dot q)\)，\(U = [-1,1]\)。下面的想法很容易推广到任何加速度界 \(a_{max} > 0\)（令 \(U = [-a_{max}, a_{max}]\)），为了简单取 \(a_{max} = 1\)。积分 \(\ddot q = u\) 一次：</p>
+<div class="eq">$$\dot q(t) = \dot q(0) + ut, \tag{14.21}$$</div>
+<p>\(\dot q(0)\) 是初速度。再积分一次得到位置</p>
+<div class="eq">$$q(t) = q(0) + \dot q(0)\,t + \tfrac12 u t^2, \tag{14.22}$$</div>
+<p>用到两个初始条件 \(q(0)\)、\(\dot q(0)\)。存在一个离散时间模型，使可达图被困在格上：令 \(U_d = \{-1,0,1\}\)、\(\Delta t\) 为任意正实数。\(u = -1, 0, 1\) 对应的向量场见图 14.12；每过 \(\Delta t\) 在这三个场之间切换并积分，就得到图 14.13 的可达图。由此得到形如 \(x_{k+1} = f_d(x_k,u_k)\) 的离散时间转移方程，\(u_k\in U_d\)，\(k\) 表示时刻 \(t = (k-1)\Delta t\)。任何动作轨迹都可以写成动作序列，例如一个六阶段的动作序列可以是 \((-1,1,0,0,-1,1)\)。从 \(x_1 = x(0) = (q_1,\dot q_1)\) 出发，在任何阶段 \(k\)、任何动作序列下，状态 \(x_k = (q_k,\dot q_k)\) 都可以写成</p>
+<div class="eq">$$\begin{aligned} q_k &= q_1 + i\,\tfrac12(\Delta t)^2\\ \dot q_k &= \dot q_1 + j\,\Delta t, \end{aligned} \tag{14.23}$$</div>
+<p>其中整数 \(i, j\) 可以由动作序列算出。于是任何动作序列都通向一个能用平面上整数坐标 \((i,j)\) 表示的状态；从 \(x_1 = (0,0)\) 出发，就得到图 14.13 的格点。<b>格是「斜」的</b>（斜率为 1），因为改变速度需要伴随一些运动；若允许无穷大的加速度，\(\dot q\) 可以瞬间改变，那对应在 \(X\) 中竖直移动。由 (14.21)，\(\dot q\) 随时间线性变化；\(u\ne0\) 时位形按二次方变化；\(u = 0\) 时按线性变化——除非 \(\dot q = 0\)，那时根本不动<sup class="fn"><a href="#fn-q" id="fn-q-ref">3</a></sup>。</p>
+<p>由于漂移，邻域结构和 5.4.2 节的不一样。\(u = 0\) 时，想象一排排水平的<b>传送带</b>：\(q\) 轴上方的把点往右送，下方的往左送（图 14.12b），传送带的速度就是 \(\dot q\)。\(u = 0\) 时沿 \(q\) 走的距离是 \(\dot q\Delta t\)：\(\dot q > 0\) 时在相平面里水平右移，\(\dot q < 0\) 时左移。从图 14.13 能看到 \(|\dot q|\) 越大运动越大；\(\dot q = 0\) 时没有水平运动。\(u\ne0\) 时，除了 \(\dot q\Delta t\)，\(q\) 还多变化 \(\pm\tfrac12(\Delta t)^2\)：加速或减速同样影响沿 \(q\) 的位置。</p>
+<p>对多数现实问题都有速度上界：设 \(v_{max} > 0\)，\(|\dot q|\le v_{max}\)；再设 \(\mathcal{C}\) 有界（所有 \(q\) 都在 \(\mathbb{R}\) 的一个区间里）。既然可达图是格、状态又被限制在 \(\mathbb{R}^2\) 的有界子集里，可达图的顶点数就是有限的。对任何固定的 \(\Delta t\)，可以用 2.2 节的任何算法搜索这个格，搜索从以 \(x_I\) 为初始顶点的可达图开始。用<b>广度优先搜索</b>可以得到近似时间最优的轨迹（也可以用 Dijkstra，但更贵）。每次搜索失败就把 \(\Delta t\) 缩小一个常数倍，可以得到分辨率完备性。和 5.4.2 节一样，不必一次构造整个网格分辨率：可以逐步加入样本，用并查集高效地更新连通性。稍后会给出一个严格的近似算法框架，用算法的输入参数说明解离最优有多近。</p>
+
+<div class="widget wide" data-widget="di-lattice"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>依次选 u = −1、0、+1 的向量场（图 14.12）：中间那个产生水平的相轨迹，另外两个产生抛物线。</li>
+  <li>阶段数 1、2、3：可达图的顶点数是 3、9、23，而且全都满足 i ≡ j (mod 2)（参考代码第 5 项）。打开「画真实的抛物线弧」就是习题 9。</li>
+  <li>点格点 (2.5, −1)：BFS 要 5 步。<b>补充</b>的连续时间最短时间是 T* ≈ 4.46；Δt = 0.5 时格点上要 9 × 0.5 = 4.5。必须恰好落在格点上时，Δt 的整数倍不一定凑得出 T*（参考代码第 15 项）。</li>
+</ul></div>
+
+<p>回忆图 5.14b 里连接网格点的问题。若目标区域 \(X_G\) 含格点，就能精确到达目标；若不含——常见的情形是 \(X_G\) 只是一个点——就要做额外的工作把目标状态连到附近的格点。这其实是一个 BVP，但对双积分器很容易解：用常值动作在时间 \(\Delta t\) 内能到达 \(x_G\) 的状态位于一个锥里（图 14.14a）<sup class="fn"><a href="#fn-cone" id="fn-cone-ref">4</a></sup>，落进锥里的格点施加 \(U\) 里的一个常值动作就能接到 \(x_G\)。同样，\(x_I\) 也不必是格点。于是可以很直接地把 \(x_I\) 接到一个格点，得到一条到达 \(x_G\) 附近格点的轨迹，再把它精确地接到 \(x_G\)。</p>
+
+<div class="widget wide" data-widget="di-cones"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>拖动 x_I：蓝色锥的上下边界是 u = ±1 的两条抛物线，右边界是 t = t_c 时 u 从 +1 变到 −1 的一段（习题 4）。</li>
+  <li>点「把两个锥连起来」：x_I → 格点 → … → 格点 → x_G，整条轨迹由抛物线段组成。</li>
+</ul></div>
+
+<h4>扩展与其它考虑 <span class="en">Extensions and other considerations</span></h4>
+<p><b>双积分器的其它格</b>：可以在 \(X\) 上构造很多别的格，\(U\) 和时间可以用不同的离散。若只关心可行性、不关心最优性，自由度很大。\(\mathcal{C} = \mathbb{R}\) 时很难定义有意思的避障问题，但这些概念很快会推广到更高维；这时，找一条把初始状态连到目标状态的可行轨迹可能是主要关注点。注意：若 \(x_I\) 和 \(x_G\) 速度都为零，状态可以一直在 \(q\) 轴附近徘徊，速度慢到动量无关紧要——这也给了「即使最终结果不是最优，也要尽量缩短行程时间」一些动力。另一方面，初始和目标状态的速度也可能不为零，这时任何可行解都可以接受：例如作为安全分析的一部分，目标可能是把一辆 SUV 弄翻。</p>
+<p>为了体会怎样构造格，再用传送带的类比：在不同的 \(\dot q\) 值上放一排排水平的样本点，可以像图 14.13 那样在 \(\dot q\) 方向上等间距。设想状态在某条传送带上；若愿意，可以施加一段时间的非零动作，移到另一条速度为 \(\dot q'\) 的传送带上：\(\dot q' > \dot q\) 时 \(u > 0\)，否则 \(u < 0\)。若动作为常值，经过 \(|\dot q - \dot q'|/u\) 的时间后状态到达 \(\dot q'\)。到达时，传送带上的位置 \(q\) 不一定和某个样本点重合；没关系，可以施加 \(u = 0\)，等它漂到下一个样本点。另一种做法是从 \(U\) 里选一个动作，直接驶向自己前向时间受限可达集里的某个格点（把图 14.14 的锥放在格点上，就能找到用常值动作在一段时间内能到达的其它格点）。</p>
+<p>回忆图 14.13：\(|\dot q|\) 越大，\(\Delta t\) 内走得越远。实践中这可能不理想，因为高速时分辨率实际上差得多。可以把传送带随 \(|\dot q|\) 增大而放得更密来补偿：速度越大，换传送带需要的时间越短，各层走过的距离可以大致保持相同——这符合「速度越快，需要的反应越快」的直觉（习题 10）。也可以做多分辨率版本。到目前为止考虑的简单问题其实可以用组合方法精确求解、没有任何近似误差；这里讲格方法，是因为它能推广到难得多的问题。</p>
+<p><b>多个独立的双积分器</b>：推广到 \(n\) 个双积分器组成的向量。\(\mathcal{C} = \mathbb{R}^n\)，每个 \(q\in\mathcal{C}\) 是 \(n\) 维向量；有 \(n\) 个动作变量和 \(n\) 个形如 \(\ddot q_i = u_i\) 的双积分器，每个变量的动作空间是 \(U_i = [-1,1]\)（同样可以用任何加速度界）。相空间 \(X = \mathbb{R}^{2n}\)，每点是 \(x = (q_1,\ldots,q_n,\dot q_1,\ldots,\dot q_n)\)；第 \(i\) 个双积分器给出两个标量方程 \(\dot x_i = x_{n+i}\)、\(\dot x_{n+i} = u_i\)。虽然有 \(n\) 个双积分器，但它们在状态转移方程里是<b>解耦</b>的：一个积分器的相位不依赖另一个的相位。所以前面的想法可以直接推广，得到 \(\mathbb{R}^{2n}\) 上的格：每个动作是 \(n\) 维向量 \(u\)，每个 \(U_i\) 离散成 \(-1, 0, 1\)；对所有 \(i\) 都有 \(\dot q_i\ne0\) 的格点有 \(3^n\) 条出边；对 \(\dot q_i = 0\) 的那个双积分器只有两种选择，因为 \(u_i = 0\) 不产生运动。把可达图投影到任何 \((x_i, x_{n+i})\) 上都和图 14.13 一样，刻画第 \(i\) 个积分器的行为。标准的搜索算法可以用在 \(\mathbb{R}^{2n}\) 的格上，广度优先搜索仍然给出近似时间最优的解；限制 \(X\) 有界并让 \(\Delta t\) 趋于零，同样得到分辨率完备性。维数更高后，可以从 \(X\) 里去掉一个复杂的障碍区域 \(X_{obs}\)；遍历每条边都要沿边做碰撞检测。状态轨迹是直线或抛物线弧，(14.22) 已经给出了闭式表达，不需要数值积分。</p>
+
+<div class="widget wide" data-widget="kinodynamic"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>依次用 Δt = 1、0.7、0.5 搜索：Δt 越小，格越细、扩展的状态越多，解一般越快；三者都在一秒内算完（这就是习题 11）。</li>
+  <li>把 c₁ 调到 0.3：高速时安全圆盘变大，机器人只好在障碍附近减速，总时间变长；c₀、c₁ 太大时直接无解。</li>
+  <li>点「播放」看点质量沿抛物线段运动——加速、匀速、减速交替，就是 bang-bang 的样子。</li>
+</ul></div>
+
+<p><b>无约束的机械系统</b>：对完全驱动机械系统的一般情形（包括大多数机械臂），也能得到格。回忆 (13.4)：任何形如 \(\dot q = f(q,u)\) 的系统也可以写成 \(\dot q = u\)，只要把 \(U(q)\) 定义为 \(f\) 在固定 \(q\) 下的像；用 \(f\) 主要是为了方便指定一个固定的动作空间 \(U\)，它对每个 \(q\in\mathcal{C}\) 以不同的方式映到切空间里。形如 \(\ddot q = h(q,\dot q,u)\)（\(u\in U\)，\(U\) 是 \(\mathbb{R}^n\) 的开子集）的方程也有类似的观察；这种形式是 13.3、13.4 节为一般的无约束机械系统得到的，例如 (13.148) 表示开链机械臂的动力学。这类方程可以直接指定允许加速度的集合，写成 \(\ddot q = u'\)：每个 \(u\) 映到下面这个动作空间里的新动作 \(u'\)，</p>
+<div class="eq">$$U'(q,\dot q) = \{\ddot q\in\mathbb{R}^n \mid \exists\, u\in U \text{ 使得 } \ddot q = h(q,\dot q,u)\}, \tag{14.24}$$</div>
+<p>对每个 \(q\in\mathcal{C}\) 和 \(\dot q\in\mathbb{R}^n\)。每个 \(u'\in U'(q,\dot q)\) 直接表示 \(\mathbb{R}^n\) 中的一个加速度向量。于是用 \(u'\in U(q,\dot q)\)，原方程可以改写成 \(\ddot q = u'\)，看起来就像多个独立的双积分器。主要区别是：</p>
+<ol>
+  <li>\(U'(q,\dot q)\) 可能是 \(\mathbb{R}^n\) 中复杂的区域，而真正的双积分器的 \(U\) 是以原点为中心的立方体。</li>
+  <li>\(U'(q,\dot q)\) 随 \(q\) 和 \(\dot q\) 变化，在时间采样区间 \(\Delta t\) 内要特别注意这种变化；真正的双积分器 \(U\) 是固定的。</li>
+</ol>
+<p>第一个区别用 \(\mathbb{R}^n\) 上的网格采样处理：每个落在 \(U'(q,\dot q)\) 里的网格点在可达图里连一条边（图 14.15a）；为了分辨率完备，网格分辨率要和 \(\Delta t\) 一起加密。第二个问题：把 \(U'(q(t),\dot q(t))\) 想象成 \(\mathbb{R}^n\) 中一个随时间移动的形状；选 \(u'\) 太靠近 \(U'(q(t),\dot q(t))\) 的边界是危险的，因为 \(t\) 增大时 \(u'\) 可能落到新动作集之外。往往可以得到 \(U'(q,\dot q)\) 边界变化速度的界（例如对 \(h\) 关于 \(q\)、\(\dot q\) 求导）；据此去掉边界附近的一薄层，确保所有尝试的动作在整个 \(\Delta t\) 内都留在 \(U'(q(t),\dot q(t))\) 里（图 14.15b）。</p>
+<p>这些想法被用来把近似算法框架推广到开链机械臂，\(h\) 由 (13.148) 给出。设 \(U\) 是轴对齐的矩形——机械臂常常如此，因为每个 \(u_i\) 的界对应各个电机的力矩上限。\(q\) 和 \(\dot q\) 固定时，(13.140) 对 \(u\) 施加线性变换得到 \(\ddot q\)；矩形一般被剪切成平行六面体（平行四边形的 \(n\) 维推广），参见 3.5 节或线性代数。</p>
+
+<div class="widget wide" data-widget="accel-set"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>拖肘关节角 q₂：平行四边形的形状随之改变——同样的力矩上限，不同姿态下能产生的加速度大不相同。</li>
+  <li>把 q̇₁、q̇₂ 调大：科氏项把平行四边形整体平移；再调大 Δt，边界附近的橙点（不安全）越来越多。<span class="muted">（补充：这里的两连杆模型和参数是我们选的，见组件说明。）</span></li>
+</ul></div>
+
+<h4>近似算法框架 <span class="en">Approximation algorithm framework</span></h4>
+<p>本节的格最早是在 NP-hard 问题的严格<b>近似算法</b>框架里，用来分析动力学规划问题的。设有两三个独立的双积分器。分析表明，算出的解在下面的意义下近似最优。令 \(c_0\)、\(c_1\) 为两个正常数，定义函数</p>
+<div class="eq">$$\delta(c_0,c_1)(\dot q) = c_0 + c_1\|\dot q\|. \tag{14.25}$$</div>
+<p>记 \(t_F\) 为施加终止动作的时刻。若对所有 \(t\in[0,t_F]\)，以 \(q(t)\) 为中心、半径 \(\delta(c_0,c_1)(\dot q)\) 的球都不与 \(\mathcal{W}\) 中的障碍碰撞，就称状态轨迹是 <b>\(\delta(c_0,c_1)\)-安全</b>的。注意球的半径随速度线性增长：可以把机器人想象成半径由速度决定的圆盘。给定 \(x_I\)、\(x_G\)、\(c_0\)、\(c_1\)（只允许点目标区域）。设对给定问题存在一条（积分某个 \(\tilde u\in\mathcal{U}\) 得到的）\(\delta(c_0,c_1)\)-安全状态轨迹，在时刻 \(t_{opt}\) 终止于 \(x_G\)。结论是：选择合适的 \(\Delta t\)（有公式给出），在可达格上做广度优先搜索，会找到一条 \((1-\epsilon)\delta(c_0,c_1)\)-安全、用时不超过 \((1+\epsilon)t_{opt}\) 的轨迹，并近似地把 \(x_I\) 连到 \(x_G\)（在 \(X\) 中多近取决于 \(\epsilon\)）。而且算法的运行时间是 \(1/\epsilon\) 和定义多边形障碍所用图元个数的多项式<span class="muted">（书中脚注：技术上只是伪多项式——对 \(a_{max}\)、\(v_{max}\)、\(c_0\)、\(c_1\) 和 \(\mathcal{W}\) 的包围立方体宽度而言；把这些参数的表示看作常数大小时是多项式，但对真正表示它们所需的比特数不是多项式）</span>。分析的关键一步是证明：任何状态轨迹都可以只用 \(U_d\) 里、每 \(\Delta t\) 内保持常值的动作紧紧跟踪。一个重要方面是：这<b>不</b>意味着算出的解在 \(X\) 中经过的路线接近真正的最优（只是执行时间接近），所以算法可能给出与真正最优轨迹<b>不同同伦类</b>的解。这种分析后来被推广到一般的开链机械臂。</p>
+<p><b>反向与双向版本</b>：本节的概念有完美的对称性。沿时间反向积分，可以得到类似图 14.13 的可达格，它指出能到达某个固定状态的动作序列和对应的初始状态。注意反方向使用这些想法<b>不</b>要求系统对称。既然两个方向的图都存在，就可以做双向搜索：用前向和反向的时间受限可达锥，把初始和目标状态接到同一张格上（例如从原点开始的格）。</p>
+<p><b>欠驱动与非完整系统</b>：由于欠驱动或其它约束，很多有意思的系统不能写成有 \(n\) 个独立动作变量的 \(\ddot q = h(q,\dot q,u)\)。例如 13.1.2 节的模型都是欠驱动、非完整的。这时不能直接把方程化成双积分器的向量，因为 \(U(q,\dot q)\) 的维数小于 \(\mathcal{C}\) 的维数 \(n\)，没法在 \(U(q,\dot q)\) 上做网格采样。尽管如此，很多情况下仍然能巧妙地离散系统，得到一个格；若能做到，基于经典搜索算法就能得到直接的分辨率完备方法。若 \(X\) 有界（或施加相约束后得到一个有界区域），搜索就在一张有限图上进行；失败时按通常的方式提高分辨率，最终得到分辨率完备性。如 14.2.2 节所说，一大族非完整系统可以得到这样的格。下面介绍处理不是格的可达图的方法。</p>
+
+<h3 id="s14-4-2">14.4.2 引入状态空间离散 <span class="en">Incorporating State Space Discretization</span></h3>
+<p>若可达图不是格（欠驱动、非完整系统通常如此），可以用<b>状态空间离散</b>强迫它表现得像格。没有微分约束时，路径很容易被强迫沿格走（如 7.7.1 节的方法）；有微分约束时，状态不能被强迫沿阶梯路径走。与其在 \(X\) 上采样、强迫轨迹访问指定的点，不如把 \(X\) 分成小的<b>单元 cells</b>，每个单元里搜索图最多只允许一个顶点。这能防止系统搜索算法在某个有界区域里有无穷多顶点时永远跑下去。例如 Dubins 车，若 \(u\) 固定、\(\Delta t\) 取整数，如 14.2.2 节所说，会在一个圆上得到无穷多个顶点。本节的想法主要受 Barraquand–Latombe 动态规划方法的启发，它主要用于 13.1.2 节的模型；但这里的介绍要一般得多，甚至不一定要求最优（需要的话可以加上）。</p>
+<p><b>把 \(X\) 分成单元</b>：一开始就把 \(X\) 分解成一组单元，不考虑碰撞检测。设 \(X\) 是 \(\mathbb{R}^n\) 的 \(n\) 维矩形子集；若 \(X\) 更一般地是光滑流形，可以在坐标邻域里定义矩形子集；需要时可以用等同来尊重 \(X\) 的拓扑，但严格说在边界处要做坐标变换才能正确表达速度（8.3 节）。最常见的单元分解是把每个坐标量化、把 \(X\) 分成大小相等的 \(n\) 维立方体，称为<b>立方剖分 cubical partition</b>。一般地，设 \(X\) 被剖分成一组 \(n\) 维单元 \(\mathcal{D}\)，\(D\in\mathcal{D}\) 表示一个单元（\(X\) 的子集）；这里假设所有单元都是 \(n\) 维的，对立方体而言就是相邻立方体公共边界上的点被规定只属于其中一个（所以单元可以是开的、闭的或都不是）。注意被剖分的是 \(X\)，而不是第 6 章那样的 \(X_{free}\)：定义 \(\mathcal{D}\) 时忽略碰撞检测和 \(X\) 上的其它约束，单元是事先定义好的，就像 5.4.2 节规定网格那样。立方剖分下，量化每个坐标轴就立刻知道单元。</p>
+<p><b>搜索</b>：算法直接套进 14.3.4 节的框架：从 \(x_I\) 用任何系统搜索算法增量地构造搜索图。假设系统已经以某种方式离散，最常见的是 14.2.2 节的离散时间模型，得到固定的 \(\Delta t\) 和有限的动作集 \(U_d\)。2.2.1 节的基本搜索算法里，记录哪些顶点被探索过很重要；这里把这个想法用到单元上：若目前构造的搜索图在单元 \(D\) 里有顶点，就称 \(D\) <b>已访问 visited</b>，否则<b>未访问 unvisited</b>。一开始只有含 \(x_I\) 的单元是已访问的。这些标记在搜索中用来剪枝可达图（图 14.16）。</p>
+<div class="box algo">
+  <div class="box-title">图 14.17　CELL-BASED SEARCH(x<sub>I</sub>, x<sub>G</sub>)：利用 X 的单元分解搜索</div>
+  <div class="pseudo">
+    <span class="ln">Q.insert(x<sub>I</sub>);</span>
+    <span class="ln">𝒢.init(x<sub>I</sub>);</span>
+    <span class="ln"><span class="kw">while</span> Q ≠ ∅ <span class="kw">and</span> x<sub>G</sub> is unvisited</span>
+    <span class="ln">    x<sub>cur</sub> ← Q.pop();</span>
+    <span class="ln">    <span class="kw">for each</span> (ũ<sub>t</sub>, x) ∈ REACHED(x<sub>cur</sub>)</span>
+    <span class="ln">        <span class="kw">if</span> x is unvisited</span>
+    <span class="ln">            Q.insert(x);</span>
+    <span class="ln">            𝒢.add_vertex(x);</span>
+    <span class="ln">            𝒢.add_edge(ũ<sub>t</sub>);</span>
+    <span class="ln">            Mark cell that contains x as visited;</span>
+    <span class="ln">Return 𝒢;</span>
+  </div>
+</div>
+<p>\(Q\) 是元素为搜索图顶点的优先队列。若要优化代价泛函，\(Q\) 可以按从 \(x_I\) 到 \(x\) 沿已构造路径累积的代价排序；代价可以有多种定义：可以就是时间（\(\Delta t\) 的步数），也可以统计动作改变的次数。算法探索时遇到新的候选顶点；只有当它们落在标记为未访问的单元里且无违规时，才存进搜索图并放进 \(Q\)；遇到这样的单元后就把它标记为已访问。REACHED 函数生成一组无违规的轨迹段；在离散时间模型下，就是对每个 \(u\in U_d\) 施加 \(\Delta t\)，只报告无违规（含无碰撞）到达的状态。</p>
+<p>和往常一样，若 \(X_G\) 相对单元大小很小，可能出现 BVP；若 \(X_G\) 大到包含整个单元，就避开了。若 \(X_G\) 是单点，可能只能近似到达 \(x_G\)，所以算法必须接受在指定容差内到达 \(x_G\)——可以把 \(X_G\) 定义得大一些来建模，所以不显式提容差。</p>
+
+<div class="widget wide" data-widget="cell-search"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>先看「空地（图 14.16）」：灰色是被剪掉的分支，深色是每个单元最多一个顶点的搜索图。</li>
+  <li>切到「U 形掉头」：默认参数（单元 0.7、θ 分 8 段、Δt = 1）下搜索失败；只把 θ 分段改成 16、或单元改成 0.35、或 Δt 改成 1.5，任何一项都可能让它成功——对应书中说的三处可以加密的采样。</li>
+  <li>把 Δt 调到 0.6 而单元仍为 0.7：车一步走不出自己的单元，新顶点全被剪掉，几乎什么都搜不到——这就是「Δt 相对单元太小，就离不开单元」。</li>
+</ul></div>
+
+<p><b>维护单元</b>：维护单元有几种选择，需要高效完成的主要操作是<b>点定位 point location</b>：判断某个状态落在哪个单元里。原始方法预先分配一个 \(n\) 维数组，碰撞检查甚至也事先做好：任何含有 \(X_{obs}\) 中至少一点的单元都标记为<b>占用 occupied</b>，这样不必调用碰撞检测模块就能避开含碰撞位形的单元。维数固定时，这种方案在常数时间内找到正确的单元并更新标记；可惜空间需求是维数的指数。另一种办法是用散列表维护标记为已访问的单元：不在乎最优、又预计在到达大多数单元之前就能找到解时，这尤其有价值；不显式存储多维数组也能高效解决点定位。</p>
+<p>也可以不用立方分解。一种一般的方法是把 \(\mathcal{D}\) 定义成 \(X\) 中 \(m\) 个样本 \(P = \{p_1,\ldots,p_m\}\) 的 Voronoi 区域：每个单元的「名字」唯一地对应 \(P\) 中的一个样本；含 \(x\in X\) 的单元定义为 \(P\) 中离 \(x\) 最近的样本（用某个事先定好的度量）。立方分解是一个特例，对应 Sukharev 网格（图 5.5a）。若 \(X\) 维数不太高，可以用高效的最近邻方案在样本数的近似对数时间内找到单元（实践中 5.5.2 节的 Kd 树应当表现不错）。维护立方分解时这种方法比较笨重，但它对<b>任何</b>样本集 \(P\) 都适用：若给定 \(P\) 找不到解，可以加更多样本改进剖分——这允许用任何稠密序列来引导对 \(X\) 的探索，同时保证分辨率完备性。</p>
+<p><b>分辨率问题</b>：用状态离散的主要麻烦之一是要在<b>三个</b>空间上采样：时间、动作空间、状态空间。设用离散时间模型。若要求最优解，单元应当很小（例如每个轴 50–100 个），这限制了它只能用于几维的状态空间。时间区间 \(\Delta t\) 也应当小，但若相对单元大小太小，可能根本离不开一个单元。若只要求可行性，可以用较大的单元，\(\Delta t\) 也要相应增大。\(U\) 的粗量化可能让解被错过，尤其 \(\Delta t\) 大时；\(\Delta t\) 减小时，\(U_d\) 中的样本数就不那么重要了。为了分辨率完备，每次搜索失败都要改进采样：三个空间里至少一个的分散度要减小。可能的做法是 1) 缩小时间区间 \(\Delta t\)，2) 给 \(U_d\) 加更多动作，3) 给 \(P\) 加更多点以缩小单元。若三个空间的分散度都趋于零、且 \(X_G\) 含 \(X_{free}\) 的一个开子集，就得到分辨率完备性；若 \(X_G\) 只是一个点，就必须容忍在某个 \(\epsilon > 0\) 以内的解。</p>
+<p>回忆：分辨率完备性假设 \(f\) 导数有界、或至少满足 Lipschitz 条件 (14.11)。实际的收敛速度主要受三个因素影响：1) \(f\) 随 \(u\) 和 \(x\) 变化的速度（由 Lipschitz 常数刻画），2) 需要穿过 \(X_{free}\) 中多窄的区域，3) 系统的可控性——最后一个条件会在 15.4 节对非完整系统进一步研究。</p>
+<p>举个具体的例子：转弯半径很大的 Dubins 车掉头（图 14.18）。可能需要一个精确的转弯才能掉头，而这可能取决于很多阶段之前选的一个动作。Dubins 车模型不允许来回之字形（例如侧方停车）的机动来局部修正位形。图 14.18a 中车左转打满就能掉头；图 14.18b 中不幸的是，所需的顶点被剪掉了，因为沿所需轨迹的某个单元里已经有了一个顶点——这说明错过一个可能的动作，会在很多阶段之后造成严重的问题。</p>
+<p><b>反向与双向版本</b>：和往常一样，这种方法也可以做反向和双向版本。若 \(X_G\) 大（或目标容差大）而 BVP 难解，反向版本就不太合适；前向更好，因为 BVP 可以完全避开。双向算法可以对两棵树用同一组单元 \(\mathcal{D}\)：两棵树到达同一个单元时可以认为问题解决了；但必须小心，仍要保证剩下的 BVP 能解——要能找到一段动作轨迹，把从初始状态出发的树的一个顶点连到从目标出发的树的一个顶点。也可以接受在容差内的连接。</p>
+
+<h3 id="s14-4-3">14.4.3 基于 RDT 的方法 <span class="en">RDT-Based Methods</span></h3>
+<p>快速探索稠密树（RDT）家族（包括 RRT）完全不维护格。RDT 最初就是为处理微分约束而提出的，尽管它的大部分实际应用是钢琴搬运工问题。本节把 5.5 节的想法从 \(\mathcal{C}\) 推广到 \(X\)，并纳入微分约束。14.4 节到目前为止的方法，在用动态规划搜索图、分辨率足够高时，给出近似最优的解；相比之下，RDT 的目标只是返回<b>可行</b>轨迹，即使分辨率提高也是如此。它们往往用相对少的采样就能成功找到解轨迹，这部分是因为不关心最优性。</p>
+<p>记 \(\alpha\) 为 \(X\) 中一个无穷的、稠密的样本序列；\(\rho : X\times X\to[0,\infty)\) 为 \(X\) 上的距离函数，可以是也可以不是真正的度量；距离函数可以不对称，这时 \(\rho(x_1,x_2)\) 表示从 \(x_1\) 到 \(x_2\) 的有向距离。本节的 RDT 是一种搜索图，因此可以看作某种离散模型下可达图的子图。为了简单，先假设用 14.2.2 节的离散时间模型，得到有限的动作集 \(U_d\) 和固定的时间区间 \(\Delta t\)；运动基元集合 \(\mathcal{U}^p\) 是所有在 0 到 \(\Delta t\) 内保持某个 \(u\in U_d\) 不变的动作轨迹（更一般的情形在本节末讨论）。</p>
+<p>与 5.5.1 节平行，先在没有障碍的情况下定义 RDT，令 \(X_{free} = X\)。构造算法见图 14.19，可以和第 II 部分为钢琴搬运工问题在 \(\mathcal{C}\) 上给出的图 5.16 比较：</p>
+<div class="box algo">
+  <div class="box-title">图 14.19　SIMPLE_RDT_WITH_DIFFERENTIAL_CONSTRAINTS(x<sub>0</sub>)</div>
+  <div class="pseudo">
+    <span class="ln">𝒢.init(x<sub>0</sub>);</span>
+    <span class="ln"><span class="kw">for</span> i = 1 <span class="kw">to</span> k <span class="kw">do</span></span>
+    <span class="ln">    x<sub>n</sub> ← NEAREST(S(𝒢), α(i));</span>
+    <span class="ln">    (ũ<sup>p</sup>, x<sub>r</sub>) ← LOCAL_PLANNER(x<sub>n</sub>, α(i));</span>
+    <span class="ln">    𝒢.add_vertex(x<sub>r</sub>);</span>
+    <span class="ln">    𝒢.add_edge(ũ<sup>p</sup>);</span>
+  </div>
+  <p class="small muted" style="margin:.4em 0 0">与图 5.16 相比，新顶点是 LPM 算出的 x<sub>r</sub>，而不是 α(i)；有些应用里第 4 行可能失败，这时跳过第 5、6 行。</p>
+</div>
+<p>RDT \(\mathcal{G}\) 以 \(X\) 中某个状态 \(x_0\) 为唯一顶点初始化。每次迭代加一条新边和一个新顶点。第 3 行用 \(\rho\) 选 \(x_n\)——\(\mathcal{G}\) 的 swath 中离 \(\alpha(i)\) 最近的点。5.5 节的 RDT 里，\(\alpha\) 的每个样本都会成为顶点；这里由于 BVP 和 \(\mathcal{U}^p\) 中具体的运动基元，可能很难或不可能精确到达 \(\alpha(i)\)。所以第 4 行调用 LPM 确定一个运动基元 \(\tilde u^p\in\mathcal{U}^p\)，从 \(x_n\) 积分后得到新状态 \(x_r\)（图 14.20：若最近点落在某条边对应的状态轨迹段上，就把这条边分成两段，在 \(\mathcal{G}\) 中插入新顶点）。对 \(\mathcal{U}^p\) 表示离散时间模型的默认情形，就对每个 \(u\in U_d\) 施加 \(\Delta t\)，选使 \(\rho(x_r,\alpha(i))\) 最小的那个。还有一个约束：若 \(x_n\) 在之前的迭代里被选过，\(\tilde u^p\) 必须是从 \(x_n\) 还没试过的运动基元；否则会在 \(\mathcal{G}\) 中产生重复的边，或者白白花时间对已知碰撞的可达图边做碰撞检查。其余几步从 \(x_n\) 加新的顶点和边；若 \(x_n\) 在某条边 \(e\) 产生的轨迹上，就像 5.5.1 节那样把 \(e\) 分开。</p>
+<p><b>高效地找最近点</b>：5.5.2 节的问题在微分约束下的 RDT 里再次出现，而且更复杂：\(\mathcal{G}\) 的边一般是弯的，没法用简单的点–线段距离测试；而且状态轨迹的精确表示通常不知道，而是由系统模拟器数值近似的。所以最好用近似方法确定 swath 中的最近点，就是 5.5.2 节讨论的直接推广（图 5.22）：若施加的运动基元产生的状态轨迹在 \(X_{free}\) 中走得很远，可以插入中间顶点。若维数够低（例如小于 20），可以用 5.5.2 节的高效最近邻算法抵消维护中间顶点的代价。</p>
+<p><b>处理障碍</b>：现在设 \(X_{obs}\ne\emptyset\)。5.5.1 节里，RDT 延伸到恰好在障碍前的停止位形 \(q_s\)。微分约束下有两个新的麻烦。第一，使用的是运动基元：若 \(\Delta t\) 小，很多情况下在到达边界之前时间就用完了；可以用大的 \(\Delta t\)、只取轨迹的无违规部分来缓解；这时甚至可以提前截断轨迹，避免冲过 \(\alpha(i)\)。第二个麻烦来自 \(X_{ric}\)：若动量很大，把树拉得离障碍越近，RDT 被困住的可能性越大。离障碍近的顶点由于 Voronoi 区域大会经常被选中，却无法扩展。钢琴搬运工问题里这不太要紧，因为树很容易沿着边界走。所以在大多数实验工作里，似乎最好只走到边界的一部分（大概一半）。</p>
+<p><b>基于树的规划器</b>：可以像 5.5 节那样用 RDT 构造规划算法：前向、反向、双向都可以。主要的新麻烦是其它采样方法也受困扰的熟悉的 BVP。若连接相邻状态很贵甚至不可能，就会出现通常的麻烦。若 \(X_G\) 含相当大的开集，带温和目标偏置的前向单树规划器可能表现很好、并避开 BVP；若 \(X_G\) 是单点，就必须设一个容差，规定 RDT 要离目标多近才能宣布找到解。对有漂移的系统，容差减小时搜索时间急剧增加。双向搜索很多情况下性能优势很大，但在两棵树之间尝试连接时有 BVP。一种可能是把容差设得很小，再像 14.3.4 节那样把两条动作轨迹拼起来；成功的话规划算法就成功终止。可惜性能同样很依赖容差，尤其漂移大时。最近的研究表明：用双向 RDT 配上大的连接容差，再用高效的变分技术闭合缺口，性能能大幅提升；可惜变分技术并不是对所有系统都高效，因为它们本质上要通过在轨迹空间里做梯度下降来解 BVP（14.7 节）。</p>
+<p><b>距离函数的问题</b>：RDT 的构造算法受距离函数 \(\rho\) 的影响很大。钢琴搬运工问题也如此，但在微分约束下为设计好的度量更关键、也更有挑战。例如例 5.3 的度量不适合衡量 Dubins 车两个位形之间的距离；更合适的度量是从 \(q\) 到 \(q'\) 最短路径的长度（这个长度容易算，见 15.5 节<sup class="fn"><a href="#fn-155" id="fn-155-ref">5</a></sup>）。即使对考虑动力学和障碍的车模型，这样的度量也比例 5.3 的更合适。很多有挑战性的问题用加权欧氏度量就能解，但利用系统的具体性质能带来巨大的改进。这个问题可能看起来像为 5.4.3 节的随机势场规划器选势函数；但 RDT 朝很多不同的样本 \(\alpha(i)\) 生长、而不是只盯着目标，所以性能下降一般不像势场规划器的局部极小那样严重：RDT 有多得多的机会逃脱。作为势函数会惨败的度量，在 RDT 规划器里往往表现很好。</p>
+<p>如 14.3 节所说，理想的距离函数是最优代价到达，记作 \(\rho^*\)。当然算 \(\rho^*\) 至少和解运动规划问题一样难，所以这个想法看起来不实际。但考虑 \(\rho^*\) 一般是有用的，因为 RDT 规划器的性能通常随实际使用的度量 \(\rho\) 与 \(\rho^*\) 偏离而下降。即使忽略障碍，努力对 \(\rho^*\) 做一个粗糙的近似，往往也能大大提高性能。一个很好的例子是：为自主直升机用值迭代算出没有障碍时的最优 cost-to-go，使用的就是图 14.8 的机动自动机模型。</p>
+
+<div class="widget wide" data-widget="rdt-diff"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>Dubins 车：分别用「加权欧氏」「只看位置」「Dubins 最短路径长」各跑一次，比较迭代次数和树的样子；同一个随机种子下结果可以直接对比。</li>
+  <li>点质量：数一数红点——它们是所有动作都撞墙的顶点，多半已经在 \(X_{ric}\) 里（刹不住了）。把 Δt 加大再看。</li>
+  <li>打开「双向」：红色虚线就是两棵树之间剩下的缝——一个没有解的 BVP。把目标容差调小，接上要多花很多迭代。</li>
+</ul></div>
+
+<p><b>保证分辨率完备性</b>：设用离散时间模型。若 \(\alpha\) 在 \(X\) 中稠密，每个 RDT 顶点在被构造之后都会被访问可数无穷次。只要保证从同一个顶点永远不重复施加同一个运动基元，所有可用的运动基元最终都会被试到——这保证了固定 \(\Delta t\) 下整张可达图都会被探索。由于可达图不一定有限，得到分辨率完备性更有挑战；可以在执行中周期性地改变 \(\Delta t\)、在后面的迭代里用越来越小的 \(\Delta t\)，套用图 14.7 的方案；若 \(U\) 有限，也可以对 \(U_d\) 做加密。这就得到分辨率完备的 RDT。</p>
+<p><b>设计好的运动基元</b>：到目前为止只考虑了离散时间模型。它是最直接、最一般的，但往往还有好得多的运动基元可用。对某个特定系统，也许能离线设计出一族在没有障碍时很好的轨迹，把它们当作 RDT 构造里的运动基元；若可能，要仔细分析系统，利用它的特殊结构或已有的技术。对车辆的运动规划，可以利用对称性，从不同状态施加同样的基元：例如开直升机时，偏航角和具体位置（除非贴近地面）可能不重要，为一个偏航角和位置设计的一族轨迹对其它的也同样好用。更复杂的运动基元可能加重 LPM 的负担；某些情况下简单的控制律（如 PID）就可能表现很好。理想情况下 LPM 应当像一个好的转向方法，可以用第 15 章的方法得到。需要强调的是，RDT 解决问题的能力并不依赖这一点；但有优秀的运动基元和好的转向方法时，性能会大大提高——主要原因是这时微分约束的困难基本上被克服了（除了漂移的不利影响）。好的运动基元往往能改善实际性能，但也会加大保证分辨率完备性的难度。</p>
+
+<h3 id="s14-4-4">14.4.4 其它方法 <span class="en">Other Methods</span></h3>
+<p>第 5 章几乎任何其它方法都可以推广到微分约束。书中简要提到几种：</p>
+<ul>
+  <li><b>随机势场</b>：5.4.3 节的随机势场法很容易改造：不再朝任意方向移动以降低势值，而是施加并积分运动基元来降低它。例如离散时间模型下，对每个 \(u\in U_d\) 施加 \(\Delta t\)，选下一状态势值最低的那个作为下降的一步。没有这样的动作时可以尝试随机游走，但同样不能朝任意方向运动，可以改为选随机动作。主要问题：1) 设计好的势函数极具挑战；2) 随机动作产生的运动不一定像随机游走。15.1.2 节讨论的 <b>Lyapunov 函数</b>在有微分约束时是很好的势函数（但通常忽略障碍）。代替随机游走，也可以用 RDT 之类的规划方法逃离局部极小。</li>
+  <li><b>其它基于树的规划器</b>：很多基于树的规划器都可以推广到微分约束，例如 5.4.4 节的扩展空间规划器被推广到航天器的动力学规划。最近还提出了一种叫<b>路径引导细分树 path-directed subdivision tree</b> 的新方法：在 swath 里随机选点、施加随机动作，并用一个空间划分数据结构控制探索。</li>
+  <li><b>采样路线图规划器</b>：前面说过，除非 BVP 能高效求解，一般很难构造采样路线图。15.5 节的转向方法可以起这个作用。原则上 14.4 节的任何单查询方法都可以用，但构造路线图要调用它们很多次，可能太贵。</li>
+</ul>
+</section>
+
+<!-- ============================================================ 14.5 -->
+<section id="s14-5">
+<h2>14.5 微分约束下的反馈规划 <span class="en">Feedback Planning Under Differential Constraints</span></h2>
+<h3 id="s14-5-1">14.5.1 问题定义 <span class="en">Problem Definition</span></h3>
+<p>Formulation 14.1 假设不需要反馈：给定初始状态，解就是一条动作轨迹，积分后得到一条穿过 \(X_{free}\) 的时间参数化路径——这把 4.3.1 节的钢琴搬运工问题推广到了相空间和微分约束。现在假设需要反馈：原因可能是没有给定初始状态，或者由于扰动、系统模型误差，计划的执行不可预测（回忆 8.1 节的动机）。只需少量工作，第 8 章的反馈运动规划框架就能推广到微分约束。比较 Formulation 8.2 和 14.1，对 Formulation 8.2 做以下调整就得到微分约束下的反馈运动规划：</p>
+<ol>
+  <li>Formulation 8.2 里 \(X = \mathcal{C}_{free}\)，按定义自动去掉了 \(\mathcal{C}_{obs}\)；现在令 \(X\) 是任何 C-space 或相空间，并像 Formulation 8.2 那样定义 \(X_{obs}\)，得到 Formulation 14.1 里的 \(X_{free}\)。</li>
+  <li>Formulation 8.2 的状态转移方程是 \(\dot x = u\)，直接指定切空间 \(T_x(X)\) 里的速度；现在改用任何系统 \(\dot x = f(x,u)\)，于是 \(U(x)\) 不再是 \(T_x(X)\) 的子集。它仍然包括特殊的终止动作 \(u_T\)。</li>
+  <li>Formulation 14.1 里的 \(x_I\) 在反馈情形下去掉，以与 Formulation 8.2 一致。</li>
+  <li>反馈计划定义为函数 \(\pi : X_{free}\to U\)：对给定的 \(x\in X_{free}\) 给出动作 \(\pi(x)\)。把 \(\pi\) 与 \(f\) 复合，得到 \(T_x(X)\) 中的速度 \(\dot x = f(x,\pi(x))\)，所以 \(\pi\) 在 \(X_{free}\) 上定义了一个向量场。</li>
+</ol>
+<p>记 \(t_F\) 为施加 \(u_T\) 的时刻。可行规划和最优规划都可以用代价泛函定义：</p>
+<div class="eq">$$L(\tilde x_{t_F}, \tilde u_{t_F}) = \int_0^{t_F} l\big(x(t),u(t)\big)\,dt + l_F\big(x(t_F)\big), \tag{14.26}$$</div>
+<p>它和 8.4.1 节的完全一样。这样就指定了微分约束下的反馈运动规划问题。与第 8 章最重要的区别是 \(\dot x = u\) 换成了 \(\dot x = f(x,u)\)，于是可以用第 13 章复杂的微分模型。\(\pi\) 产生的向量场必须满足 \(\dot x = f(x,u)\) 施加的微分约束。8.4.4 节对允许的向量场加过简单的约束（速度上界或光滑性），但远不如第 13 章的模型严苛：例如 Dubins 车不允许倒车，而 8.4.4 节的约束允许朝任何方向运动。</p>
+
+<h3 id="s14-5-2">14.5.2 带插值的动态规划 <span class="en">Dynamic Programming with Interpolation</span></h3>
+<p>如 14.4 节所见，微分约束下的运动规划极具挑战，再要求反馈让问题更复杂。若 \(X_{obs} = \emptyset\)，可以用控制论里很多技术设计反馈计划（15.2.2 节）；很多情况下，设计反馈计划并不比计算开环轨迹难；但若 \(X_{obs}\ne\emptyset\)，反馈通常让问题难得多。幸好，动态规划再一次前来救场。2.3 节的值迭代为离散状态空间和状态转移方程给出了反馈计划；值得注意的是，这个想法可以推广到 \(U\) 和 \(X\) 连续、阶段也是连续统（称为时间）的情形。这里需要的大部分工具已经在 8.5.2 节介绍过：用插值表示最优 cost-to-go \(G^*\)，用离散时间近似运动规划问题。</p>
+<p>14.2.2 节的离散时间模型可以用来得到形如 \(x_{k+1} = f_d(x_k,u_k)\) 的离散阶段状态转移方程；代价泛函按 8.5.2 节用 (8.65) 近似。这个积分可以用系统模拟器的结果数值计算，得到每阶段代价 \(l_d(x_k,u_k)\)。用反向值迭代，动态规划递推是</p>
+<div class="eq">$$G^*_k(x_k) = \min_{u_k\in U_d}\Big\{ l_d(x_k,u_k) + G^*_{k+1}(x_{k+1}) \Big\}, \tag{14.27}$$</div>
+<p>与 (2.11) 和 (8.56) 类似。若 \(U\) 本来不是有限的，就用有限的动作样本集 \(U_d\)。用系统模拟器判断沿轨迹的某些点是否在 \(X_{obs}\) 里；在的话 \(l_d(x_k,u_k) = \infty\)，这就阻止选择违反约束的动作。</p>
+<p>和 8.5.2 节一样，用一组样本 \(P\subset X\) 在 \(X\) 上近似 \(G^*\)，\(X\setminus P\) 中点处需要的值由插值得到。例如可以用图 8.20 的重心细分方案，在单纯形上以 \(O(n\lg n)\) 的时间插值，\(n\) 是 \(X\) 的维数。照例，反向值迭代从某个终止阶段 \(F\) 开始，沿阶段号反向进行；所有 cost-to-go 值稳定后终止。终止阶段 \(F\) 的初始化是：\(x\in X_G\cap P\) 时 \(G^*_F(x) = 0\)，否则 \(G^*_F(x) = \infty\)。之后每轮迭代对每个 \(x\in P\) 计算 (14.27)，用插值求 \(G^*_{k+1}(x_{k+1})\)。</p>
+<p>得到的平稳 cost-to-go 函数 \(G^*\) 可以作为 \(X_{free}\) 上的导航函数（8.5.2 节）；回忆第 8 章，用一个局部算子就能把导航函数变成反馈计划。这里的局部算子是</p>
+<div class="eq">$$\pi(x) = \operatorname*{argmin}_{u\in U_d}\Big\{ l_d(x,u) + G^*\big(f_d(x,u)\big) \Big\}, \tag{14.28}$$</div>
+<p>它对 \(X_{free}\) 中任何落进 \(P\) 中样本的插值邻域的状态都给出一个动作。</p>
+
+<div class="widget wide" data-widget="vi-interp"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>点「迭代到收敛」（约 80 轮），再点相平面里的 (2, 0)：插值得到的 G* ≈ 2.92，而<b>补充</b>的精确最短时间 T* = 2√2 ≈ 2.83（目标是半径 0.12 的小圆，所以略有差别；参考代码第 12 项）。</li>
+  <li>打开障碍：障碍左边、向右速度大的一片变成红色（G* = ∞）——那就是 \(X_{ric}\)；例如 (0.5, 1.5) 刹车要 1.125，来不及。</li>
+  <li>把每轴样本数从 61 调到 21：G* 变粗糙，反馈轨迹在开关曲线附近抖动。</li>
+</ul></div>
+
+<p>可惜这里的方法只在几维的空间里有用。若 \(X = \mathcal{C}\)，可以用在例如 13.1.2 节的系统上；若考虑动力学，很多情况下维数太高，因为 \(X\) 的维数通常是 \(\mathcal{C}\) 的两倍：若 \(\mathcal{A}\) 是平面里的刚体，\(X\) 的维数是 6，已经处在实用的通常上限。</p>
+<p>把这里的动态规划和 14.4.1、14.4.2 节构造搜索图的方法比较很有意思：用 Dijkstra（时间最优时甚至广度优先）时，由动态规划原理，得到的解近似最优；为了保证收敛，基于 \(f\) 的 Lipschitz 条件给出了分辨率完备性的论证——重要的是允许搜索失败时提高分辨率。值迭代不是计算搜索图，而是计算 cost-to-go 函数。就像树方法有前向和反向版本，值迭代也有前向和反向两种。分辨率完备性在这里更难，因为 \(x_I\) 不固定，所以不知道某个分辨率对要用的应用是否足够好；若 \(x_I\) 已知，可以用 \(G^*\) 和系统模拟器从 \(x_I\) 生成轨迹，若到不了 \(X_G\)，就给 \(P\) 和 \(U_d\) 加样本或缩小 \(\Delta t\) 来提高分辨率。在 \(f\) 的 Lipschitz 条件下，这种方法收敛到真正的最优 cost-to-go，所以值迭代对给定的 \(x_I\) 可以看作分辨率完备的。收敛性甚至推广到计算带自然动作（以非确定性或概率方式建模）的最优反馈计划，这推广了 10.6 节的值迭代。</p>
+<p>构造值迭代的类 Dijkstra 版本（8.5.2 节末尾），能让基于搜索图的方法和基于值迭代的方法更接近。它们推广了 2.3.3 节为有限情形看作值迭代改进的 Dijkstra 算法：改进来自于认识到 (14.27) 的大多数计算中，cost-to-go 并不改变，原因有二：1) 从某些状态出发还没找到通向 \(X_G\) 的轨迹，cost-to-go 仍然是无穷；2) 某些状态的最优 cost-to-go 可能已经算出来，后续迭代不会再改进。</p>
+<p>可以做前向或反向的类 Dijkstra 算法；以反向为例。8.5.2 节用<b>反向投影 backprojection</b> 刻画在一个阶段内能到达另一组状态的状态集合，(8.68) 用它在类 Dijkstra 算法执行中定义<b>前沿 frontier</b>。处理 \(\dot x = f(x,u)\) 本质上没有区别：做了离散时间近似之后，反向投影的定义就和 8.5.2 节的 (8.66) 基本一样。用 14.2.2 节的离散时间模型，状态 \(x\in X_{free}\) 的反向投影是</p>
+<div class="eq">$$B(x) = \{x'\in X_{free} \mid \exists\, u\in U_d \text{ 使得 } x = f_d(x',u)\}. \tag{14.29}$$</div>
+<p>它和 14.2.1 节的反向时间受限可达集密切相关：可以看作那个集合离散的、单阶段的版本——施加一个常值动作 \(u\in U_d\) 走 \(\Delta t\) 能到达 \(x\) 的状态。如 8.5.2 节所说，实践中算前沿集的一个超集可能更好；这可以通过近似反向投影得到，而微分约束下的反向投影一般比 8.5.2 节的情形复杂。一个有用的简化是定义 \(B(x)\) 时忽略与障碍的碰撞；也可以用真正反向投影的简单包围体。权衡和碰撞检测里的类似（5.3.2 节）。有时系统的特殊结构对确定反向投影大有帮助：例如对双积分器可以得到很好的波前传播算法（14.6.3 节用到了这一点）。</p>
+</section>
+
+<!-- ============================================================ 14.6 -->
+<section id="s14-6">
+<h2>14.6 解耦的规划方法 <span class="en">Decoupled Planning Approaches</span></h2>
+<h3 id="s14-6-1">14.6.1 拆分大问题的不同方式 <span class="en">Different Ways to Decouple the Big Problem</span></h3>
+<p>随着计算能力提高，采样算法不断改进，直接求解微分约束下有挑战性的规划问题在实践中越来越可行。但仍有很多情况下，由于昂贵的数值积分、碰撞检测、高维状态空间中复杂的障碍，计算这样的解太贵。<b>解耦</b>方法把大问题拆成各自更容易解的模块，因而有吸引力。钢琴搬运工问题的变体里已经见过这类方法：7.1.3 节对时变障碍用速度调节，7.2.2 节用解耦的方法协调多个机器人。</p>
+<p>理想情况下，我们希望在有障碍和微分约束时，得到定义在任何状态上的反馈计划——这假设执行时状态能可靠地测出。14.5 节给出了解这个问题最好的通用技术，可惜只限于几维。若有显著的感知不确定性，反馈计划就要定义在信息空间上（第 11 章）。回到 1.4 节，图 1.19 展示了一种流行的模型：把大规划问题拆成一串细化。典型的解耦方法有四个模块：</p>
+<ol>
+  <li>用运动规划算法找一条无碰路径 \(\tau:[0,1]\to\mathcal{C}_{free}\)。</li>
+  <li>把 \(\tau\) 变换成新路径 \(\tau'\)，使 \(\mathcal{C}\) 上的速度约束（若有）得到满足。例如这可能保证 Dubins 车能真正沿路径走；至少大多数情况下需要做些路径平滑。</li>
+  <li>为 \(\tau'\) 计算一个时间函数 \(\sigma:[0,t_F]\to[0,1]\)，使 \(\tau'\circ\sigma\) 是穿过 \(\mathcal{C}_{free}\) 的时间参数化路径，并满足：在施加 \(u_T\) 的时刻 \(t_F\) 之前，状态轨迹 \(\tilde x\) 必须始终满足 \(\dot x = f(x(t),u(t))\) 和 \(u(t)\in U(x(t))\)。</li>
+  <li>设计一个跟踪 \(\tilde x\) 的反馈计划（反馈控制律）\(\pi : X\to U\)，执行中尽量减小期望状态与测量状态之间的误差。</li>
+</ol>
+<p>鉴于最近的技术和计算能力，这种方法的重要性可能有所下降；但它仍然是分解和求解问题的重要方式。要注意这种分解是任意的：若每个模块都能解，对产生一个解是充分的，但这样的分解并不必要。<b>每一步都可能因为前面模块的糟糕选择而丢失完备性</b>，而一个模块往往很难考虑到后面才会出现的问题。</p>
+<p>合并模块的方式也有很多种。14.4 节的方法要么：1) 同时解前两个模块——找满足 \(\dot q = f(q,u)\) 的穿过 \(\mathcal{C}_{free}\) 的路径；要么 2) 同时解前三个模块——找满足 \(\dot x = f(x,u)\) 的穿过 \(X_{free}\) 的路径。14.5 节同时解了四个模块，但只限于低维状态空间。若保持模块分开：第 II 部分的规划方法可以解第一个模块；14.6.2 节讲实现第二个模块的方法；14.6.3 节讲解第三个模块（可能同时解第二个）的方法；第四个模块是在大量控制论教材里研究透了的控制问题。</p>
+
+<h3 id="s14-6-2">14.6.2 先规划、再变换 <span class="en">Plan and Transform</span></h3>
+<p>本节的解耦方法假设 \(X = \mathcal{C}\)，即只有 13.1 节那样的速度约束；可以写成 \(\dot q = f(q,u)\)，也可以隐式地写成一组约束 \(g_i(q,\dot q) = 0\)。这里的想法很容易推广到相空间。这个方法主要由 Laumond 等人提出，并用于 13.1.2 节的简单车。</p>
+<div class="box algo">
+  <div class="box-title">图 14.21　PLAN-AND-TRANSFORM APPROACH</div>
+  <ol style="margin:0">
+    <li>用运动规划算法（如第 II 部分的方法）计算一条路径 \(\tau:[0,1]\to\mathcal{C}_{free}\)。</li>
+    <li>选一些 \(s_1, s_2\in[0,1]\)，\(s_1 < s_2\)，用 LPM 尝试把 \(\tau\) 从 \(\tau(s_1)\) 到 \(\tau(s_2)\) 的部分换成一条满足微分约束的路径 \(\gamma\)。</li>
+    <li>若 \(\tau\) 现在在整个 \([0,1]\) 上都满足微分约束，算法终止；否则回到第 2 步。</li>
+  </ol>
+</div>
+<p>第一步忽略微分约束，算一条无碰路径 \(\tau\)；然后迭代修改，直到它满足约束。每次迭代通过指定 \(s_1 < s_2\) 选一个子区间 \([s_1,s_2]\subseteq[0,1]\)；这些点可以用随机序列选，也可以确定性地选；可以用二分细化区间，在迭代中逐步提高 \([0,1]\) 上的分辨率。对每个选中的区间，用 LPM 算一条路径段 \(\gamma:[0,1]\to\mathcal{C}_{free}\)，满足 \(\gamma(0) = \tau(s_1)\)、\(\gamma(1) = \tau(s_2)\)。LPM 可能因为连不上两个位形、或发生碰撞而失败，这时换一个子区间重来。每次 LPM 成功，就把 \(\tau\) 更新为</p>
+<div class="eq">$$\tau'(s) = \begin{cases} \tau(s) & s < s_1 \\ \gamma\big((s-s_1)/(s_2-s_1)\big) & s\in[s_1,s_2] \\ \tau(s) & s > s_2. \end{cases} \tag{14.30}$$</div>
+<p>\(\gamma\) 的自变量做了重新参数化，让它从 \(s_1\) 跑到 \(s_2\)，而不是从 0 到 1。</p>
+<p><b>例 14.5（Dubins 车的先规划再变换）</b>：具体地，设任务是为 Dubins 车规划路径。图 14.22 是一条忽略微分约束的运动规划算法可能算出的路径 \(\tau\)：两个尖角车走不过去。设随机选出的 \(s_1\)、\(s_2\) 落在图示位置，\(\tau\) 在 \(\tau(s_1)\) 与 \(\tau(s_2)\) 之间的部分要换成 Dubins 车能走的路径。注意两端的朝向要对上，因为它们是位形的一部分。图 14.23 是一条替换路径 \(\gamma\)，由下面的 LPM 得到：对 Dubins 车，任何两个位形之间都能找到一条路径——在起止位形处画出最左转和最右转对应的圆（最小转弯半径），找一条与每个位形的一个圆相切、并且顺着车的行驶方向的直线（圆就像<b>单行道</b>）。用 \(\gamma\) 更新 \(\tau\) 得到 \(\tau'\)（图 14.24），它满足 Dubins 车的微分约束。这个问题非常简单，实践中可能要几十次迭代才能替换完所有路径段；若用随机化，区间 \([0,s]\) 和 \([s,1]\) 不能被忽略。</p>
+
+<div class="widget wide" data-widget="plan-transform"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>点「一步」：每次随机选 s₁ &lt; s₂，在两端画出四个最小转弯圆（虚线），找公切线；绿色 = 换上了，红色 = 撞了、这次作废。</li>
+  <li>把 ρ_min 调大，或把折点拖到障碍旁：替换段越来越难无碰，迭代次数上升，甚至永远消不掉最后一个折角。</li>
+  <li>图 14.23 的 LPM 只用 CSC（圆–直线–圆）这四种字，不一定最短；<b>补充</b>：2000 个随机问题里有 310 个 CSC 比 Dubins 最优路径长，最多长 2.4 倍（参考代码第 13 项）。</li>
+</ul></div>
+
+<p>例 14.5 看起来简单，是因为有一个简单的局部规划器，也没有障碍。设想 \(\tau\) 穿过一条狭窄的之字形走廊：这时可能根本没有解，因为有 Dubins 车转不过去的尖角。若有一个障碍恰好和图 14.24 里的那个环相交，替换就会失败。一般而言不能保证替换段无碰。LPM 构造的路径段应当尽量贴近原路径；对 Dubins 车很多情况下做不到：例如让 Dubins 车往后挪一小段距离，需要沿图 14.23 那样的圆走；即使两个位形之间的距离减小，车需要走的距离也不会趋于零——即使用最短路径也是如此。</p>
+<p>LPM 应当有什么性质，才能保证先规划再变换的方法分辨率完备？有一个充分条件：记 \(\rho\) 为 \(X\) 上的度量。称 LPM 满足<b>拓扑性质 topological property</b>，当且仅当：对任何 \(\epsilon > 0\)，存在某个 \(\delta > 0\)，使得对任何满足 \(\rho(q,q') < \delta\) 的一对 \(q, q'\in\mathcal{C}_{free}\)，LPM 给出的路径 \(\tau\) 对所有 \(s\in[0,1]\) 都满足 \(\rho(\tau(s),q) < \epsilon\)。若 LPM 满足拓扑性质，任何穿过 \(\mathcal{C}_{free}\) 的无碰路径都能变换成满足微分约束的路径：设路径 \(\tau\) 在 \(\mathcal{C}_{free}\) 里至少有 \(\epsilon\) 的间隙，把 \(\tau\) 的定义域分成若干区间，使每个区间上 \(q\) 的变化不超过 \(\delta\)，LPM 就会给出用于替换的无碰路径段。</p>
+<p>结果表明，对（能倒车的）Reeds–Shepp 车可以设计这样的 LPM，因为它是<b>小时间局部可控</b>的——这个性质在 15.1.3、15.4 节讨论。一般而言，第 15 章的很多技术可能有助于分析和设计有效的 LPM。</p>
+<p>先规划再变换还有一个有意思的改编，用于有 \(k\) 个形如 \(g_i(q,\dot q) = 0\) 的隐式约束的问题——<b>多层方法 multi-level approach</b>（图 14.25；另有类似的方法）。想法是把 \(k\) 个约束排成一个序列，一次引入一个：起初规划一条忽略约束的路径；先把它变换成满足 \(g_1(q,\dot q) = 0\) 且（用图 14.21 的先规划再变换方法）避开碰撞的路径；若成功，再把结果变换成无碰、且同时满足 \(g_1 = 0\) 和 \(g_2 = 0\) 的路径；如此每次加一个约束，直到方法失败或 \(k\) 个约束全部考虑进去。</p>
+<div class="box algo">
+  <div class="box-title">图 14.25　MULTI-LEVEL APPROACH：一次考虑一个隐式约束</div>
+  <ol style="margin:0">
+    <li>用标准运动规划算法（如第 II 部分）计算路径 \(\tau:[0,1]\to\mathcal{C}_{free}\)，令 \(i = 1\)。</li>
+    <li>把 \(\tau\) 变换成对所有 \(j = 1,\ldots,i\) 都满足 \(g_j(q,\dot q) = 0\) 的无碰路径。</li>
+    <li>若第 2 步变换失败，终止并报告失败。</li>
+    <li>若 \(i < k\)（隐式速度约束的个数），令 \(i\) 加一并回到第 2 步；否则终止，报告 \(\tau\) 是满足所有约束的路径。</li>
+  </ol>
+</div>
+
+<h3 id="s14-6-3">14.6.3 路径约束轨迹规划 <span class="en">Path-Constrained Trajectory Planning</span></h3>
+<p>本节假设已经给定一条路径 \(\tau:[0,1]\to\mathcal{C}_{free}\)：可能由第 II 部分的运动规划算法算出，也可能是手工给的。剩下的任务是确定沿路径的速度，使相空间 \(X\) 上的微分约束得到满足。设每个状态 \(x\in X\) 表示位形和它的时间导数，\(x = (q,\dot q)\)；记 \(n\) 为 \(\mathcal{C}\) 的维数，\(X\) 的维数就是 \(2n\)。给定路径后，\(X\) 里只剩下两个自由度：1) \(\tau\) 定义域里的位置 \(s\in[0,1]\)，2) 每个 \(s\) 处的速率 \(\dot s = ds/dt\)。完整的状态 \(x\) 可以由这两个参数恢复。状态变化时必须满足给定的系统 \(\dot x = f(x,u)\)。下面会看到，这产生一个二维规划问题，可以用很多种技术高效地解。7.1 节的时变运动规划的解耦版本里出现过类似的概念；本节的介绍受几十年前机械臂路径时间缩放工作的启发——那时计算机慢得多，这推动了强解耦方法的发展。</p>
+<h4>用 \(s\)、\(\dot s\)、\(\ddot s\) 表示系统</h4>
+<p>设系统形如</p>
+<div class="eq">$$\ddot q = h(q,\dot q,u), \tag{14.31}$$</div>
+<p>有 \(n\) 个动作变量 \(u = (u_1,\ldots,u_n)\)。先瞥一眼例 14.6 可能有帮助，它用简单的双积分器 \(\ddot q = u\) 说明后面的概念。\(\mathcal{C}\) 中的加速度由状态 \(x = (q,\dot q)\) 和动作 \(u\) 决定。设 \(u\in U\)，\(U\) 是 \(\mathbb{R}^n\) 的 \(n\) 维子集；若 \(h\) 非奇异，选 \(u\in U\) 会产生 \(n\) 维的可能加速度集合——也就是说它是完全驱动的。若动作变量少于 \(n\) 个，一般没有足够的自由度沿指定路径走，所以 \(U\) 必须是 \(n\) 维的。那么哪些 \(u\) 会约束运动沿给定路径 \(\tau\) 走？为此要把 \(q\)、\(\dot q\)、\(\ddot q\) 和路径定义域 \(s\) 及其一、二阶时间导数 \(\dot s\)、\(\ddot s\) 联系起来，这会得到 \(U\) 中对应沿路径走的动作的子集。</p>
+<p>设给定 \(s\)、\(\dot s\)、\(\ddot s\) 和路径 \(\tau\)。位形 \(q\in\mathcal{C}_{free}\) 是</p>
+<div class="eq">$$q = \tau(s). \tag{14.32}$$</div>
+<p>设 \(\tau\) 的一、二阶导数都存在。由链式法则，速度 \(\dot q\) 是</p>
+<div class="eq">$$\dot q = \frac{d\tau}{ds}\frac{ds}{dt} = \frac{d\tau}{ds}\,\dot s, \tag{14.33}$$</div>
+<p>其中导数 \(d\tau/ds\) 在 \(s\) 处取值。再求一次导数，由乘积法则得到加速度</p>
+<div class="eq">$$\ddot q = \frac{d}{dt}\Big(\frac{d\tau}{ds}\dot s\Big) = \frac{d^2\tau}{ds^2}\frac{ds}{dt}\dot s + \frac{d\tau}{ds}\ddot s = \frac{d^2\tau}{ds^2}\dot s^2 + \frac{d\tau}{ds}\ddot s. \tag{14.34}$$</div>
+<p>完整的状态 \(x = (q,\dot q)\) 可以由 \((s,\dot s)\) 用 (14.32)(14.33) 恢复。下一步是得到一个看起来像 (14.31)、但用 \(s\)、\(\dot s\)、\(\ddot s\) 表示的方程：把 \(h(q,\dot q,u)\) 中的 \(q\) 换成 \(\tau(s)\)、\(\dot q\) 换成 (14.33) 的右边，得到函数 \(h'(s,\dot s,u)\)：</p>
+<div class="eq">$$h'(s,\dot s,u) = h\Big(\tau(s),\ \frac{d\tau}{ds}\dot s,\ u\Big). \tag{14.35}$$</div>
+<p>于是</p>
+<div class="eq">$$\ddot q = h'(s,\dot s,u). \tag{14.36}$$</div>
+<p>对给定的状态 \(x\)（可以由 \(s\)、\(\dot s\) 得到），选 (14.36) 中的 \(u\) 能得到的加速度集合与原系统 (14.31) 一样；唯一的区别是 \(x\) 现在被限制在 \(X\) 的一个二维子集上——选 \(s\)、\(\dot s\) 能到达的那些状态。把 (14.34) 代入 (14.36) 的左边，约束加速度使运动沿 \(\tau\) 走：</p>
+<div class="eq">$$\frac{d^2\tau}{ds^2}\dot s^2 + \frac{d\tau}{ds}\ddot s = h'(s,\dot s,u), \tag{14.37}$$</div>
+<p>也可以写成</p>
+<div class="eq">$$\frac{d\tau}{ds}\ddot s = h'(s,\dot s,u) - \frac{d^2\tau}{ds^2}\dot s^2, \tag{14.38}$$</div>
+<p>就是把 (14.34) 的第一项移到右边。注意 (14.38) 实际上表示 \(n\) 个方程。对每个满足 \(d\tau_i/ds\ne0\) 的 \(i\)，解出 \(\ddot s\) 得到形如</p>
+<div class="eq">$$\ddot s = \frac{1}{d\tau_i/ds}\Big( h'_i(s,\dot s,u_i) - \frac{d^2\tau_i}{ds^2}\dot s^2 \Big) \tag{14.39}$$</div>
+<p>的约束<sup class="fn"><a href="#fn-1439" id="fn-1439-ref">6</a></sup>。</p>
+<h4>确定允许的加速度 <span class="en">Determining the allowable accelerations</span></h4>
+<p>现在可以刻画 \(U\) 中让 \(\tau\) 被跟随的动作：\(u\in U\) 跟随 \(\tau\)，当且仅当每个形如 (14.39) 的方程都满足。若对所有 \(i = 1,\ldots,n\) 都有 \(d\tau_i/ds\ne0\)，就有 \(n\) 个这样的方程。设选定 \(u_1\)，由第一个方程解出 \(\ddot s\)；把求得的 \(\ddot s\) 代入其余 \(n-1\) 个方程，就能得到其余动作变量 \(u_2,\ldots,u_n\) 所需的值。这意味着跟随 \(\tau\) 的动作至多是 \(U\) 的一个一维子集。</p>
+<p>若某个 \(i\) 有 \(d\tau_i/ds = 0\)，跟随路径就要求 \(\dot q_i = 0\)；这时 (14.39) 不能用，约束变成 \(h_i(q,\dot q,u) = 0\)，例 14.6 会给出一个简单的说明。若对所有 \(i\) 都有 \(d\tau_i/ds = 0\)，位形根本不允许改变——这只出现在 \(\tau\) 是常值函数这种退化（也没用）的情形。</p>
+<p>很多情况下，不存在满足所有约束方程的 \(u\)，这意味着在那个状态上路径无法被跟随。这样的状态应当尽可能通过在 \(X\) 上定义相约束去掉。路径 \(\tau\) 选得不好，违反这类相约束可能不可避免：可能存在某些 \(s\)，无论 \(\dot s\) 是多少，都没有 \(u\in U\) 能跟随 \(\tau\)。</p>
+<p>即使某条状态轨迹在某种意义下是最优的，它的最优性最终也取决于给定的路径 \(\tau\)。考虑图 14.26 的路径：在 \(\tau(1/3)\) 有一个「尖角」，这违反了可微性假设，要停留在 \(\tau\) 上就需要无穷大的加速度。对某些模型，可以在 \(\tau(1/3)\) 停下再出发：例如平面里的漂浮质点，可以减速到恰好停在 \(\tau(1/3)\)，再朝新的方向出发、精确地沿曲线走——这假设质点是完全驱动的。若 \(\mathcal{C}\) 上有非完整约束（例如 Dubins 车），给定的路径至少要先满足它们，才谈得上考虑加速度；这时的解取决于<b>解耦向量场 decoupling vector fields</b> 的存在。一般最好把运动规划算法构造 \(\tau\) 时可能产生的尖角磨圆；这有帮助，但仍不能完全解决问题：路径在 \(\tau(2/3)\) 附近曲率很大，同样不理想——速度固定时，急弯一般需要更大的加速度，速度可能只好降下来，只因为 \(\tau\) 草率地要求在 \(\mathcal{C}\) 里急转弯。想象开发一辆自主的双层观光巴士：沿 \(\tau(2/3)\) 附近的曲线高速行驶显然可能让巴士侧翻；它只能减速，因为它是这条路径选择的奴隶。</p>
+
+<div class="widget wide" data-widget="path-accel"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>「直线」：不管 ṡ 多大，蓝线都过原点，允许区间都是 [−0.25, 0.25]——方向 τ′ = (4, 2)，由 |4| 决定（例 14.6；参考代码第 10 项）。</li>
+  <li>「四分之一圆」：s = 0.5、ṡ 从 0 往上拖，绿段越来越短，ṡ ≈ 0.535 时消失（\(\dot s^2 L^2 = \sqrt2 R\)，参考代码第 11 项）。</li>
+  <li>「发夹弯」s = 0.5（弯尖）：这里 dτ₁/ds = 0，只剩约束 |τ₁″ṡ²| ≤ 1——蓝线是竖的，只要 ṡ 稍大就整条落到正方形外。</li>
+</ul></div>
+
+<h4>路径约束相平面 <span class="en">The path-constrained phase space</span></h4>
+<p>回忆 14.4.1 节：形如 \(\ddot q = h(q,\dot q,u)\) 的系统可以写成 \(\ddot q = u'\)，\(u'\in U'(q,\dot q)\)（图 14.15），从而把很多系统想象成带相依动作空间约束的多个独立双积分器。同样的想法这里可以用来得到<b>一个</b>双积分器。记 \(S\) 为二维的<b>路径约束相空间 path-constrained phase space</b>，每个元素形如 \((s,\dot s)\)，表示沿 \(\tau\) 的位置和速度；它参数化了原相空间 \(X\) 的一个二维子集，每个原状态向量是 \(x = (q,\dot q) = (\tau(s), d\tau/ds\,\dot s)\)。\(S\) 中各点可能有哪些加速度？在每个 \((s,\dot s)\) 处，可以确定 \(U\) 中满足 (14.39) 型方程的子集，每个有效动作给出一个加速度 \(\ddot s\)。记 \(U'(s,\dot s)\subseteq\mathbb{R}\) 为由满足 (14.39)（对每个 \(i\)，\(d\tau_i/ds = 0\) 的除外）的 \(u\in U\) 能得到的所有 \(\ddot s\) 值。于是系统可以写成 \(\ddot s = u'\)，\(u'\in U'(s,\dot s)\)。做了这么多工作，终于得到了<b>双积分器</b>。主要的麻烦是对某些系统 \(U'(s,\dot s)\) 可能很难确定：它可能是一个区间、几个不相交的区间，甚至是空集。假设已经刻画了 \(U'(s,\dot s)\)，剩下的规划问题用本章已有的技术就能直接求解。一个双积分器不太有挑战性，所以存在高效的采样算法。</p>
+<p>下面考虑障碍区域 \(S_{obs}\subset S\)。它包括所有<b>不</b>属于 \(X_{free}\) 的状态<sup class="fn"><a href="#fn-sobs" id="fn-sobs-ref">7</a></sup>：给定 \(s\) 和 \(\dot s\)，可以算出状态 \(x\)，判断 \(X\) 上的约束是否被违反。通常 \(\tau\) 本来就构造成避开障碍碰撞，但也可能还有一些相约束。\(S_{obs}\) 还包括所有 \(U'(s,\dot s)\) 为空的点 \((s,\dot s)\)。记 \(S_{free} = S\setminus S_{obs}\)。</p>
+<p><b>例 14.6（路径约束下的双积分器）</b>：考虑两个双积分器，物理上可以对应一个在 \(\mathbb{R}^2\) 中运动的质点，于是 \(\mathcal{C} = \mathcal{W} = \mathbb{R}^2\)。令 \(U = [-1,1]^2\)，\(\ddot q = u\)，\(u\in U\)。选路径 \(\tau\) 迫使质点沿一条直线运动。对线性路径，\(d\tau/ds\) 是常数、\(d^2\tau/ds^2 = 0\)；利用这些和 \(h'(s,\dot s,u) = u\)，(14.39) 化简为</p>
+<div class="eq">$$\ddot s = \frac{u_i}{d\tau_i/ds}, \tag{14.40}$$</div>
+<p>\(i = 1, 2\)。设 \(\tau(s) = (s,s)\)，即质点必须沿过 \(\mathcal{C}\) 原点的对角线运动；(14.40) 进一步化为 \(\ddot s = u_1\) 和 \(\ddot s = u_2\)。所以任何 \(u_1\in[-1,1]\) 都可以选，但 \(u_2\) 必须取 \(u_2 = u_1\)。受约束的系统可以写成一个双积分器 \(\ddot s = u'\)，\(u'\in[-1,1]\)，\(u_1\)、\(u_2\) 都由 \(u'\) 导出：\(u_1 = u_2 = u'\)。注意 \(U'\) 不随 \(S\) 变化——这是因为线性路径是退化的。</p>
+<p>现在把运动约束在一条一般的直线上：</p>
+<div class="eq">$$\tau(s) = (a_1 s + b_1,\ a_2 s + b_2), \tag{14.41}$$</div>
+<p>其中 \(a_1\)、\(a_2\) 非零。这时 (14.40) 给出 \(\ddot s = u_1/a_1\) 和 \(\ddot s = u_2/a_2\)。每个 \(u_i\in[-1,1]\)，所以每个方程表明 \(\ddot s\in[-1/a_i, 1/a_i]\)（\(a_i < 0\) 时理解为 \([-1/|a_i|, 1/|a_i|]\)）。加速度必须落在两个区间的交里。若 \(|a_1|\ge|a_2|\)，则 \(\ddot s\in[-1/a_1, 1/a_1]\)，可以取 \(u' = u_1\)、令 \(u_2 = u'a_2/a_1\)。若 \(|a_1| < |a_2|\)<sup class="fn"><a href="#fn-a1a2" id="fn-a1a2-ref">8</a></sup>，则 \(\ddot s\in[-1/a_2, 1/a_2]\)，\(u' = u_2\)，\(u_1 = u'a_1/a_2\)。</p>
+<p>设 \(a_1 = 0\)、\(a_2\ne0\)，路径是</p>
+<div class="eq">$$\tau(s) = (q_1,\ a_2 s + b_2), \tag{14.42}$$</div>
+<p>\(q_1\) 固定，质点被限制在 \(\mathcal{C} = \mathbb{R}^2\) 中一条竖直线上运动。这时 (14.40) 只给出一个约束 \(\ddot s = u_2\)；但 \(u_1\) 被独立地约束为 \(u_1 = 0\)，因为禁止水平运动。若 \(n\) 个独立的双积分器被约束在一条直线上，结论类似：有 \(n\) 个形如 (14.40) 的方程，\(|a_i|\) 最大的那个 \(i\in\{1,\ldots,n\}\) 决定加速度范围 \(\ddot s\in[-1/a_i, 1/a_i]\)；动作 \(u'\) 定义为 \(u' = u_i\)，其余 \(u_j\)（\(j\ne i\)）由剩下的 \(n-1\) 个方程得到。</p>
+<p>现在设 \(\tau\) 是非线性的，(14.39) 变成</p>
+<div class="eq">$$\ddot s = \frac{u_i - \dfrac{d^2\tau_i}{ds^2}\dot s^2}{d\tau_i/ds}, \tag{14.43}$$</div>
+<p>对每个满足 \(d\tau_i/ds\ne0\) 的 \(i\)（原书印刷的形式见脚注 6）。现在集合 \(U'(s,\dot s)\) 在 \(S\) 上变化。速度 \(\dot s\) 越大，\(U'(s,\dot s)\) 越不可能非空；换句话说，所有形如 (14.43) 的方程越不可能有解。对物理系统，这意味着留在路径上需要转弯转得太急：高速时可能需要落在 \([-1,1]^n\) 之外的加速度 \(\ddot q\)。■</p>
+<p>同样的想法可以用在复杂得多的系统上。这并不奇怪：14.4.1 节里，形如 \(\ddot q = h(q,\dot q,u)\) 的系统被解释为多个独立的双积分器 \(\ddot q = u'\)，\(u'\in U'(q,\dot q)\) 给出可能的加速度。在这种解释下，并结合例 14.6，把一般系统的运动约束在路径 \(\tau\) 上只是进一步限制 \(U'(q,\dot q)\)，得到的允许加速度集合至多是一维的。</p>
+<p><b>例 14.7（路径约束下的机械臂）</b>：设系统由 13.4.2 节的 (13.142) 描述，这是几十年来控制机械臂常用的形式。形如 (14.39) 的约束可以把 \(q\)、\(\dot q\)、\(\ddot q\) 用 \(s\)、\(\dot s\)、\(\ddot s\) 表示得到，需要 (14.32)(14.33)(14.34)。直接代入 (13.142) 得到</p>
+<div class="eq">$$M(\tau(s))\Big(\frac{d^2\tau}{ds^2}\dot s^2 + \frac{d\tau}{ds}\ddot s\Big) + C\Big(\tau(s), \frac{d\tau}{ds}\dot s\Big)\frac{d\tau}{ds}\dot s + g(\tau(s)) = u. \tag{14.44}$$</div>
+<p>它可以化简成 \(n\) 个形如</p>
+<div class="eq">$$\alpha_i(s)\ddot s + \beta_i(s)\dot s^2 + \gamma_i(s) = u_i \tag{14.45}$$</div>
+<p>的方程<sup class="fn"><a href="#fn-1445" id="fn-1445-ref">9</a></sup>。对每个方程解 \(\ddot s\) 得到 (14.39) 的一个特例。和例 14.6 一样，每个方程决定 \(\ddot s\) 的一个界区间，所有 \(n\) 个区间的交给出允许的 \(\ddot s\) 区间；动作 \(u'\) 同样表示区间里的加速度，原动作变量 \(u_i\) 由 (14.45) 得到。■</p>
+
+<h4>用动态规划求最优解 <span class="en">Computing optimal solutions via dynamic programming</span></h4>
+<p>把问题写成路径约束相空间 \(S\subset\mathbb{R}^2\) 上的问题之后，就可以用 14.5 节的带插值动态规划来解。\(\tau\) 的定义域给出约束 \(0\le s\le1\)。设只需要沿路径前进，不需要倒退——这意味着 \(\dot s > 0\)。为了让 \(S\) 有界，通常假设一个上界 \(\dot s_{max}\)，超过它就知道速度太高、跟不住路径。这就得到图 14.27a 的规划问题：系统是 \(\ddot s = u'\)，\(u'\in U'(s,\dot s)\)；初始相位是 \((0,\dot s_i)\)，目标相位是 \((1,\dot s_g)\)，通常 \(\dot s_i = \dot s_g = 0\)。图 14.27 的区域落在相空间第一象限，因为只允许 \(s\) 和 \(\dot s\) 取正值（图 14.13 里 \(q\) 和 \(\dot q\) 可正可负），所以所有运动都向右，动作决定是加速还是减速。</p>
+<p>离散 \(S\) 和 \(U'(s,\dot s)\) 后，很容易用带插值的反向值迭代。由于约束 \(\dot s > 0\)，做类 Dijkstra 版本也很直接；甚至可以做一个简单的波前传播：从 \(s = 1\) 开始，以竖直的波一列一列往回推进，直到 \(s = 0\)（图 14.27b）。反向投影 (14.29) 可以大大简化。设 \(s\) 轴离散成 \(m+1\) 个等间距的值 \(s_0,\ldots,s_m\)，间距为某个固定的 \(\Delta s > 0\)，于是 \(s_k = k\Delta s\)<sup class="fn"><a href="#fn-sk" id="fn-sk-ref">10</a></sup>。下标 \(k\) 可以理解为阶段。从 \(k = m\) 开始，若对应的相位代表目标，最终 cost-to-go \(G^*_m(s_m,\dot s_m)\) 定义为 0，否则为 \(\infty\)。在每个 \(s_k\) 处对 \(\dot s\) 采样，cost-to-go 函数用沿竖轴的一维线性插值表示。每个阶段在每个 \(\dot s\) 样本上做动态规划计算</p>
+<div class="eq">$$G^*_k(s_k,\dot s_k) = \min_{u'\in U'(s_k,\dot s_k)}\Big\{ l'_d(s_k,\dot s_k,u') + G^*_{k+1}(s_{k+1},\dot s_{k+1}) \Big\}, \tag{14.46}$$</div>
+<p>这是 (14.27) 的一种特殊形式。\(G^*_{k+1}(s_{k+1},\dot s_{k+1})\) 用离散 \(\dot s\) 值上的线性插值求。代价项 \(l'_d\) 由 \(l_d\) 得到：从 \(s\) 和 \(\dot s\) 算出原状态 \(x\in X\)；但若轨迹段进入 \(S_{obs}\)，代价为无穷。计算一直进行到阶段 \(k = 1\)，这时就算出了最优 cost-to-go \(G^*_1(s_1,\dot s_1)\)。最优轨迹用每个阶段的 cost-to-go 函数作为导航函数得到。</p>
+<p>动态规划方法通用到甚至可以推广到有更高阶约束的路径约束轨迹规划：例如系统给成 \(q^{(3)} = h(q,\dot q,\ddot q,u)\)，就得到三维的路径约束相空间，每个元素是 \((s,\dot s,\ddot s)\)，空间里的动作是加加速度 jerk，得到 \(s^{(3)} = u'\)，\(u'\in U'(s,\dot s,\ddot s)\)。</p>
+
+<h4>求时间最优的 bang-bang 方法 <span class="en">A bang-bang approach for time optimality</span></h4>
+<p>动态规划方法已经很高效了，因为搜索被限制在二维里。尽管如此，若 \(S_{obs}\) 有某种特殊结构，还能更高效地算出时间最优的轨迹。想法是找一个在两种运动基元之间交替的序列：一种是最大加速，一种是最大减速。这种在两个极端之间的切换常叫 <b>bang-bang 控制</b>，在推导时间最优控制律时经常出现（可以先看看例 15.4）。得到时间最优轨迹的一个缺点是：若执行时出现误差，它们无法被跟踪（14.6.1 节的第四个模块），因为解走在可达集的边界上。</p>
+<p>这种方法是为机械臂（例 14.7）开发的。设 \(S_{obs}\) 是单个连通分支，上面以 \(\dot s_{max}\) 为界，两侧以 \(s = 0\) 和 \(s = 1\) 为界；设 \(S\) 只因为允许的 \(\ddot s\) 区间消失（即 \(U'(s,\dot s)\) 变空）而产生 \(S_{obs}\)。还假设 \(S_{obs}\) 的下边界可以写成可微函数 \(\phi:[0,1]\to S\)，称为<b>极限曲线 limit curve</b>，对每个 \(s\in[0,1]\) 给出最大速度 \(\dot s = \phi(s)\)（方法可以推广到多个障碍，但这里不考虑）。假设对每个 \(i\) 都有 \(d\tau_i/ds\ne0\)；\(d\tau_i/ds = 0\) 的情形也可以处理。</p>
+<p>记 \(u'_{min}(s,\dot s)\)、\(u'_{max}(s,\dot s)\) 为 \((s,\dot s)\in S\) 处最小、最大可能的加速度。若 \((s,\dot s)\notin S_{obs}\)，则 \(u'_{min}(s,\dot s) < u'_{max}(s,\dot s)\)。在极限曲线上，\(u'_{min}(s,\phi(s)) = u'_{max}(s,\phi(s))\)；施加这时唯一可行的动作，得到的速度与极限曲线相切，这叫切点 \((s_{tan},\dot s_{tan})\)。在 \(S_{obs}\) 内部没有可能的加速度。bang-bang 方法见图 14.28，图 14.29 是它的图示。设初始相位和目标相位分别是 \((0,0)\) 和 \((1,0)\)。</p>
+<div class="box algo">
+  <div class="box-title">图 14.28　BANG-BANG APPROACH：比动态规划少得多的搜索就找到时间最优、路径约束的轨迹</div>
+  <ol style="margin:0">
+    <li>从终态 \((1,0)\) 出发，对 \(\ddot s = u'_{min}(s,\dot s)\) 做反向时间积分；数值地构造这条曲线，直到进入 \(S_{obs}\) 的内部或 \(\dot s = 0\)。后一种情形算法以失败终止。</li>
+    <li>令 \((s_{cur},\dot s_{cur}) = (0,0)\)。</li>
+    <li>从 \((s_{cur},\dot s_{cur})\) 对 \(\ddot s = u'_{max}(s,\dot s)\) 做前向积分，直到进入 \(S_{obs}\) 的内部，或越过第 1 步生成的曲线。后一种情形问题已解决。</li>
+    <li>从第 3 步的轨迹越过极限曲线的那一点开始，沿极限曲线向右找下一个切点 \((s_{tan},\dot s_{tan})\)。从 \((s_{tan},\dot s_{tan})\) 对 \(\ddot s = u'_{min}(s,\dot s)\) 做反向积分，直到碰到第 3 步的曲线。令 \((s_{cur},\dot s_{cur}) = (s_{tan},\dot s_{tan})\)，回到第 3 步。</li>
+  </ol>
+</div>
+<p>第 1 步实际上是通过构造一条终止于 \((1,0)\) 的最大减速曲线来扩大目标：碰到这条曲线的轨迹，切换到最大减速就能最优地到达 \((1,0)\)。第 3、4 步构造一条最大加速曲线、接着一条最大减速曲线：加速曲线一直延伸到刺穿极限曲线，这违反了约束，必须避免；所以要确定一条更早离开加速曲线、刚好擦过而不进入 \(S_{obs}\) 内部的减速曲线——这条曲线必须与极限曲线相切，所以沿极限曲线搜索下一个可能的切点，从那里用反向积分（第 4 步）生成接触加速曲线的减速曲线。这样就得到了解的一部分：先加速、再减速，到达 \(\phi\) 的一个切点。若碰到了连向目标的曲线，可能就到不了第 4 步。从切点出发，重复第 3、4 步，直到碰到目标曲线。</p>
+
+<div class="widget wide" data-widget="path-phase"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>「直线」：U′ 处处相同，只有一次切换（中点），时间 4.000——静止到静止走完「s̈ ≤ 1/4」的路程（参考代码第 11 项）。</li>
+  <li>「四分之一圆」：bang-bang 3.605，与补充的两遍法一致；切到「动态规划」，竖线越多（m 越大）越接近它。</li>
+  <li>「斜向波浪线」「发夹弯」：书中的简化步骤不够用，这里退回补充的两遍法并说明原因；看路径着色：越红的地方极限曲线越低，车必须越慢。点「沿路径播放」。</li>
+</ul></div>
+</section>
+
+<!-- ============================================================ 14.7 -->
+<section id="s14-7">
+<h2>14.7 基于梯度的轨迹优化 <span class="en">Gradient-Based Trajectory Optimization</span></h2>
+<p>本节简要概述运动规划的一个互补问题：设本章的某个算法返回了一条可行的动作轨迹，怎样改进它？<b>轨迹优化 trajectory optimization</b> 指在满足所有约束的前提下扰动轨迹、提高它的质量的问题。例如可能希望缩短 RRT 算出的轨迹，去掉一些由随机化造成的任意的动作变化。轨迹优化被认为是运动规划的补充，因为它通常需要一个初始猜测，而这可以由规划算法提供。它可以看作一种 BVP，但它是改进初始猜测，而不是从零确定轨迹。</p>
+<p>钢琴搬运工问题里采样算法算出的路径也有优化问题；但没有微分约束时，缩短路径要简单得多：可以用 14.6.2 节的先规划再变换方法，LPM 只需沿 \(\mathcal{C}\) 中的最短路径连接位形对。有微分约束时就要面对 BVP。</p>
+<p>在最一般的情形下，改进轨迹非常难。优化文献里有很多方法（有综述），本节的目的是鼓励进一步学习，简要提及已经发展起来的各类方法，而不详细解释。这些方法属于<b>非线性规划 nonlinear programming (NLP)</b>（或非线性优化）的范畴，与 9.3 节求随机化安全策略用的线性规划相对。优化实际上发生在一个可能轨迹的空间里，每条轨迹是时间的函数，因此 13.4.1 节用过的<b>变分法</b>就和刻画极值相关了：那里的泛函 \(\Phi\) 就是这里的代价泛函 \(L\)；系统 \(\dot x = f(x,u)\) 构成一组额外必须满足的约束，但 \(u\) 可以在优化中选择。</p>
+<p>为了能用数值计算方法，用一个参数空间来指定一族轨迹；优化于是可以看作在满足所有约束的同时在参数空间里的增量搜索。每一步运动的方向由代价泛函关于参数的梯度确定，同时被约束在与约束相切的方向上移动。所以非线性规划的大部分可以看作牛顿法或梯度下降的应用；和标准优化一样，可以用代价泛函的二阶导数判断搜索何时终止。这些方法的数值问题相当复杂；有若干 NLP 软件包可用（如 NAG Fortran 库或 Matlab 里的软件包）。</p>
+<p>非线性最优控制理论可以看作 NLP 的一个变体。动态规划递推在连续时间设定下变成一个微分方程，Hamilton 方程 (13.198) 推广为 Pontryagin 极小值原理，这些在 15.2 节讨论；极小值原理里出现的额外变量可以看作带约束优化的 Lagrange 乘子，约束就是 \(\dot x = f(x,u)\)。动态规划或极小值原理产生的微分方程很难解析求解，所以多数情况下用数值技术。数值动态规划已经在 14.5 节讲过。</p>
+<p><b>打靶法 shooting methods</b> 是最简单的一族轨迹优化方法。举个简单的例子，设已经算出一条形如</p>
+<div class="eq">$$u(t) = w_1 + w_2 t \tag{14.47}$$</div>
+<p>的动作轨迹 \(\tilde u:[0,t_F]\to\mathbb{R}\)，\(w_1\)、\(w_2\) 是固定的参数。考虑把 \(w_1\)、\(w_2\) 扰动一小量，再做 (14.1) 的积分。若 \(f\) 满足 Lipschitz 条件，小扰动应当只让 \(\tilde x\) 小变化；新轨迹可以用代价泛函评估，看是否有改进（例如最大曲率更小）。与其随机扰动，不如计算代价泛函关于参数的梯度：在参数空间里沿负梯度方向走一小步应当降低代价。不过扰动 \(w_1\)、\(w_2\) 很可能会移动终态 \(x(t_F)\)；通常必须把终止条件（如 \(x(t_F) = x_G\)）作为优化的约束，这会去掉一些自由度，所以往往需要更多的轨迹参数。</p>
+<p>更一般地，设运动规划算法算出了一个基于离散时间模型的动作序列，序列中每个动作保持常值 \(\Delta t\)。每个动作的时长都可以改为一个要扰动的参数；每个区间上的每个动作变量 \(u_i\) 也可以用 (14.47) 扰动，初始条件 \(w_1 = u_i\)、\(w_2 = 0\)。搜索的维数增加了，但有更多的自由度。在某些表述里，参数可能以隐式约束的形式出现，这时每次迭代都要解一个 BVP；这种情况下常常用极小值原理。用打靶法表述和求解轨迹优化问题的更多细节见经典教材。</p>
+
+<div class="widget wide" data-widget="shooting"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>点右图 (0.5, 0) 附近再点「梯度下降」：收敛到 (−0.090, 0.664)，终点误差几乎为 0。再从 (0, 0) 或 (−0.5, 0) 出发：停在终点还差 1.3–1.4 的局部极小（与参考代码第 14 项一致）。</li>
+  <li>加上圆形障碍：原来的解穿过障碍，罚函数把它推开；从不同的初值出发会落到绕障碍不同一侧的解，或者卡住。</li>
+</ul></div>
+
+<p>把打靶技术用于有障碍的轨迹优化会遇到几个困难。每次扰动都需要积分和碰撞检查。对车辆类问题，有时可以利用对称性避免积分：例如扰动 Dubins 车路径上一小段时间内的转向角，其余部分的轨迹只需用一个 SE(2) 矩阵变换即可。一个严重的问题是：沿负梯度走可能建议一个缩短路径、却导致碰撞的方向。可以像先规划再变换那样把轨迹分段来缓解，但这会产生更多的优化。另一种可能是为障碍发明一个罚函数，但这有局部极小问题，而且不能表示 \(X_{obs}\) 的精确边界。</p>
+<p>打靶的另一个困难是：起点附近动作的小变化可能导致后面时刻状态的大变化。缓解办法之一是<b>多重打靶 multiple shooting</b>（与目前描述的单次打靶相对）：轨迹先被分成若干段（可以对应一串运动基元的时间边界），设想分别扰动每个运动基元，这时还需要额外的约束表示所有轨迹段必须保持相连。多重打靶可以推广为一族叫<b>转录 transcription</b> 或<b>配点 collocation</b> 的方法：它们同样把轨迹分段，但每个连接约束涉及沿轨迹的更多点，而不只是段端点。转录的一个版本用隐式约束，需要再用一个 BVP 求解器；另一个版本用参数化约束，这会大大增加搜索的维数——后者靠快速的稀疏矩阵计算方法在实践中仍然有用。</p>
+<p>轨迹优化方法的主要困难之一，是它们可能卡在轨迹空间的局部极小里：行为强烈依赖初始猜测。它们一般不可能找到一条与初始轨迹不同伦的轨迹，不能从一个坏同伦类里的初始猜测中恢复。若 \(X_{obs}\) 复杂，这个问题越发重要。很多情况下，变分技术甚至可能找不到单个同伦类内的最优解：若 \(X_{free}\) 的闭包含有正曲率，同一个同伦类里也可能有多个局部极小；若不含，这个空间称为<b>非正曲率</b>（NPC，或 CAT(0)），这是可以直接由 \(X\) 上的度量推出的性质——对这类空间，关于度量局部最优的轨迹总是它所在同伦类里最好的。</p>
+</section>
+
+<section id="reading">
+<h2>延伸阅读 <span class="en">Further Reading</span></h2>
+<p>书末的延伸阅读按小节给了大量文献，这里只摘要方向：</p>
+<ul>
+  <li><b>可达集</b>的刻画与计算越来越受关注；动机之一是<b>验证 verification</b>：保证控制系统在所有可能的扰动下都按要求工作——这可以建模成与自然的博弈，自然试图把系统带进不想要的状态（例如飞机坠毁）。\(X_{ric}\) 的近期进展见 Fraichard 与 Asama 的「不可避免碰撞状态」。用分散度和 Lipschitz 条件表示的收敛速度见 P. Cheng 的博士论文；控制问题的计算复杂性另有专门综述。运动基元、动力学模拟与数值积分也各有文献。</li>
+  <li>14.4.1 节基于 Donald、Xavier、Canny、Reif 等人的动力学规划工作；14.4.2 节受 Barraquand–Latombe 启发；14.4.3 节取自 LaValle–Kuffner 的 RRT 综述。非完整规划的综述见 Laumond、Sekhavat、Lamiraux 的 Guidelines。</li>
+  <li>14.5 节是把值迭代改编到运动规划问题；带插值值迭代的一般收敛定理见 Kushner、Dupuis、Bertsekas 等人的工作；Dijkstra 变体见 LaValle–Konkimalla。</li>
+  <li>14.6 节的解耦方法在机器人学文献里非常常见；先规划再变换见 Laumond 等人；解耦的轨迹规划与时间缩放（尤其时间最优轨迹）见 Bobrow、Dubowsky、Gibson、Shin–McKay、Shiller 等人。</li>
+  <li>基于梯度的技术见 Betts 的综述，经典教材是 Bryson–Ho 与 Luenberger。本章的技术也用于航空航天，以及计算机图形学里虚拟人物的动画——那里<b>动作捕捉</b>常被用来建立一个运动基元库。</li>
+</ul>
+</section>
+
+<section id="cheatsheet">
+<h2>本章速查表</h2>
+<div class="table-wrap">
+<table class="data">
+  <thead><tr><th style="width:9em">概念</th><th>要点</th></tr></thead>
+  <tbody>
+    <tr><td>Formulation 14.1</td><td>求动作轨迹 \(\tilde u\)；由 (14.1) 积分得到状态轨迹；\(x(0) = x_I\)、某时刻施加 \(u_T\) 且 \(x\in X_G\)；\(f(x,u_T) = 0\)。</td></tr>
+    <tr><td>术语</td><td>非完整 = 不可积的速度约束；kinodynamic = 二阶（速度 + 加速度）约束；轨迹规划 = 路径 + 速度（时间缩放）；控制论的 motion planning / steering = 无障碍的 BVP。</td></tr>
+    <tr><td>系统性质</td><td>漂移：有状态停不下；欠驱动：动作数 &lt; dim C；对称：每条轨迹都能逆着走回（Reeds–Shepp 是、Dubins 不是）。</td></tr>
+    <tr><td>\(X_{obs}\)、相约束</td><td>(14.2) \(\kappa(x)\in\mathcal{C}_{obs}\)，柱状；相约束 \(h_i(x)\le0\)；无违规 = 无碰撞 + 满足相约束。</td></tr>
+    <tr><td>\(X_{ric}\)</td><td>(14.3)：不施加 \(u_T\) 时无论如何都会进入 \(X_{obs}\)；双积分器的宽度 \(\dot q^2/(2a_{max})\)；无漂移系统 \(X_{ric} = X_{obs}\)；采样规划里不计算它。</td></tr>
+    <tr><td>可达集</td><td>(14.4) \(R(x_0,\mathcal{U})\)、(14.5) 时间受限、(14.6)(14.7) 反向；边界是 cost-to-come 的等值线；Reeds–Shepp：小时间可控。</td></tr>
+    <tr><td>离散时间模型</td><td>区间 \(\Delta t\)、有限 \(U_d\)、区间内常值；动作序列；可达树 → 合并重复得可达图；swath (14.8)。</td></tr>
+    <tr><td>分辨率完备</td><td>\(\dot x = u\)：网格，失败就缩小 \(\Delta t\)；一般 \(f\)：要 Lipschitz (14.10)(14.11)，图可能可数无穷 → 三角形枚举交错探索（图 14.7）。</td></tr>
+    <tr><td>运动基元</td><td>(14.12) \(f_d\)、(14.13) \(f_p\)；配平轨迹 + 机动 = 机动自动机（混合系统 \(X\times M\)）。</td></tr>
+    <tr><td>距离</td><td>理想距离 = 最优 cost-to-go（不对称）；Dubins 车用最短路径长；黎曼度量；忽略部分约束得到下估计。</td></tr>
+    <tr><td>系统模拟器</td><td>闭式解（积分器链、线性系统）；Euler (14.16) 一阶；RK4 (14.18)(14.19) 四阶；多步法；黑盒；反向积分 (14.20) = 对 \(-f\) 积分。</td></tr>
+    <tr><td>LPM 与 BVP</td><td>两条路：让 BVP 平凡（好的基元 / 转向方法），或尽量少解 BVP；前向 + 大目标区域可避开；反向、双向、点目标都有 BVP。</td></tr>
+    <tr><td>通用框架</td><td>初始化 → SSM → LPM（模拟 + 碰撞 + 相约束） → 插边（可能分裂） → 检查解 → 重复。</td></tr>
+    <tr><td>双积分器格</td><td>(14.21)–(14.23)：\(q = i\Delta t^2/2\)、\(\dot q = j\Delta t\)，\(i\equiv j\)；BFS ≈ 时间最优；可达锥连接非格点；\(n\) 个积分器 \(3^n\) 条边；\(U'(q,\dot q)\) (14.24) + 安全层；δ(c₀,c₁)-安全 (14.25)。</td></tr>
+    <tr><td>单元剪枝</td><td>CELL-BASED SEARCH：每单元最多一个顶点；三处采样（Δt、\(U_d\)、单元）都要能加密；Δt 太小离不开单元；错过一个动作可能很多阶段后才出问题。</td></tr>
+    <tr><td>RDT</td><td>图 14.19：LPM 试未试过的动作、选 \(\rho(x_r,\alpha(i))\) 最小；只走到障碍的一部分（X_ric）；距离函数越接近 \(\rho^*\) 越好；从不重复同一基元 + 变 Δt → 分辨率完备。</td></tr>
+    <tr><td>反馈 / 值迭代</td><td>(14.26)；(14.27) 带插值的值迭代；(14.28) 局部算子；(14.29) 反向投影；只适合低维（平面刚体 dim X = 6 已到上限）。</td></tr>
+    <tr><td>先规划再变换</td><td>图 14.21 + (14.30)；Dubins 的公切线 LPM（图 14.23）；拓扑性质（Reeds–Shepp 满足、Dubins 不满足）；多层方法（图 14.25）。</td></tr>
+    <tr><td>路径约束</td><td>(14.32)–(14.34)；(14.39) \(\ddot s = (h'_i - \tau_i''\dot s^2)/\tau_i'\)；\(U'(s,\dot s)\) 至多一维 → 双积分器 \(\ddot s = u'\)；\(S_{obs}\)、极限曲线 \(\phi\)；DP (14.46)；bang-bang（图 14.28）。</td></tr>
+    <tr><td>轨迹优化</td><td>NLP、变分法、极小值原理；打靶 (14.47)、多重打靶、转录 / 配点；局部极小、同伦类、NPC / CAT(0)。</td></tr>
+  </tbody>
+</table>
+</div>
+</section>
+
+<section id="pitfalls">
+<h2>常见陷阱</h2>
+<ol>
+  <li><b>把相空间障碍只当成 \(\mathcal{C}_{obs}\)</b>：有动量时，\(X_{obs}\) 之外的很大一片（\(X_{ric}\)）其实也是死路；树会在那里白白浪费顶点。</li>
+  <li><b>在 \(X\) 里直接采样目标状态再「连过去」</b>：每次连接都是一个 BVP；尽量用前向搜索 + 有体积的目标区域，或者事先有高效的转向方法。</li>
+  <li><b>以为可达图一定有限</b>：Δt 与系统的固有周期无理相关时，即使 X 有界，一条分支也能产生可数无穷个顶点；完备性要靠交错探索或状态空间单元。</li>
+  <li><b>把模拟器的 Δt 和离散时间模型的 Δt 混为一谈</b>：前者是积分精度参数（通常小得多），后者决定可达图。</li>
+  <li><b>用 Euler 积分长时间的振荡系统</b>：误差会累积（弹簧的半径每步放大 \(\sqrt{1+\Delta t^2}\)）；默认用 RK4，并只检查个别点时记住「技术上不正确」。</li>
+  <li><b>对非完整系统用加权欧氏距离</b>：它把车身后面的点当成「很近」，RDT 会朝做不到的方向使劲；尽量逼近 \(\rho^*\)。</li>
+  <li><b>单元太粗或 Δt 相对单元太小</b>：前者把唯一可行的分支剪掉（图 14.18），后者让搜索走不出起始单元。</li>
+  <li><b>把格点 BFS 的「近似最优」当成路线也接近最优</b>：近似算法只保证执行时间接近，解可能在另一个同伦类里。</li>
+  <li><b>先规划再变换时忽略朝向</b>：替换段 γ 两端的朝向必须和路径对上，Dubins 车还不能指望替换段贴近原路径（不满足拓扑性质）。</li>
+  <li><b>路径约束规划里把 \(d\tau_i/ds = 0\) 的点当成普通点</b>：那里约束变成 \(h_i = 0\)，极限曲线可能出现尖点；bang-bang 的简化描述也不再适用。</li>
+  <li><b>期待时间最优轨迹能被稳稳跟踪</b>：它们走在可达集边界上，执行时没有余量修正误差。</li>
+  <li><b>梯度法的初值随手给</b>：局部极小、同伦类都由初值决定；打靶的轨迹对早期动作非常敏感，必要时用多重打靶或配点。</li>
+</ol>
+</section>
+
+<section id="exercises">
+<h2>习题导引</h2>
+<p class="small muted">只给思路，不给完整解答。标「互动」的可以先在本页对应的图里做实验。</p>
+<ol>
+  <li><b>平面点质量的 \(X_{ric}\)</b>（\(u_1 = 1\)，\(u_2\in[-1,1]\)）：\(u_1\) 恒为 1 意味着 \(q_1\) 方向一直在加速，不能刹车；碰撞只能靠 \(q_2\) 方向的「侧移」来躲。对点障碍 (0,0)：先求到达 \(q_1 = 0\) 的时刻 \(t^*\)（解 \(q_1(0) + \dot q_1(0)t + t^2/2 = 0\)），再问在这段时间里 \(q_2\) 能不能离开 0——这是一维双积分器的时间受限可达集问题。线段障碍同理，只是 \(q_2\) 要离开 \([-1,1]\)。</li>
+  <li><b>三积分器的格</b>：仿照 (14.23)，常值 \(u\) 下 \(q\) 是 \(t\) 的三次多项式；令 \(q = i\Delta t^3/6\)、\(\dot q = j\Delta t^2/2\)、\(\ddot q = k\Delta t\)，检查一步之后 \((i,j,k)\) 仍是整数（并找出类似 \(i\equiv j\) 的同余条件）。\(q^{(n)}\) 同理用 \(\Delta t^m/m!\) 作单位。</li>
+  <li><b>Reeds–Shepp 车三阶段的图 14.6b</b>（互动）：「可达树」里选 Reeds–Shepp、k = 3：树 259 个顶点，可达图只有 113 个。</li>
+  <li><b>图 14.14 的边界</b>（互动）：\(u = \pm1\) 的抛物线 \(\dot q = \sqrt{\dot q_0^2 \pm 2(q-q_0)}\)（\(\dot q > 0\) 的部分），参考代码第 6 项用两万个随机点核对过。</li>
+  <li><b>滚动的四面体</b>：状态是（底面所在的三角格位置，朝向）；每次绕底面一条棱翻倒。<span class="muted">注意：正四面体放在一个面上时底面只有 3 条棱，按理只能朝 3 个方向翻；原书题面写 four directions，疑为笔误<sup class="fn"><a href="#fn-tet" id="fn-tet-ref">11</a></sup>。</span></li>
+  <li><b>差速驱动四阶段的可达图</b>（互动）：「可达树」里选差速驱动；我们补充的参数是 r = L = 1、Δt = π/2，四阶段 121 / 98 个顶点。题目要你自己选参数并标出坐标。</li>
+  <li><b>混合系统的分辨率完备性</b>：把离散模式也看成一维「可数」的东西，在图 14.7 的之字形里再加一个维度（ℕ×ℕ×ℕ 也是可数的），或者把模式的切换并入运动基元。</li>
+  <li><b>Euler vs RK4</b>（互动）：「系统模拟器」组件就是这道题；参考代码第 7 项给出了数值表。建议：除非系统极简单或有闭式解，默认 RK4；需要极快、积分又占主导时考虑多步法。</li>
+  <li>–10. <b>真实的抛物线弧、等长的段</b>（互动）：「双积分器的格」里打开「画真实的抛物线弧」；第 10 题可以让传送带的间距随 \(|\dot q|\) 变化，使 \(|\dot q|\Delta t\) 大致相等。</li>
+  <li><b>平面点质量的时间最优</b>（互动）：「平面点质量的格点搜索」就是第 11 题的实现。</li>
+  <li><b>航天器 RDT</b>：12 维相空间（SE(3) × 速度），度量的选择是关键（参考 14.4.3 节「距离函数的问题」）。</li>
+  <li><b>Dubins 车的值迭代</b>：把「带插值的值迭代」从 2 维推广到 3 维 \((x,y,\theta)\)，注意 \(\theta\) 的等同；局部算子 (14.28) 给出反馈。</li>
+  <li>–16. <b>推箱子、拖车、飞机</b>：都是「换一个 \(f\)」：系统模拟器 + RDT 或单元剪枝搜索的框架不变。第 16 题的九个动作是 {左, 直, 右} × {降, 平, 升}。</li>
+  <li>–18. <b>两连杆机械臂的 DP 与 bang-bang</b>：用例 13.13 的动力学写出 (14.45) 的 \(\alpha_i,\beta_i,\gamma_i\)，再套用「路径约束相平面」组件的两种算法。</li>
+  <li><b>交错步长的 Dubins 搜索</b>（互动）：「交错探索一串可达图」组件就是这个思路。</li>
+  <li><b>Reeds–Shepp 车的值迭代</b>：cost-to-go 的等值线就是时间受限可达集的边界；与图 14.4 和本页「简单车的时间受限可达集」对照，应当能看到原点附近横向的开邻域。</li>
+</ol>
+</section>
+
+<section id="notes">
+<h2>脚注</h2>
+<div class="box small">
+  <p id="fn-left" style="margin:0 0 6px"><sup>1</sup> 原书写「Fix \(u_\phi = -\phi_{max}\) (turn left)」。按 13.1.2 节的简单车模型 (13.15)，\(\dot\theta = (u_s/L)\tan u_\phi\)，前进（\(u_s = 1\)）时 \(u_\phi = -\phi_{max}\) 给出 \(\dot\theta < 0\)，是<b>右</b>转（图 13.1 也注明车轮朝右时 \(\phi\) 为负）。应为 \(u_\phi = \phi_{max}\)（左转）或把括号改成 turn right；这不影响论证。<a href="#fn-left-ref">↩</a></p>
+  <p id="fn-lpm" style="margin:0 0 6px"><sup>2</sup> 原书第 3 步写「a motion primitive \(\tilde u^p:[0,t_F]\to X_{free}\) such that \(u(0) = x_{cur}\) and \(u(t_F) = x_r\)」：动作轨迹的值域应是 \(U\)，两个端点条件说的是<b>状态</b> \(x(0) = x_{cur}\)、\(x(t_F) = x_r\)，落在 \(X_{free}\) 里的是积分得到的状态轨迹。本页按这个意思改写。<a href="#fn-lpm-ref">↩</a></p>
+  <p id="fn-q" style="margin:0 0 6px"><sup>3</sup> 原书 14.4.1 节两处写「If \(q\ne0\)」：「If \(q\ne0\), then the configuration changes quadratically」与「If \(q\ne0\), then the \(\dot q\) coordinate changes by \(\pm\frac12u(\Delta t)^2\)」。按 (14.21)(14.22)，前一句应为 \(u\ne0\)；后一句应为「\(u\ne0\)（\(u = \pm1\)）时，除了 \(\dot q\Delta t\)，\(q\) 坐标还要多变化 \(\pm\frac12(\Delta t)^2\)」（\(\dot q\) 本身变化的是 \(\pm\Delta t\)）。<a href="#fn-q-ref">↩</a></p>
+  <p id="fn-cone" style="margin:0 0 6px"><sup>4</sup> 原文说「The set of states that can be reached from some state \(x_G\) within time \(\Delta t\) lie within a cone」，但图 14.14a 的标题是 Backward reachable set from \(x_G\)，上下文说的也是「锥里的格点用常值动作就能接到 \(x_G\)」，所以指的应是<b>能到达</b> \(x_G\) 的状态（反向可达集）。另外图 14.14 的图注「lattice points that call within cones」应为 fall。<a href="#fn-cone-ref">↩</a></p>
+  <p id="fn-155" style="margin:0 0 6px"><sup>5</sup> 这里原书指向 15.5 节；Dubins 车最短路径的计算在 15.3 节（15.3.1），15.5 节是转向方法。<a href="#fn-155-ref">↩</a></p>
+  <p id="fn-1439" style="margin:0 0 6px"><sup>6</sup> 原书 (14.39) 印作 \(\ddot s = \frac{1}{d\tau_i/ds}h'_i(s,\dot s,u_i) - \frac{d^2\tau_i}{ds^2}\dot s^2\)，(14.43) 印作 \(\ddot s = \frac{u_i}{d\tau_i/ds} - \frac{d^2\tau_i}{ds^2}\dot s^2\)：第二项都少除了 \(d\tau_i/ds\)。从 (14.38) 解 \(\ddot s\) 应得 \((h'_i - \tau_i''\dot s^2)/\tau_i'\)；参考代码第 10 项用数值微分核对：只有改正后的形式能还原出 \(\ddot s\)。本页的 (14.39)(14.43) 和「路径约束」两个组件都用改正后的形式。<a href="#fn-1439-ref">↩</a></p>
+  <p id="fn-sobs" style="margin:0 0 6px"><sup>7</sup> 原书写「This includes any states that belong to \(X_{free}\)」，应为<b>不</b>属于 \(X_{free}\) 的状态（随后一句说用 \(s\)、\(\dot s\) 算出 \(x\)，检查 \(X\) 上的约束是否被违反）。<a href="#fn-sobs-ref">↩</a></p>
+  <p id="fn-a1a2" style="margin:0 0 6px"><sup>8</sup> 原书例 14.6 的两种情形写成「If \(|a_1|\ge|a_2|\) … If \(|a_1| > |a_2|\) …」，第二种应为 \(|a_1| < |a_2|\)：区间 \([-1/|a_i|, 1/|a_i|]\) 的交由 \(|a_i|\) 较大的那个决定（参考代码第 10 项列了几组数值）。另外 \(a_i < 0\) 时区间应写成 \([-1/|a_i|, 1/|a_i|]\)。<a href="#fn-a1a2-ref">↩</a></p>
+  <p id="fn-1445" style="margin:0 0 6px"><sup>9</sup> 原书 (14.45) 印作 \(\alpha_i(s)\ddot s + \beta_i(s)\dot s^2 + \gamma_i(s)\dot s = u_i\)。由 (14.44)：科氏项 \(C(\tau,\tau'\dot s)\tau'\dot s\) 关于 \(\dot s\) 是二次的（并入 \(\beta_i\)），重力项 \(g(\tau(s))\) 不含 \(\dot s\)，所以应为 \(\gamma_i(s)\)，不乘 \(\dot s\)（时间最优路径跟踪文献里的标准形式也是 \(a(s)\ddot s + b(s)\dot s^2 + c(s) = u\)）。<b>注</b>：书中接着说「若 \(d\tau_i/ds = 0\) 则 \(\alpha_i(s) = 0\)」；按 (14.44)，\(\alpha_i(s)\) 是 \(M(\tau(s))\,d\tau/ds\) 的第 \(i\) 个分量，一般并不因 \(d\tau_i/ds = 0\) 而为零（除非 \(M\) 是对角的），这句话只在特殊情形下成立。<a href="#fn-1445-ref">↩</a></p>
+  <p id="fn-sk" style="margin:0 0 6px"><sup>10</sup> 原书写「Thus, \(s_k = (k\Delta s)/m\)」。既然 \(s_0,\ldots,s_m\) 的间距是 \(\Delta s\)，应为 \(s_k = k\Delta s\)（\(\Delta s = 1/m\)，即 \(s_k = k/m\)）。<a href="#fn-sk-ref">↩</a></p>
+  <p id="fn-tet" style="margin:0"><sup>11</sup> 这是我们的判断：题面「the tetrahedron can be flipped in one of four directions」；正四面体静止时有一个面着地，可绕的底棱只有 3 条。若把「不动」也算一个动作才是 4 个。<a href="#fn-tet-ref">↩</a></p>
+</div>
+</section>
+
+<nav class="pager">
+  <a href="ch13-differential-models.html"><span class="dir">← 上一章</span>第 13 章 微分模型</a>
+  <a class="next" href="../index.html"><span class="dir">回到首页 →</span>全书路线图与进度</a>
+</nav>
+
+<footer class="page-foot">
+  内容依据 Steven M. LaValle《Planning Algorithms》（Cambridge University Press, 2006）Part IV 第 14 章整理与讲解，原书可在 <a href="https://lavalle.pl/planning/ch14.pdf" target="_blank" rel="noopener">lavalle.pl/planning/ch14.pdf</a> 免费阅读。互动图为学习辅助，标「补充」的内容不是书中原文；数值例子由 <a href="code/ch14_differential.py">part4/code/ch14_differential.py</a> 核对。
+</footer>
+
+</main>
+</div>
+</body>
+</html>
