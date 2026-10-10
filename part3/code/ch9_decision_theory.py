@@ -433,6 +433,8 @@ def part10():
         "(9.42)": [[1, 3, 3, 2], [0, -1, 2, 1], [-2, 2, 0, 1]],
         "(9.53)": [[3, 3, 5], [1, -1, 7], [0, -2, 4]],
         "2×4 补充": [[3, -1, 2, 0], [-2, 4, -1, 1]],
+        "3×2 补充": [[3, -1], [0, 2], [-2, 4]],
+        "3×3 补充": [[2, -1, 0], [-1, 1, 2], [0, 3, -2]],
     }
     for name, A in games.items():
         w, z, v = solve_zero_sum(A)
@@ -443,6 +445,7 @@ def part10():
         print(f"  {name}: w* = {vec(w)}, z* = {vec(z)}, 随机化值 = {show(v)}；确定性 下值 {lo} ≤ {show(v)} ≤ 上值 {up}")
     w, z, v = solve_zero_sum([[3, 0], [-1, 1]])
     assert w == [F(2, 5), F(3, 5)] and z == [F(1, 5), F(4, 5)] and v == F(3, 5)
+    assert solve_zero_sum([[2, -1, 0], [-1, 1, 2], [0, 3, -2]])[2] == F(7, 15)
     # 习题 11 的反例：c < 0 时鞍点会变
     A = [[1, 2], [3, 4]]
     negA = [[-x for x in r] for r in A]
@@ -509,6 +512,12 @@ def part11():
         print(f"  w1={show(w1)}, z1={show(z1)}: wAz = {show(l1)}，书中末行 {show(book1)}（差 {show(l1 - book1)}）；"
               f"wBz = {show(l2)}，书中末行 {show(book2)}（差 {show(l2 - book2)}）")
         assert l1 - book1 == -1 and l2 - book2 == -2
+    # 囚徒困境的两个变体（页面「试一试」）：把「双方拒绝」改成 (1,1) 或 (−1,−1)
+    for r in (1, -1):
+        A, B = [[8, 0], [30, r]], [[8, 30], [0, r]]
+        print(f"  囚徒困境变体：双方拒绝 = ({r},{r}) → 纯 Nash {pure_nash(A, B)}")
+    assert pure_nash([[8, 0], [30, 1]], [[8, 30], [0, 1]]) == [(1, 1)]
+    assert pure_nash([[8, 0], [30, -1]], [[8, 30], [0, -1]]) == [(1, 1), (2, 2)]
     print("  ★ 原书笔误：(9.75) 末行应为 −3w1z1 + w1 + z1 − 1，(9.76) 末行应为 −3w1z1 + 2w1 + 2z1 − 2（导数不受影响）。")
 
 
@@ -533,6 +542,12 @@ def part12():
     print("  ★ 原书笔误：书中说有两个纯 Nash 均衡，代价 (2,−4,2) 和 (3,−2,−1)；"
           "后者对应 (2,1,1)，但 P1 改选 1 后代价从 3 降到 L1(1,1,1) = 1，所以不是均衡。")
     assert nes == [(1, 2, 1)]
+    # 补充：若 L1(1,1,1) ≥ 3（例如 4），(2,1,1) 也成为均衡，书中的说法就成立
+    L2 = dict(L)
+    L2[(1, 1, 1)] = (4, 1, -2)
+    nes2 = [a for a in L2 if all(L2[tuple(3 - x if k == i else x for k, x in enumerate(a))][i] >= L2[a][i] for i in range(3))]
+    print("  把 L1(1,1,1) 改成 4 后的纯 Nash 均衡:", nes2)
+    assert nes2 == [(1, 2, 1), (2, 1, 1)]
 
 
 # ====================================================================== 13. 效用
@@ -660,6 +675,20 @@ def play(a, b, rounds):
 
 def part16():
     header("16. 重复囚徒困境循环赛（补充，9.5.4 节提到的 Tit-for-Tat）")
+    def tour(field, rounds):
+        tot = {n: 0 for n in field}
+        for i, a in enumerate(field):
+            for b in field[i:]:
+                ca, cb = play(a, b, rounds)
+                tot[a] += ca
+                if a != b:
+                    tot[b] += cb
+        return tot
+
+    default = ["always_C", "always_R", "tft", "grim", "pavlov"]
+    t = tour(default, 20)
+    print("  页面默认的 5 种策略、每场 20 轮:", sorted(t.items(), key=lambda x: x[1]))
+    assert t["tft"] == t["grim"] == 342 and min(t.values()) == 342
     names = ["always_C", "always_R", "tft", "grim", "alt", "pavlov"]
     rounds = 20
     tot = {n: 0 for n in names}

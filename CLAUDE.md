@@ -60,6 +60,7 @@ Planning Algorithm/
 | 3 | `part2/ch3-geometric-representations.html` | 12 个：半平面交、姜饼人脸、超椭圆、齐次矩阵、YPR、三连杆、DH、PUMA 560、辛烷、运动树、闭环、线性变换 | 自包含单文件，颜色约定：绿 = 障碍 O，红 = 机器人 A，蓝 = 坐标系 |
 | 4 | `part2/ch4-configuration-space.html` | 15 个：内点/边界点、有限拓扑检查器、区间同胚、流形检测、粘合正方形（习题 27）、同伦与基本群、O(2)、柱面规划、四元数、一维 Minkowski、星形算法（含旋转）、两连杆 C-space、两连杆簇、三连杆簇/四连杆、连杆图与 Grübler | 共享布局 + `part2/js/ch4-*.js` + `part2/code/ch4_configuration_space.py`；颜色沿用第 3 章：绿 = 障碍，红 = 机器人，蓝 = 坐标/路径 |
 | 5 | `part2/ch5-sampling-based-planning.html` | 21 处（19 种）：Lp 度量、SO(2) 距离、位移度量、球面/SO(3) 采样、van der Corput、采样方法对比（×3：随机/Sukharev/Halton）、维数灾难、包围体层次、特征 Voronoi、路径段检查、连杆 Lipschitz、网格 A*、随机势场、RDT 探索、Kd 树、RRT 规划器、PRM、可见性路线图、采样启发式 | 共享布局 + `part2/js/ch5-*.js`（`ch5-lib.js` 是本章共用库，组件实例挂在 `el._w` 上便于调试）+ `part2/code/ch5_sampling.py`；2D 图都直接画在 C-space 里：灰 = Cobs，绿 = 解路径，蓝 = qI 树，紫 = qG 树 |
+| 9 | `part3/ch9-basic-decision-theory.html` | 18 个：Pareto 最优、两颗骰子事件实验室、贝叶斯马赛克、随机化策略与猜硬币、先验单纯形、决策准则实验室、噪声传感器、OCR 分类器、参数估计、零和矩阵博弈实验室、上 / 下包络、双矩阵 Nash 均衡、三人博弈改选图、效用与彩票、偏好三角形、频率学派风险、无信息先验、重复囚徒困境 | 共享布局 + `part3/js/ch9-*.js`（`ch9-lib.js` 是本章共用库：坐标图 `Plot`、矩阵编辑器 `MatrixEditor`、零和 LP 求解 `solveZeroSum` 等；组件实例挂在 `el._w` 上）+ `part3/code/ch9_decision_theory.py`；**Part III 颜色约定（第 10–12 章沿用）**：蓝 = 机器人 / P₁ 的动作 u（矩阵的行），橙 = 自然 / P₂ 的动作 θ、v（列），绿 = 选中的最优 / 鞍点 / 均衡，红 = 最坏情况 / 遗憾 / 被支配，紫 = 概率分布（先验、后验、随机化策略）；按动作分区域着色时用类别色 u₁ 蓝、u₂ 粉、u₃ 棕、u₄ 灰蓝 |
 
 ## 5. 云端会话（Claude Code cloud）的补充约定
 

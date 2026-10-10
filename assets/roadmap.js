@@ -32,7 +32,7 @@
       desc: "第 5、6 章方法的许多扩展问题与算法。", key: "7.4（闭链）需要 4.4。", pre: [5, 6] },
     { n: 8, part: "II", title: "反馈运动规划", en: "Feedback Motion Planning",
       desc: "过渡性章节：把反馈引入运动规划，但还不引入微分约束。开环计划 vs 闭环计划。", key: "", pre: [5, 6] },
-    { n: 9, part: "III", title: "基本决策论", en: "Basic Decision Theory",
+    { n: 9, part: "III", title: "基本决策论", en: "Basic Decision Theory", href: "part3/ch9-basic-decision-theory.html",
       desc: "单步决策：在其他决策者（真实对手或用来建模不确定性的「自然」）的干扰下做出最好的决策。", key: "", pre: [2] },
     { n: 10, part: "III", title: "序贯决策论", en: "Sequential Decision Theory",
       desc: "把第 9 章的单步决策串成多步；2.3 节的动态规划在这里变得重要。假设当前状态总是已知。", key: "", pre: [9, 2] },

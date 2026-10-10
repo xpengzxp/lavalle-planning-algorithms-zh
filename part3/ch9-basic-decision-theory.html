@@ -1,0 +1,1040 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>基本决策论 · 第 9 章</title>
+<meta name="description" content="LaValle《Planning Algorithms》第 9 章的中文互动教程：优化与 Pareto 最优、概率回顾、随机化策略、与自然对弈（最坏情况 / 期望 / 遗憾）、观测与贝叶斯分类、参数估计、零和博弈的鞍点与随机化鞍点、Nash 均衡、效用理论与对决策论的质疑。">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<link rel="stylesheet" href="../assets/style.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+<script src="../assets/common.js"></script>
+<script defer src="js/ch9-lib.js"></script>
+<script defer src="js/ch9-prelim.js"></script>
+<script defer src="js/ch9-nature.js"></script>
+<script defer src="js/ch9-zerosum.js"></script>
+<script defer src="js/ch9-nonzero.js"></script>
+<script defer src="js/ch9-scrutiny.js"></script>
+<style>
+  .ch9-plot { width: 100%; }
+  .ch9-plot canvas { margin: 0 auto; border-radius: 6px; }
+  .box.intuition ul { margin: 0; padding-left: 1.2em; }
+  .fn { font-size: .8em; }
+  .eq-line p { overflow-x: auto; }
+  table.data tr.sel td { background: var(--accent-soft); }
+  /* 矩阵编辑器：行 = P1 / 机器人（蓝），列 = P2 / 自然（橙） */
+  .mx { border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; background: var(--surface); }
+  .mx th, .mx td { border: 1px solid var(--border); padding: 4px 8px; text-align: center; min-width: 2.6em; line-height: 1.5; }
+  .mx th.c { color: var(--warn); background: color-mix(in srgb, var(--warn-soft) 75%, var(--surface)); font-weight: 650; }
+  .mx th.r { color: var(--accent-text); background: var(--accent-soft); font-weight: 650; white-space: nowrap; }
+  .mx th.corner { color: var(--muted); font-weight: 500; font-size: 12px; background: var(--surface-2); white-space: nowrap; }
+  .mx th.x, .mx td.x { background: var(--surface-2); color: var(--text-2); font-size: 13px; font-weight: 500; white-space: nowrap; }
+  .mx td.x.best { color: var(--ok); font-weight: 750; }
+  .mx td.cell { background: var(--surface); white-space: nowrap; }
+  .mx td.cell.ro { cursor: pointer; }
+  .mx.ro-table td.cell.ro { cursor: default; }
+  .mx td.cell.zero { color: var(--muted); }
+  .mx td.cell input { width: 3.6em; text-align: center; font: inherit; border: 1px solid var(--border-strong); border-radius: 5px; padding: 2px 3px; background: var(--surface); color: var(--text); }
+  .mx.pair td.cell input { width: 2.9em; }
+  .mx.three td.cell input { width: 3.2em; }
+  .mx td.cell input.bad-input { border-color: var(--bad); background: var(--bad-soft); }
+  .mx .a { color: var(--accent-text); } .mx .b { color: var(--warn); } .mx .comma { color: var(--muted); margin: 0 2px; }
+  .mx td.secr { background: color-mix(in srgb, var(--accent-soft) 75%, var(--surface)); }
+  .mx td.secc { background: color-mix(in srgb, var(--warn-soft) 85%, var(--surface)); }
+  .mx td.secr.secc { background: color-mix(in srgb, var(--accent-soft) 50%, var(--warn-soft)); }
+  .mx td.saddle, .mx td.nash { background: color-mix(in srgb, var(--ok) 30%, var(--surface)) !important; font-weight: 700; }
+  .mx td.sel { outline: 2.5px solid var(--text); outline-offset: -3px; }
+  .mx td.inrow { box-shadow: inset 0 -3px 0 color-mix(in srgb, var(--warn) 70%, transparent); }
+  .mx td.incol { box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent) 70%, transparent); }
+  .mx td.br1 .a { box-shadow: 0 0 0 2px var(--accent); border-radius: 4px; padding: 0 3px; }
+  .mx td.br2 .b { box-shadow: 0 0 0 2px var(--warn); border-radius: 4px; padding: 0 3px; }
+  .mx th.p1h { color: var(--accent-text); } .mx th.p2h { color: var(--warn); } .mx th.p3h { color: var(--c-goal); }
+  .mx tr.nashrow th, .mx tr.nashrow td { background: color-mix(in srgb, var(--ok) 22%, var(--surface)); }
+  .mx tr.selrow th.r { outline: 2px solid var(--text); outline-offset: -2px; }
+  .mx tr { cursor: default; }
+  .mx-tools { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 0; }
+  /* 两颗骰子 */
+  .dice-grid { display: grid; grid-template-columns: 2.4em repeat(6, minmax(32px, 1fr)); gap: 4px; max-width: 360px; user-select: none; touch-action: none; }
+  .dice-grid .dh { text-align: center; font-size: 12px; color: var(--muted); align-self: center; }
+  .dice-grid .dc { aspect-ratio: 1; border: 1px solid var(--border-strong); border-radius: 6px; background: var(--surface); color: var(--text-2); font: inherit; font-size: 13px; cursor: pointer; padding: 0; }
+  .dice-grid .dc.inE { background: color-mix(in srgb, var(--accent) 35%, var(--surface)); color: var(--text); }
+  .dice-grid .dc.inF { box-shadow: inset 0 0 0 3px var(--warn); }
+  /* 重复囚徒困境 */
+  .ipd-row { display: flex; align-items: center; gap: 8px; margin: 4px 0; font-size: 13px; }
+  .ipd-name { width: 6.5em; flex: none; }
+  .ipd-moves { display: flex; flex-wrap: wrap; gap: 2px; flex: 1; }
+  .ipd-moves i { width: 9px; height: 14px; border-radius: 2px; display: inline-block; }
+  .ipd-moves i.c { background: var(--bad); } .ipd-moves i.r { background: var(--ok); }
+  .figpat { display: flex; gap: 26px; flex-wrap: wrap; justify-content: center; margin: 1em 0; }
+  .figpat figure { margin: 0; text-align: center; }
+  .figpat figcaption { font-size: 13px; color: var(--muted); max-width: 260px; margin: 4px auto 0; }
+  .fig91 td, .fig91 th { text-align: center; }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <a class="brand" href="../index.html">Planning Algorithms 学习站</a>
+  <span class="crumbs"><a href="../index.html">首页</a> › Part III › 第 9 章 基本决策论</span>
+  <button class="icon-btn" id="theme-toggle" type="button" aria-label="切换深浅色">☾</button>
+</header>
+
+<div class="layout">
+<nav class="toc" aria-label="目录">
+  <p class="toc-title">本章目录</p>
+  <ol>
+    <li><a href="#overview">本章导读</a></li>
+    <li><a href="#s9-1">9.1 预备概念</a>
+      <ol>
+        <li><a href="#s9-1-1">优化与 Pareto 最优</a></li>
+        <li><a href="#s9-1-2">概率论回顾</a></li>
+        <li><a href="#s9-1-3">随机化策略</a></li>
+      </ol>
+    </li>
+    <li><a href="#s9-2">9.2 与自然对弈</a>
+      <ol>
+        <li><a href="#s9-2-1">为自然建模</a></li>
+        <li><a href="#s9-2-2">非确定性 vs 概率模型</a></li>
+        <li><a href="#s9-2-3">利用观测</a></li>
+        <li><a href="#s9-2-4">最优决策的例子</a></li>
+      </ol>
+    </li>
+    <li><a href="#s9-3">9.3 二人零和博弈</a>
+      <ol>
+        <li><a href="#s9-3-1">博弈的表述</a></li>
+        <li><a href="#s9-3-2">确定性策略与鞍点</a></li>
+        <li><a href="#s9-3-3">随机化策略</a></li>
+      </ol>
+    </li>
+    <li><a href="#s9-4">9.4 非零和博弈</a>
+      <ol>
+        <li><a href="#s9-4-1">二人博弈与 Nash 均衡</a></li>
+        <li><a href="#s9-4-2">多于两个玩家</a></li>
+      </ol>
+    </li>
+    <li><a href="#s9-5">9.5 审视决策论</a>
+      <ol>
+        <li><a href="#s9-5-1">效用理论与理性</a></li>
+        <li><a href="#s9-5-2">对概率模型的质疑</a></li>
+        <li><a href="#s9-5-3">对非确定性模型的质疑</a></li>
+        <li><a href="#s9-5-4">对博弈论的质疑</a></li>
+      </ol>
+    </li>
+    <li><a href="#further">延伸阅读</a></li>
+    <li><a href="#cheatsheet">本章速查表</a></li>
+    <li><a href="#pitfalls">常见陷阱</a></li>
+    <li><a href="#exercises">习题导引</a></li>
+    <li><a href="#notes">脚注：原书笔误</a></li>
+  </ol>
+</nav>
+
+<main class="content">
+
+<p class="kicker">Part III · 第 9 章</p>
+<h1>基本决策论 <span class="en">Basic Decision Theory</span></h1>
+<p class="lede">Part III 讨论<b>不确定性下的规划</b>。这一章是它的地基：把规划问题压缩成<b>只有一步</b>的决策，然后认真地问——当还有别的<b>决策者 decision maker（DM）</b>会干扰结果时，什么叫「最好的决策」？那个干扰者可能是一个用来建模不确定性的虚构角色「<b>自然 nature</b>」，也可能是一个真正有智能、和你利益冲突的对手。第 10–12 章会把这里的一步决策串成多步。</p>
+
+<section id="overview">
+<h2 style="border-top:0;margin-top:1em">本章导读</h2>
+
+<svg viewBox="0 0 660 200" role="img" aria-label="本章结构示意" style="max-width:660px;display:block;margin:0 auto">
+  <defs><marker id="f9a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker></defs>
+  <rect x="8" y="70" width="128" height="60" rx="10" fill="var(--surface-2)" stroke="var(--border-strong)"/>
+  <text x="72" y="96" text-anchor="middle" font-size="14" fill="var(--text)">9.1 单人优化</text>
+  <text x="72" y="116" text-anchor="middle" font-size="11.5" fill="var(--muted)">U, L(u)，Pareto</text>
+  <rect x="176" y="18" width="150" height="62" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="251" y="44" text-anchor="middle" font-size="14" fill="var(--text)">9.2 与自然对弈</text>
+  <text x="251" y="64" text-anchor="middle" font-size="11.5" fill="var(--muted)">L(u, θ)：最坏 / 期望 / 遗憾</text>
+  <rect x="176" y="120" width="150" height="62" rx="10" fill="var(--warn-soft)" stroke="var(--warn)"/>
+  <text x="251" y="146" text-anchor="middle" font-size="14" fill="var(--text)">9.3 零和博弈</text>
+  <text x="251" y="166" text-anchor="middle" font-size="11.5" fill="var(--muted)">L(u, v)：鞍点、随机化</text>
+  <rect x="366" y="120" width="150" height="62" rx="10" fill="var(--ok-soft)" stroke="var(--ok)"/>
+  <text x="441" y="146" text-anchor="middle" font-size="14" fill="var(--text)">9.4 非零和博弈</text>
+  <text x="441" y="166" text-anchor="middle" font-size="11.5" fill="var(--muted)">L₁, L₂, …：Nash 均衡</text>
+  <rect x="366" y="18" width="150" height="62" rx="10" fill="var(--surface-2)" stroke="var(--border-strong)"/>
+  <text x="441" y="44" text-anchor="middle" font-size="14" fill="var(--text)">9.5 审视决策论</text>
+  <text x="441" y="64" text-anchor="middle" font-size="11.5" fill="var(--muted)">效用、先验、保守、理性</text>
+  <rect x="556" y="70" width="96" height="60" rx="10" fill="var(--surface)" stroke="var(--border-strong)" stroke-dasharray="5 4"/>
+  <text x="604" y="96" text-anchor="middle" font-size="13" fill="var(--text)">第 10–12 章</text>
+  <text x="604" y="116" text-anchor="middle" font-size="11" fill="var(--muted)">多步决策</text>
+  <path d="M136 92 L172 58" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#f9a)"/>
+  <path d="M136 108 L172 142" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#f9a)"/>
+  <path d="M326 151 L362 151" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#f9a)"/>
+  <path d="M326 49 L362 49" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#f9a)"/>
+  <path d="M516 52 L552 88" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#f9a)"/>
+  <text x="128" y="60" text-anchor="end" font-size="10.5" fill="var(--muted)">加入自然 ↗</text>
+  <text x="128" y="148" text-anchor="end" font-size="10.5" fill="var(--muted)">对手是真人 ↘</text>
+</svg>
+<p class="small muted" style="text-align:center">本章的脉络。9.2 与 9.3 其实是同一张矩阵的两种读法：列由「自然」选，还是由一个聪明的对手选。</p>
+
+<p>和第 2 章相比，这一章把规划的步数降到 <b>1</b>，再引入更复杂的建模方式。因为没有信息需要跨越多个阶段传递，也就<b>不需要状态空间</b>；所以书中暂时不说「为机器人设计计划 plan」，而说「为决策者设计<b>策略 strategy</b>」，规划问题也降格成<b>决策问题 decision-making problem</b>。回到多阶段的第 10 章时，第 2 章的大部分算法都能自然地吸收这里的决策论概念。</p>
+<p>Part III 反复出现的主题是<b>多个决策者的相互作用</b>。除了一直被称为「机器人」的主角之外，还有别的 DM：它们不能被机器人预测或控制。一个特殊的 DM 叫<b>自然</b>，它是建模不确定性的通用手段——通常是虚构的，并不真的在为自己的利益做理性决策，只是一个方便的建模工具。也有一些情形里其它 DM 是真正的对手，这就进入<b>博弈论 game theory</b>，所有 DM（包括机器人）都叫<b>玩家 players</b>。</p>
+
+<div class="box">
+  <div class="box-title">本章地图与读法</div>
+  <ul style="margin:0">
+    <li><b>9.1 预备概念</b>：单目标 / 多目标优化（Pareto 最优）、概率论回顾、随机化策略。</li>
+    <li><b>9.2 与自然对弈</b>：常说的<b>决策论 decision theory</b>——在不确定性下做一次决策；非确定性模型（最坏情况）与概率模型（期望），以及观测、贝叶斯分类、参数估计。</li>
+    <li><b>9.3 零和博弈</b>：两个利益完全对立的 DM；安全策略、鞍点、随机化鞍点（von Neumann）。</li>
+    <li><b>9.4 非零和博弈</b>：任意多个 DM、任意程度的冲突——<b>非合作博弈 noncooperative game</b>；Nash 均衡。</li>
+    <li><b>9.5 审视决策论</b>：为这些模型辩护，也批评它们；想把决策论模型用到规划上时尤其有用。</li>
+  </ul>
+  <p style="margin:.6em 0 0">本章<b>不强依赖</b> Part II，甚至连第 2 章的概念也用不到（没有阶段、没有状态空间）；偶尔提到 Part II 的地方都不是理解所必需的。大部分讨论是<b>离散</b>空间。参考代码 <a href="code/ch9_decision_theory.py"><code>part3/code/ch9_decision_theory.py</code></a> 核对了页面上出现的每个数值，以及下文标出的原书笔误。</p>
+</div>
+<div class="box">
+  <div class="box-title">Part III 的颜色约定（本章起沿用）</div>
+  <p style="margin:0"><span style="color:var(--accent-text);font-weight:650">蓝</span> = 机器人 / P₁ 的动作 u（矩阵的行）；<span style="color:var(--warn);font-weight:650">橙</span> = 自然 / P₂ 的动作 θ、v（矩阵的列）；<span style="color:var(--ok);font-weight:650">绿</span> = 选中的最优动作、鞍点、均衡；<span style="color:var(--bad);font-weight:650">红</span> = 最坏情况、遗憾、被支配；<span style="color:var(--c-alive2);font-weight:650">紫</span> = 概率分布（先验、后验、随机化策略）。按动作分区域着色时另用一组类别色，图例里会注明。</p>
+</div>
+</section>
+
+<!-- ============================================================ 9.1 -->
+<section id="s9-1">
+<h2>9.1 预备概念 <span class="en">Preliminary Concepts</span></h2>
+
+<h3 id="s9-1-1">9.1.1 优化 <span class="en">Optimization</span></h3>
+<h4>单目标优化</h4>
+<p>先看最简单的情形：只有一个决策者，它要做出最好的决策。这就是熟悉的<b>优化 optimization</b> 问题。</p>
+<div class="box def formulation">
+  <div class="box-title">Formulation 9.1（优化 Optimization）</div>
+  <ol>
+    <li>非空集合 \(U\)，称为<b>动作空间 action space</b>；每个 \(u\in U\) 称为一个<b>动作 action</b>。</li>
+    <li>函数 \(L : U \to \mathbb{R}\cup\{\infty\}\)，称为<b>代价函数 cost function</b>。</li>
+  </ol>
+</div>
+<p>和 Formulation 2.2 对比：状态空间 \(X\)、状态转移都不需要了，因为只有一次决策；没有状态空间，也就没有初始状态和目标状态。<b>策略</b>就是选出最好的动作。如果 \(U\) 有限，最好的动作 \(u^*\in U\) 是</p>
+<div class="eq">$$u^* = \operatorname*{argmin}_{u\in U}\Big\{L(u)\Big\}. \tag{9.1}$$</div>
+<p>\(U\) 无限时情况就不同了。设 \(U = (-1,1)\)、\(L(u) = u\)：我们想说 \(-1\) 代价最低，但 \(-1\notin U\)；若 \(U = [-1,1]\) 就没问题。在开区间上<b>没有</b>代价最小的动作：任给 \(u\)，总能找到 \(u'\) 使 \(L(u') < L(u)\)。可如果 \(L(u) = |u|\)，(9.1) 正确地给出 \(u = 0\)——最小值在内部而不在边界上。所以一般要当心：最优值可能不存在。两种补救：</p>
+<ul>
+  <li>要求 \(U\) <b>闭且有界</b>（4.1 节）。闭集包含边界，避免了上面的问题；有界性排除 \(U = \mathbb{R}\)、\(L(u) = u\) 这种情形（\(\mathbb{R}\) 是闭集，但越往负方向代价越小）。</li>
+  <li>改用<b>下确界 infimum</b> inf——能放在代价下面的最大下界。对 \(U=(-1,1)\)、\(L(u)=u\)：
+    <div class="eq">$$\inf_{u\in(-1,1)}\Big\{L(u)\Big\} = -1. \tag{9.2}$$</div>
+    唯一的困难是没有任何 \(u\) 真正取到这个代价——下确界实际上用到了 \(U\) 的闭包。无界问题也能处理：\(U = \mathbb{R}\)、\(L(u)=u\) 的下确界是 \(-\infty\)。</li>
+</ul>
+<p>经验法则：拿不准时，在本该写 min 的地方写 inf 更安全——最小值存在时下确界就等于它，不存在时也给出合理的答案（只是在 \(U\) 有限时写 inf 看起来有点多余）。</p>
+<p>把 \(L\) 乘以 \(-1\) 就得到「倒过来」的问题，本质不变。有时最大化更自然，例如 9.5.1 节的效用理论：定义<b>回报函数 reward function</b> \(R\)，选 \(u\) 使回报最大；令 \(L(u) = -R(u)\) 就变回最小化。最大化问题里，inf 换成<b>上确界 supremum</b> sup。</p>
+<p>本书大多数问题里，一次决策中选最优 \(u\) 都很直接——规划的复杂性来自别处。但要意识到：当 \(U\) 和 \(L\) 复杂时，优化本身就极具挑战。\(U\) 可能有限但极大，也可能是 \(\mathbb{R}^n\) 的高维子集（比如 1000 维）；代价函数可能根本写不出闭式。简单时可以用微积分里的一阶、二阶导数；真实应用中往往要用梯度下降之类的方法，只能保证局部最小。很多时候需要基于采样的技术——5.2 节的分散度等采样思想最初就是为优化发展的。另一些问题有组合解法，例如<b>线性规划 linear programming</b>（求一组线性函数的最小 / 最大，9.4 节会出现）。第 5、6 章分别沿着采样和组合两种思路——它们与优化有平行之处。最优运动规划其实是在路径空间上的优化问题，极难刻画；6.2.4 节等特殊情形能求最优解，一般则极具挑战。<b>变分法 calculus of variations</b> 是在满足微分约束的路径空间上做优化的一般方法（13.4.1 节）。</p>
+
+<h4>多目标优化</h4>
+<div class="box def formulation">
+  <div class="box-title">Formulation 9.2（多目标优化 Multiobjective Optimization）</div>
+  <ol>
+    <li>非空集合 \(U\)，称为动作空间；每个 \(u\in U\) 称为一个动作。</li>
+    <li>向量值代价函数 \(L : U\to\mathbb{R}^d\)（\(d\) 是某个整数）。如有需要，代价的任何分量都可以是 \(\infty\)。</li>
+  </ol>
+</div>
+<p>7.7.2 节多机器人最优协调时已经见过这个问题。两个动作 \(u\)、\(u'\) 称为<b>等价 equivalent</b>，若 \(L(u) = L(u')\)。称 \(u\) <b>支配 dominate</b> \(u'\)，若它们不等价，且对所有 \(1\le i\le d\) 都有 \(L_i(u)\le L_i(u')\)。这在动作集合上定义了一个<b>偏序 partial ordering</b> \(\le\)；许多动作是<b>不可比的 incomparable</b>。不被任何其它动作支配的动作叫 <b>Pareto 最优 Pareto optimal</b>——也就是关于这个偏序的极小元。</p>
+<p><b>例 9.1（Pareto 最优的简单例子）</b>：\(U=\{1,2,3,4,5\}\)、\(d=2\)，\(L(1)=(4,0)\)、\(L(2)=(3,3)\)、\(L(3)=(2,2)\)、\(L(4)=(5,7)\)、\(L(5)=(9,0)\)。动作 2、4、5 可以排除，因为它们被别的动作支配：例如 \((3,3)\) 被 \((2,2)\) 支配，所以 \(u=3\) 比 \(u=2\) 好。剩下的 \(u=1\) 和 \(u=3\) 是 Pareto 最优的。看来 Pareto 最优的主要作用是<b>丢掉被支配的动作</b>：可能剩下不止一个，但至少把 \(U\) 缩小到一组「最好的候选」。</p>
+<p><b>例 9.2（宾夕法尼亚收费公路 Pennsylvania Turnpike）</b>：想象开车横穿宾夕法尼亚州，收费公路上曾经立着吓人的限速与罚款牌。\(U=\{50,51,\ldots,100\}\) 是可选的整数车速（英里 / 小时）。罚款：56–65 罚 \$50，66–75 罚 \$100，76–85 罚 \$200，86–100 罚 \$500；超过 100 据说要坐牢，不予考虑。两个准则：(1) 穿过全州的时间，(2) 罚款金额；假设只要超速就一定被抓。目标是两者都小。比较 56 和 57：罚款相同，57 更快，所以 57 支配 56。事实上 65 支配一直到 56 的所有速度——罚款一样，时间最短。由此推出 Pareto 最优车速是 <b>55、65、75、85、100</b>。在它们之间怎么选取决于司机自己；但明显不该选这五个之外的速度。</p>
+<p><b>例 9.3（连续的 Pareto 最优解）</b>：\(U=[0,1]\)、\(d=2\)、\(L(u)=(u,1-u)\)。每个 \(u\) 都是 Pareto 最优：一个准则稍微变小，另一个就变大，任何两个动作都不可比。这说明了 Pareto 最优的主要「挫败感」：去掉非支配解之后可能还是太多，甚至有一整个连续统。它是否有用，取决于具体应用。</p>
+
+<div class="widget" data-widget="pareto"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>例 9.1：把 u = 2 从 (3,3) 拖到 (1,3)：它不再被 (2,2) 支配，Pareto 集变成 {1, 2, 3}。再把它拖到 (1,1)，看它一口气支配了谁。</li>
+  <li>收费公路：把车速从 56 拖到 65，红点一个个变绿又变红——每个罚款档里只有最快的那个点不被支配。</li>
+  <li>例 9.3 与习题 1：绿色区域（能支配选中点的区域）里永远没有别的代价点时，它就是 Pareto 最优。习题 1 里 u > 0 的点为什么全是红的？</li>
+</ul></div>
+
+<h3 id="s9-1-2">9.1.2 概率论回顾 <span class="en">Probability Theory Review</span></h3>
+<p>这一节回顾一些基本的概率概念，并引入整个 Part III 使用的记号。</p>
+<div class="box def">
+  <div class="box-title">概率空间 probability space \((S,\mathcal{F},P)\)</div>
+  <ol style="margin:0">
+    <li><b>样本空间 sample space</b>：非空集合 \(S\)，代表所有可能的结果。</li>
+    <li><b>事件空间 event space</b>：\(S\) 的子集族 \(\mathcal{F}\)。\(S\) 离散时通常 \(\mathcal{F} = \mathrm{pow}(S)\)；\(S\) 连续时 \(\mathcal{F}\) 通常是 5.1.3 节的 σ-代数。</li>
+    <li><b>概率函数 probability function</b> \(P:\mathcal{F}\to\mathbb{R}\)，给事件赋概率；有时也叫 \(S\) 上的<b>概率分布</b>。它满足公理：\(P(E)\ge0\)；\(P(S)=1\)；若 \(E\cap F=\emptyset\)，则 \(P(E\cup F) = P(E)+P(F)\)。</li>
+  </ol>
+</div>
+<p>\(S\) 离散时，\(P\) 只要在单元素上定义就能由公理推出整个 \(\mathcal{F}\) 上的值。常写 \(P(s)\)——严格说应写 \(P(\{s\})\)，因为 \(s\) 不是事件。<b>例 9.4（掷一颗骰子）</b>：\(S=\{1,\ldots,6\}\)，事件空间 \(\mathrm{pow}(S)\) 共 \(2^6\) 个子集；均匀时 \(P(\{s\})=1/6\)；「掷出偶数」的事件 \(E=\{2,4,6\}\) 概率为 1/2。第三条公理像 5.1.3 节测度空间的最后一条公理——\(P\) 其实是一种特殊的测度（例 5.12）。\(S\) 连续时单点的概率通常为零，改用<b>概率密度函数 probability density function</b> \(p : S\to\mathbb{R}\)：</p>
+<div class="eq">$$P(E) = \int_E p(x)\,dx. \tag{9.3}$$</div>
+
+<h4>条件概率、独立与贝叶斯规则</h4>
+<p><b>条件概率</b>「给定 \(F\) 时 \(E\) 的概率」：</p>
+<div class="eq">$$P(E\,|\,F) = \frac{P(E\cap F)}{P(F)}. \tag{9.4}$$</div>
+<p>\(E\)、\(F\) <b>独立 independent</b> 当且仅当 \(P(E\cap F) = P(E)P(F)\)，否则<b>相关 dependent</b>。一个重要又容易误解的概念是<b>条件独立 conditional independence</b>：\(E\)、\(F\) 本身相关，但给定第三个事件 \(G\) 后变得独立：\(P(E\cap F)\neq P(E)P(F)\)，而 \(P(E\cap F\,|\,G) = P(E|G)P(F|G)\)。书中的例子：\(E\) 是一个人的身高，\(F\) 是他的阅读水平——孩子个子矮、阅读水平也低，所以两者相关；但给定年龄 \(G\) 后，身高和阅读水平就不该再有关联了。</p>
+<p>(9.4) 给出约束</p>
+<div class="eq">$$P(E\cap F) = P(F)P(E|F) = P(E)P(F|E), \tag{9.5}$$</div>
+<p>由此得到交换 \(E\) 与 \(F\) 的<b>贝叶斯规则 Bayes' rule</b>：</p>
+<div class="eq">$$P(F\,|\,E) = \frac{P(E|F)P(F)}{P(E)}. \tag{9.6}$$</div>
+<p>\(P(F)\) 称为<b>先验 prior</b>，\(P(F|E)\) 称为<b>后验 posterior</b>——分别是考虑 \(E\) 之前和之后的概率。所有概率都以某个 \(G\) 为条件时，得到<b>条件贝叶斯规则</b>：</p>
+<div class="eq">$$P(F\,|\,E,G) = \frac{P(E|F,G)P(F|G)}{P(E|G)}. \tag{9.7}$$</div>
+<p><b>边缘化 marginalization</b>：设 \(F_1,\ldots,F_n\) 是 \(S\) 的任一划分，则</p>
+<div class="eq">$$P(E) = \sum_{i=1}^{n} P(E|F_i)P(F_i). \tag{9.8}$$</div>
+<p>它最有用的地方是贝叶斯规则的分母。把 (9.8) 代进 (9.6)：</p>
+<div class="eq">$$P(F\,|\,E) = \frac{P(E|F)P(F)}{\displaystyle\sum_{i=1}^{n}P(E|F_i)P(F_i)}. \tag{9.9}$$</div>
+<p>这个形式常常更好用，因为 \(P(E)\) 看起来被「消掉」了。</p>
+
+<h4>随机变量与期望</h4>
+<p><b>随机变量 random variable</b> \(X\) 是把 \(S\) 映到 \(\mathbb{R}\) 的函数。书中脚注吐槽这个名字很糟糕：它既不「随机」，也不是「变量」，就是一个函数 \(X:S\to\mathbb{R}\)；更糟的是习惯上用大写字母表示它，而函数通常用小写。\(S\) 本身就是 \(\mathbb{R}\) 的子集时，\(X\) 默认取恒等函数。<b>期望 expectation</b> 是按概率加权的平均：</p>
+<div class="eq">$$E[X] = \sum_{s\in S} X(s)P(s), \tag{9.10}$$</div>
+<div class="eq">$$E[X] = \int_S X(s)p(s)\,ds \qquad(S\ \text{连续}). \tag{9.11}$$</div>
+<p>（用测度论的语言，两者都是 Lebesgue 积分的特例，不必分开写。）<b>条件期望</b>把分布换成条件分布，例如 \(S\) 离散、给定事件 \(F\)：</p>
+<div class="eq">$$E[X\,|\,F] = \sum_{s\in S} X(s)P(s|F). \tag{9.12}$$</div>
+<p><b>例 9.5（掷骰子）</b>：回到例 9.4，令 \(X(s)=s\)，用 (9.10)<sup class="fn"><a href="#fn-1" id="fn-1-ref">1</a></sup> 得 \(E[X] = 3.5\)。注意期望值未必是实际中「期望」出现的值：3.5 根本不可能掷出来。若只在掷出大于 3 的试验上取期望，即事件 \(F=\{4,5,6\}\)，由 (9.12) 得 \(E[X|F]=5\)。连掷两颗时 \(s=(i,j)\)，\(S\not\subset\mathbb{R}\)，可以令 \(X(s)=i+j\)，此时 \(E[X]=7\)。</p>
+
+<div class="widget" data-widget="dice"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>预设「和为 7 / 第一颗是 3」：两个事件<b>独立</b>——知道第一颗是 3，和为 7 的概率仍是 1/6。换成「和 ≥ 10 / 第一颗是 6」就不独立了（P(E|F) = 1/2 ≫ 1/6）。</li>
+  <li>选「画事件 F」，把 F 画成整个 S（全部 36 格）：E[X | F] 回到 7，P(E | F) 回到 P(E)。</li>
+  <li>验证 (9.5)：无论怎么画，右边那行的两个乘积总相等——这就是贝叶斯规则 (9.6) 的来源。</li>
+</ul></div>
+
+<div class="widget wide" data-widget="bayes-mosaic"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>「机器人在哪个房间」：先验最偏向厨房，但看到门之后客厅反而最可能（9/19 ≈ 47%）。把三个似然拖成一样高——观测不再携带信息，后验 = 先验。</li>
+  <li>点「再观测一次 E」两三次：每次都用上一次的后验当先验。这正是 9.2.3 节 (9.31) 处理多个条件独立观测的方式。</li>
+  <li>换成「罕见病检测」（补充例子）：检测准确率 95%，阳性后真正患病的概率却只有 16.1%——患病那一列窄得几乎看不见。把先验从 0.01 拖到 0.2，后验跳到多少？</li>
+</ul></div>
+
+<h3 id="s9-1-3">9.1.3 随机化策略 <span class="en">Randomized Strategies</span></h3>
+<p>到目前为止，计划里的动作都是<b>确定性的 deterministic</b>：第 2 章的计划完全确定地指定动作；Formulation 9.1 的策略就是「每次都做同一个决策」。有些应用里决策者<b>不希望被预测</b>，这时可以把随机化引入策略。\(U\) 离散时，<b>随机化策略 randomized strategy</b> \(w\) 由 \(U\) 上的一个概率分布 \(P(u)\) 给出；\(W\) 表示所有随机化策略的集合。现在要区分<b>定义策略</b>和<b>应用（执行）策略</b>：执行时按 \(P(u)\) 抽样选出动作。重复执行时假设各次独立：\(P(u_k|u_i)=P(u_k)\)，即第 \(k\) 次选 \(u_k\) 的概率不受之前第 \(i<k\) 次选了什么的影响。\(U\) 连续时可以用密度 \(p(u)\) 指定。决策论与博弈论文献里，确定性策略和随机化策略常分别叫<b>纯策略 pure</b> 和<b>混合策略 mixed</b>。</p>
+<p><b>例 9.6（抛硬币做决定）</b>：\(U=\{a,b\}\)，抛一枚均匀硬币，正面选 \(a\)、反面选 \(b\)，即 \(P(a)=P(b)=1/2\)。每次执行前不知道会选哪个，但多次之后大约一半时间选 \(a\)。</p>
+<p>确定性策略总可以看成随机化策略的特例：要模拟 \(u_i\)，令 \(P(u)=1\)（\(u=u_i\)）、否则为 0——「只有以概率零才会选到别的动作（可能，但不大可能！）」。用随机化策略求解 Formulation 9.1 时，代价没法预测，于是定义<b>平均代价</b>：执行次数趋于无穷时，平均值收敛到期望代价 \(\bar L(w)\)（把 \(L\) 看成随机变量）。\(U\) 离散时</p>
+<div class="eq">$$\bar L(w) = \sum_{u\in U} L(u)P(u) = \sum_{u\in U} L(u)\,w_i, \tag{9.13}$$</div>
+<p>其中 \(w_i\) 是 \(w\) 对应于该 \(u\) 的分量。是否存在比所有确定性策略都好的 \(w\)，即对所有 \(u\) 都有 \(\bar L(w) < L(u)\)？答案是<b>否</b>：最好的策略总是把概率 1 放在最小化 \(L\) 的 \(u^*\) 上。若有两个以上动作同样最优，随机化策略可以在它们之间随意分配概率，但不会进一步降低代价。所以在这种情形下随机化毫无意义——除非有别的考虑。</p>
+<p>一个随机化至关重要的例子是<b>对抗有智能的对手</b>：如果问题重复很多次，对手很容易学会任何确定性策略。随机化可以削弱对手的预测能力。9.3 节会用这个想法改进零和博弈的玩法。</p>
+<p><b>例 9.7（猜硬币 Matching Pennies）</b>：两个玩家反复同时把硬币放在桌上，正面 H 或反面 T 朝上。结果 HH 或 TT（相同）时，玩家 1 付玩家 2 一比索；HT 或 TH 时，玩家 2 付玩家 1 一比索。如果玩家 1 用确定性策略，玩家 2 一旦摸清它，就能每次都赢；玩家 1 用最好的随机化策略，平均下来最多不输不赢。哪个随机化策略能做到？把它推广到三个动作就是著名的石头剪刀布：要写一个和聪明对手反复对弈的程序，最好引入随机化。</p>
+
+<div class="widget wide" data-widget="randomized"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>左图：无论 L(a)、L(b) 取什么，L̄(w) 都是一条直线，最低点在端点——单人优化里随机化不会更好。</li>
+  <li>右图，p = 1（总出 H）对「会学习」的 P2：几轮之后平均代价就贴到 1（每次都输）。把 p 拖到 0.5 重来：曲线在 0 附近晃，对手学不到东西。</li>
+  <li>换成「P2 总出 H」：这时 p = 0（总出 T）反而最好——对一个<b>不会学习</b>的对手，确定性的最好回应就够了。随机化的价值在于防备会学习的对手。</li>
+</ul></div>
+</section>
+
+<!-- ============================================================ 9.2 -->
+<section id="s9-2">
+<h2>9.2 与自然对弈 <span class="en">A Game Against Nature</span></h2>
+
+<h3 id="s9-2-1">9.2.1 为自然建模 <span class="en">Modeling Nature</span></h3>
+<p>这是全书第一次直接为不确定性建模。有两个 DM：</p>
+<ul>
+  <li><b>机器人 Robot</b>：全书主要 DM 的名字。现在有两个 DM 了，这个名字用来区分彼此。</li>
+  <li><b>自然 Nature</b>：一种对机器人来说不可预测的神秘力量。它有自己的动作集合，选择的方式会干扰机器人的成就。自然可以看作为了在决策或规划中<b>建模不确定性</b>而构造出来的合成 DM。</li>
+</ul>
+<p>想象机器人和自然各做一个决策，代价取决于双方的选择，仍然代表结果对机器人的影响；但机器人现在必须考虑自然的影响。自然不可预测，所以机器人要为它的行为建立模型。机器人有动作集合 \(U\)；自然也有一个动作集合，称为<b>自然动作空间 nature action space</b>，记为 \(\Theta\)，<b>自然动作</b>记为 \(\theta\in\Theta\)。\(U\) 现在称为<b>机器人动作空间</b>，不致混淆时仍简称动作空间。</p>
+<div class="box def formulation">
+  <div class="box-title">Formulation 9.3（与自然对弈 A Game Against Nature）</div>
+  <ol>
+    <li>非空集合 \(U\)，称为（机器人）动作空间；每个 \(u\in U\) 称为一个动作。</li>
+    <li>非空集合 \(\Theta\)，称为自然动作空间；每个 \(\theta\in\Theta\) 称为一个自然动作。</li>
+    <li>函数 \(L : U\times\Theta\to\mathbb{R}\cup\{\infty\}\)，称为代价函数。</li>
+  </ol>
+</div>
+<p>代价现在同时依赖 \(u\) 和 \(\theta\)。\(U\)、\(\Theta\) 有限时，可以把 \(L\) 写成 \(|U|\times|\Theta|\) 的<b>代价矩阵 cost matrix</b>。<b>例 9.8（一个简单的与自然对弈）</b>：\(U\)、\(\Theta\) 各有三个动作，九种结果的代价矩阵是</p>
+<div class="table-wrap" style="text-align:center"><table class="mx" style="margin:0 auto"><tr><th class="corner">L(u, θ)</th><th class="c">θ₁</th><th class="c">θ₂</th><th class="c">θ₃</th></tr>
+<tr><th class="r">u₁</th><td>1</td><td>−1</td><td>0</td></tr><tr><th class="r">u₂</th><td>−1</td><td>2</td><td>−2</td></tr><tr><th class="r">u₃</th><td>2</td><td>−1</td><td>1</td></tr></table></div>
+<p>机器人的动作选一行，自然的动作选一列，代价就是对应的矩阵元素。</p>
+<p>Formulation 9.3 里双方像是同时行动：自然在决策前不知道机器人的动作。很多情境下自然可能<b>知道</b>机器人的动作，这时可以对每个 \(u\) 定义不同的自然动作空间：</p>
+<div class="box def formulation">
+  <div class="box-title">Formulation 9.4（自然知道机器人的动作 Nature Knows the Robot Action）</div>
+  <ol>
+    <li>非空集合 \(U\)，称为动作空间。</li>
+    <li>对每个 \(u\in U\)，一个非空集合 \(\Theta(u)\)，称为自然动作空间。</li>
+    <li>函数 \(L : U\times\Theta\to\mathbb{R}\cup\{\infty\}\)，称为代价函数。</li>
+  </ol>
+  <p style="margin:.3em 0 0">机器人选了 \(u\) 之后，自然从 \(\Theta(u)\) 中选。</p>
+</div>
+
+<h3 id="s9-2-2">9.2.2 非确定性模型 vs 概率模型 <span class="en">Nondeterministic vs. Probabilistic Models</span></h3>
+<p>与自然对弈时，什么是最好的决策？这取决于机器人对自然如何选择动作掌握了什么信息。总假设机器人不知道自然究竟会选哪个动作（否则就没必要定义自然了）。从机器人的视角，有两种模型：</p>
+<div class="table-wrap">
+<table class="data">
+  <tr><th style="width:9em">模型</th><th>机器人的心声</th><th>做法</th></tr>
+  <tr><td><b>非确定性</b> <span class="en">nondeterministic</span></td><td>「我完全不知道自然会做什么。」</td><td>只知道 \(\Theta\)（或 \(\Theta(u)\)）；按<b>最坏情况</b>决策</td></tr>
+  <tr><td><b>概率</b> <span class="en">probabilistic</span></td><td>「我一直在观察自然、收集统计数据。」</td><td>还知道 \(P(\theta)\)（或 \(p(\theta)\)）；按<b>期望</b>决策</td></tr>
+</table>
+</div>
+<p>这两个术语借自 Erdmann。有些文献用 <i>possibilistic</i> 代替 nondeterministic——很好的词，可惜在英语里和 probabilistic 太像。</p>
+<h4>最坏情况分析</h4>
+<p>非确定性模型下没有更多信息。合理的做法是<b>假设最坏</b>：甚至可以想象自然知道机器人会选什么，并恶意地选一个把代价推到最高的动作。这种悲观的看法常被戏称为墨菲定律（「凡是可能出错的事就一定会出错」）或 Sod 定律。于是最好的动作是</p>
+<div class="eq">$$u^* = \operatorname*{argmin}_{u\in U}\Big\{\max_{\theta\in\Theta}\Big\{L(u,\theta)\Big\}\Big\}. \tag{9.14}$$</div>
+<p>这叫<b>最坏情况分析 worst-case analysis</b>，因式中的 min 和 max 也常叫 <b>minimax</b> 解。\(U\) 或 \(\Theta\) 无限时 min、max 可能不存在，应换成 inf、sup。</p>
+<h4>期望情况分析</h4>
+<p>最坏情况有时太悲观；也许假设 \(\Theta\) 中所有动作等可能更好——这是下面概率模型的特例。概率模型下，假设机器人已经收集了足够数据，能可靠地估计 \(P(\theta)\)（或 \(p(\theta)\)）。这相当于想象自然在执行 9.1.3 节的随机化策略：过去很多次试验观察到的自然动作，将来也会按 \(P(\theta)\) 以同样方式出现。于是改用<b>期望情况分析 expected-case analysis</b>，优化在大量独立试验中得到的平均代价：</p>
+<div class="eq">$$u^* = \operatorname*{argmin}_{u\in U}\Big\{E_\theta\big[L(u,\theta)\big]\Big\}, \tag{9.15}$$</div>
+<p>\(E_\theta\) 表示按 \(\theta\) 的分布取期望。\(\Theta\) 与 \(P(\theta)\) 构成概率空间，对每个 \(u\)，\(L(u,\theta)\) 是一个随机变量（也可以把随机变量定义在 \(U\times\Theta\) 上，再取给定 \(u\) 的条件期望）。于是</p>
+<div class="eq">$$E_\theta\big[L(u,\theta)\big] = \sum_{\theta\in\Theta} L(u,\theta)P(\theta). \tag{9.16}$$</div>
+<p><b>例 9.9（非确定性 vs 概率）</b>：回到例 9.8，\(U=\{u_1,u_2,u_3\}\)，\(\Theta=\{\theta_1,\theta_2,\theta_3\}\)。非确定性模型下 \(u^*=u_1\)，最坏代价 \(L(u^*,\theta)=1\)。概率模型下设 \(P(\theta_1)=1/5\)、\(P(\theta_2)=1/5\)、\(P(\theta_3)=3/5\)，用 (9.15) 逐个计算期望代价：</p>
+<div class="eq">$$\begin{aligned}
+E_\theta[L(u_1,\theta)] &= (1)\tfrac15 + (-1)\tfrac15 + (0)\tfrac35 = 0\\
+E_\theta[L(u_2,\theta)] &= (-1)\tfrac15 + (2)\tfrac15 + (-2)\tfrac35 = -1\\
+E_\theta[L(u_3,\theta)] &= (2)\tfrac15 + (-1)\tfrac15 + (1)\tfrac35 = \tfrac45.
+\end{aligned} \tag{9.17}$$</div>
+<p>最好的是 \(u^*=u_2\)，期望代价 \(-1\)。若分布换成 \(P=[1/10\ \ 4/5\ \ 1/10]\)，就会得到 \(u^*=u_1\)。所以最好的决策依赖于 \(P(\theta)\)：如果这个信息在统计上可靠，就能做出更有根据的决策；如果没有这样的信息，非确定性模型可能更合适。没有数据时也可以把 \(P(\theta)\) 设成均匀分布（所有自然动作等可能），但基于此的结论是危险的（9.5 节）。</p>
+
+<div class="widget wide" data-widget="prior-simplex"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>点三个预设：例 9.9 的两个先验分别落在 u₂、u₁ 的区域里；三角形里<b>没有</b> u₃ 的区域——对例 9.8，u₃ 在任何先验下都不会是唯一的期望最优（参考代码第 5 项）。</li>
+  <li>拖动紫点，找出 u₁ 和 u₂ 的分界线（E[L(u₁)] − E[L(u₂)] = 2p₁ − 3p₂ + 2p₃ = 0）。分界线靠近哪个顶点，就说明哪个 θ 最能左右决策。</li>
+  <li>勾选「用遗憾矩阵 T 代替 L」：区域一点都没变。这是本页对例 9.10 笔误判断的依据之一。</li>
+</ul></div>
+
+<p>在 Formulation 9.4 中，自然动作空间 \(\Theta(u)\) 依赖于机器人的动作 \(u\)。非确定性模型下 (9.14) 简单地变成</p>
+<div class="eq">$$u^* = \operatorname*{argmin}_{u\in U}\Big\{\max_{\theta\in\Theta(u)}\Big\{L(u,\theta)\Big\}\Big\}. \tag{9.18}$$</div>
+<p>可惜这类问题没有漂亮的矩阵表示，因为 \(\Theta(u)\) 的大小可以随 \(u\) 变化。概率情形下 \(P(\theta)\) 换成条件分布 \(P(\theta|u)\)；估计它需要对每个可能的 \(u\) 观察大量独立试验。自然的行为现在可以依赖于机器人的动作，但它仍由一个随机化策略刻画——它不会跨试验调整策略。(9.16) 中的期望变成</p>
+<div class="eq">$$E_\theta\big[L(u,\theta)\big] = \sum_{\theta\in\Theta(u)} L(u,\theta)P(\theta|u). \tag{9.19}$$</div>
+
+<h4>遗憾 regret</h4>
+<p>要注意，这里给出的模型并不是做出好决策的唯一公认方式。博弈论的关键想法是最小化「<b>遗憾</b>」——做了一个坏决策、事后希望能改掉时的那种感觉。假设你选了 \(u\) 之后被告知自然用了 \(\theta\)；遗憾就是「给定自然的动作，如果你换一个动作本可以省下多少代价」。对每个 \((u,\theta)\)，<b>遗憾</b> \(T\) 定义为</p>
+<div class="eq">$$T(u,\theta) = \max_{u'\in U}\Big\{L(u,\theta) - L(u',\theta)\Big\}. \tag{9.20}$$</div>
+<p>对 Formulation 9.3，\(U\)、\(\Theta\) 有限时可以定义<b>遗憾矩阵 regret matrix</b><sup class="fn"><a href="#fn-3" id="fn-3-ref">3</a></sup>：每列减去该列的最小值。若最关心的是最小化遗憾而不是实际代价，非确定性模型下最小化最坏遗憾的动作是</p>
+<div class="eq">$$u^* = \operatorname*{argmin}_{u\in U}\Big\{\max_{\theta\in\Theta}\Big\{T(u,\theta)\Big\}\Big\}, \tag{9.21}$$</div>
+<p>概率模型下最小化期望遗憾的动作是</p>
+<div class="eq">$$u^* = \operatorname*{argmin}_{u\in U}\Big\{E_\theta\big[T(u,\theta)\big]\Big\}. \tag{9.22}$$</div>
+<p>与 (9.14)、(9.15) 的唯一区别就是 \(L\) 换成了 \(T\)。9.3.2 节会更详细地讨论遗憾，因为它是博弈论中最优性概念的基础。</p>
+<p><b>例 9.10（遗憾矩阵）</b>：例 9.8 的遗憾矩阵是</p>
+<div class="table-wrap" style="text-align:center"><table class="mx" style="margin:0 auto"><tr><th class="corner">T(u, θ)</th><th class="c">θ₁</th><th class="c">θ₂</th><th class="c">θ₃</th></tr>
+<tr><th class="r">u₁</th><td>2</td><td>0</td><td>2</td></tr><tr><th class="r">u₂</th><td>0</td><td>3</td><td>0</td></tr><tr><th class="r">u₃</th><td>3</td><td>0</td><td>3</td></tr></table></div>
+<p>非确定性模型下由 (9.21) 得 \(u^*=u_1\)，最坏遗憾为 2。概率模型下设 \(P(\theta_1)=P(\theta_2)=P(\theta_3)=1/3\)，由 (9.22) 算出三个动作的期望遗憾分别是 4/3、1、2，所以最优动作是 \(u^*=u_2\)，最优期望遗憾为 1<sup class="fn"><a href="#fn-2" id="fn-2-ref">2</a></sup>。</p>
+
+<div class="widget wide" data-widget="criteria"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>例 9.8 预设：最坏情况选 u₁、期望选 u₂；把 θ₂ 的权重拖大（例 9.9 的后半），期望准则也改选 u₁。</li>
+  <li>换成「习题 2」：拖动 Hurwicz 系数 α，看答案在 α = 1/3 处从 u₃ 跳到 u₁（习题 3b，参考代码第 4 项）。</li>
+  <li>换成「例 9.28 支票 vs 现金」：最坏情况坚持拿 1 欧元现金；把「跳票」的权重拉到最大、「兑现」拉到 0.001 附近，期望准则也改选现金。</li>
+</ul></div>
+
+<h3 id="s9-2-3">9.2.3 利用观测 <span class="en">Making Use of Observations</span></h3>
+<p>Formulation 9.3 和 9.4 不允许机器人在决策前得到（除 \(L\) 以外的）任何信息。现在假设机器人有一个传感器，在选动作之前可以检查一下。传感器给出一个<b>观测 observation</b>（或测量），包含关于自然会选哪个动作的信息。某些情境下可以把自然动作想象成已经选定的一种<b>状态</b>，观测提供关于它的信息。例如自然选定曼谷此刻的气温，观测就是曼谷某支温度计的读数。</p>
+<h4>表述问题</h4>
+<p>令 \(Y\) 为<b>观测空间 observation space</b>，即所有可能观测 \(y\in Y\) 的集合。方便起见设 \(Y\)、\(U\)、\(\Theta\) 都是离散的。模型的一部分是：给定 \(y\) 后，对 \(\theta\) 的某些约束是已知的。非确定性模型下，对每个 \(\theta\in\Theta\) 指定集合 \(Y(\theta)\subseteq Y\)，表示自然动作为 \(\theta\) 时<b>可能</b>出现的观测；概率模型下指定条件分布 \(P(y|\theta)\)。9.2.4 节会给出传感模型的例子，11.1.1、11.5.1 节还有更多（那里是关于状态空间 \(X\) 写的，在本节退化成 \(\Theta\)）。和之前一样，概率情形还需要先验 \(P(\theta)\)。</p>
+<div class="box def formulation">
+  <div class="box-title">Formulation 9.5（有观测的与自然对弈 A Game Against Nature with an Observation）</div>
+  <ol>
+    <li>有限非空集合 \(U\)，称为动作空间；每个 \(u\in U\) 称为一个动作。</li>
+    <li>有限非空集合 \(\Theta\)，称为自然动作空间。</li>
+    <li>有限非空集合 \(Y\)，称为观测空间。</li>
+    <li>对每个 \(\theta\in\Theta\) 指定集合 \(Y(\theta)\subseteq Y\) 或概率分布 \(P(y|\theta)\)，表示自然动作为 \(\theta\) 时哪些观测是可能的或有多大概率。概率情形还要指定先验 \(P(\theta)\)。</li>
+    <li>函数 \(L : U\times\Theta\to\mathbb{R}\cup\{\infty\}\)，称为代价函数。</li>
+  </ol>
+</div>
+<p>求解 Formulation 9.5 时，策略不再只是指定一个动作，因为我们要在收到观测之前就完整描述机器人的行为。于是把<b>策略</b>定义为函数 \(\pi : Y\to U\)：对每个可能的观测 \(y\)，策略给出一个动作。我们要在所有可能的策略中搜索，找出对所有可能观测都做得最好的那一个。这里的 \(Y\) 其实是<b>信息空间 information space</b> 的一个特例，那是第 11、12 章的主题；最终，策略（或计划）将以<b>信息状态</b>为条件，它推广了观测。</p>
+<h4>最优策略</h4>
+<p>先看非确定性模型下的最优策略 \(\pi^*\)。对每个 \(\theta\) 的集合 \(Y(\theta)\) 必须「反过来」，求出对每个观测 \(y\) 可能的自然动作：</p>
+<div class="eq">$$\Theta(y) = \{\theta\in\Theta \mid y\in Y(\theta)\}. \tag{9.23}$$</div>
+<p>最优策略对每个 \(y\in Y\) 设</p>
+<div class="eq">$$\pi^*(y) = \operatorname*{argmin}_{u\in U}\Big\{\max_{\theta\in\Theta(y)}\Big\{L(u,\theta)\Big\}\Big\}. \tag{9.24}$$</div>
+<p>对比 (9.14)：那里的 max 取遍整个 \(\Theta\)；有了观测 \(y\)，集合缩小到 \(\Theta(y)\subseteq\Theta\)。</p>
+<p>概率模型下要做与 (9.23) 类似的运算：由 \(P(y|\theta)\) 算出 \(P(\theta|y)\)，确定 \(y\) 含有的关于 \(\theta\) 的信息。用分母边缘化的贝叶斯规则 (9.9)：</p>
+<div class="eq">$$P(\theta\,|\,y) = \frac{P(y|\theta)P(\theta)}{\displaystyle\sum_{\theta\in\Theta}P(y|\theta)P(\theta)}. \tag{9.25}$$</div>
+<p>两种情形的联系：取 \(P(y|\theta)\) 仅当 \(y\in Y(\theta)\) 时非零，并取均匀的 \(P(\theta)\)，则 (9.25) 恰好给 (9.23) 中 \(\Theta(y)\) 的元素非零概率——(9.25) 就是 (9.23) 的概率版本。最优策略对每个 \(y\) 规定为</p>
+<div class="eq">$$\pi^*(y) = \operatorname*{argmin}_{u\in U}\Big\{E_\theta\Big[L(u,\theta)\,\Big|\,y\Big]\Big\} = \operatorname*{argmin}_{u\in U}\Big\{\sum_{\theta\in\Theta}L(u,\theta)P(\theta|y)\Big\}. \tag{9.26}$$</div>
+<p>与 (9.15)、(9.16) 的区别是 \(P(\theta)\) 换成了 \(P(\theta|y)\)。对每个 \(u\)，(9.26) 中的期望称为<b>条件贝叶斯风险 conditional Bayes' risk</b>，最优策略总是选使它最小的动作。注意 (9.26) 中的 \(P(\theta|y)\) 可以用 (9.25) 表示，其分母<sup class="fn"><a href="#fn-4" id="fn-4-ref">4</a></sup>就是 \(P(y)\)，与 \(u\) 无关、不影响优化；所以在 (9.26) 中用 \(P(y|\theta)P(\theta)\) 代替 \(P(\theta|y)\)，得到的 \(\pi^*\) 相同。空间连续时把概率换成概率密度，方法不变。</p>
+<h4>自然行动两次</h4>
+<p>另一种方便的表述是让自然行动两次：</p>
+<ol>
+  <li>先选一个自然动作 \(\theta\in\Theta\)，机器人不知道它。</li>
+  <li>再选一个<b>自然观测动作 nature observation action</b>，干扰机器人感知 \(\theta\) 的能力。</li>
+</ol>
+<p>令 \(\psi\) 表示自然观测动作，从<b>自然观测动作空间</b> \(\Psi(\theta)\) 中选。<b>传感器映射 sensor mapping</b> \(h\) 对每个 \(\theta\in\Theta\)、\(\psi\in\Psi(\theta)\) 给出 \(y = h(\theta,\psi)\)。于是对两种自然动作，都得到一个观测 \(y=h(\theta,\psi)\)。这给出 Formulation 9.5 的另一种写法：</p>
+<div class="box def formulation">
+  <div class="box-title">Formulation 9.6（自然干扰观测 Nature Interferes with the Observation）</div>
+  <ol>
+    <li>有限非空集合 \(U\)，称为动作空间。</li>
+    <li>有限非空集合 \(\Theta\)，称为自然动作空间。</li>
+    <li>有限非空集合 \(Y\)，称为观测空间。</li>
+    <li>对每个 \(\theta\in\Theta\)，非空集合 \(\Psi(\theta)\)，称为自然观测动作空间。</li>
+    <li>传感器映射 \(h : \Theta\times\Psi\to Y\)。</li>
+    <li>函数 \(L : U\times\Theta\to\mathbb{R}\cup\{\infty\}\)，称为代价函数。</li>
+  </ol>
+</div>
+<p>它用一个函数 \(h\) 优雅地统一了非确定性模型与概率模型。非确定性模型假设任何 \(\psi\in\Psi(\theta)\) 都可能出现，于是</p>
+<div class="eq">$$\Theta(y) = \{\theta\in\Theta \mid \exists\psi\in\Psi(\theta)\ \text{使得}\ y = h(\theta,\psi)\}. \tag{9.27}$$</div>
+<p>概率模型指定分布 \(P(\psi|\theta)\)（常常退化为 \(P(\psi)\)）。设把 \(h\) 的定义域限制在某个固定的 \(\theta\) 上时，它是从 \(\Psi\) 到 \(Y\) 的单射——换句话说，\(\theta\) 固定时每个自然观测动作导致唯一的观测。利用 \(P(\psi)\) 和 \(h\)，\(P(y|\theta)\) 由下式导出：</p>
+<div class="eq">$$P(y\,|\,\theta) = \begin{cases} P(\psi|\theta) & \text{对唯一满足 } y = h(\theta,\psi) \text{ 的 } \psi,\\ 0 & \text{若不存在这样的 }\psi.\end{cases} \tag{9.28}$$</div>
+<p>去掉单射假设时，\(P(\psi|\theta)\) 换成对所有满足 \(y=h(\theta,\psi)\) 的 \(\psi\) 求和。在 Formulation 9.6 中，非确定性模型与概率模型的唯一区别就是对 \(\psi\) 的刻画，它代表一种测量干扰。策略仍然形如 \(\pi : Y\to U\)<sup class="fn"><a href="#fn-5" id="fn-5-ref">5</a></sup>。甚至可以用混合模型：一种自然动作按非确定性建模，另一种按概率建模。</p>
+<h4>接收多个观测</h4>
+<p>Formulation 9.5 的另一个扩展是在决策前接收多个观测 \(y_1,y_2,\ldots,y_n\)，每个 \(y_i\) 属于观测空间 \(Y_i\)。策略 \(\pi\) 现在依赖于所有观测：</p>
+<div class="eq">$$\pi : Y_1\times Y_2\times\cdots\times Y_n\to U. \tag{9.29}$$</div>
+<p>非确定性模型对每个 \(i\) 和 \(\theta\) 指定 \(Y_i(\theta)\)，把 (9.24) 中的 \(\Theta(y)\) 换成</p>
+<div class="eq">$$\Theta(y_1)\cap\Theta(y_2)\cap\cdots\cap\Theta(y_n), \tag{9.30}$$</div>
+<p>得到最优动作 \(\pi^*(y_1,\ldots,y_n)\)。概率模型改为指定 \(P(y_i|\theta)\)。通常假设各观测在给定 \(\theta\) 时<b>条件独立</b>：对任意 \(y_i\)、\(\theta\)、\(y_j\)（\(i\ne j\)），\(P(y_i|\theta,y_j) = P(y_i|\theta)\)。(9.26) 中的 \(P(\theta|y)\) 换成 \(P(\theta|y_1,\ldots,y_n)\)；利用贝叶斯规则和条件独立，</p>
+<div class="eq">$$P(\theta\,|\,y_1,\ldots,y_n) = \frac{P(y_1|\theta)P(y_2|\theta)\cdots P(y_n|\theta)P(\theta)}{P(y_1,\ldots,y_n)}. \tag{9.31}$$</div>
+<p>分母可以看作不影响优化的常数，所以除非还需要最优期望代价，否则不必显式计算。条件独立让我们不必完整指定 \(P(y|\theta)\)，是一个巨大的简化；有时即使条件独立并不成立，也会为了这个简化而假设它。使用观测条件独立的方法常被称为<b>朴素贝叶斯 naive Bayes</b>。</p>
+
+<div class="widget wide" data-widget="sensor"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>「小误差」传感器，连点「测一次」：橙色带（非确定性的 Θ(y₁)∩…∩Θ(yₙ)，式 9.30）最多 3 格宽、再测就缩到 1–2 格；紫色后验（式 9.31）逐渐把概率集中到真值上。参考代码第 6 项：读数 7、8、8 之后，Θ 交集是 {7, 8}，后验是 (1/3, 2/3)。</li>
+  <li>换成「偶尔大误差」：橙色带一下子宽到 17 格，测很多次才收窄；后验却很快集中。这就是 9.5.3 节说的「为了保证而把 Ψ(θ) 弄得很大」的代价。</li>
+  <li>换成「偶尔丢回波」：读到 ∞ 时两种模型都什么也没学到；最坏情况的推理会担心传感器永远只报 ∞。</li>
+</ul></div>
+
+<h3 id="s9-2-4">9.2.4 最优决策的例子 <span class="en">Examples of Optimal Decision Making</span></h3>
+<p>到这里给出的框架刻画了<b>统计决策论 statistical decision theory</b>，它涵盖了广泛的应用和研究问题：几乎任何需要自动做决策的情境（由机器或按规则办事的人来做）都可以用这些概念。第 10–12 章会把这个决策问题反复嵌进复杂的规划问题：规划被看成一个反复修改状态空间中状态的序贯决策过程。通常每一步决策都比常见的决策论应用简单，因为规划问题还被许多其它因素复杂化——如果某个应用的单步决策已经太难解，那么扩展到规划就没什么希望了。尽管如此，认识到在这一框架下建模、求解决策问题时一般会遇到的挑战仍然重要。下面的例子展示了它的威力与范围。</p>
+<h4>模式分类 pattern classification</h4>
+<p>过去几十年，计算机视觉和机器学习中一个活跃的领域是<b>模式分类</b>：用一组数据做分类。例如在计算机视觉里，数据对应从图像中提取的信息，是视觉系统用来给物体分类的观测特征（比如「我在看一碗越南米粉」）。这里给出的是模式分类的一个高度理想化的版本：假设所有模型细节（包括所需的概率分布）都已经有了。有些情境中可以通过在大数据集上收集统计得到它们；但在许多应用中，获取这些数据昂贵或不可行，必须在缺乏好信息的情况下发展分类技术。有些问题甚至是<b>无监督 unsupervised</b> 的——连可能的类别都要自动发现。因此模式分类仍是一个有挑战的研究领域。</p>
+<p>一般模型是：自然先确定类别，然后得到关于类别的观测，最后机器人的动作试图根据观测猜出正确的类别。这正符合 Formulation 9.5。令 \(\Theta\) 为有限的<b>类别</b>集合；机器人要猜类别，所以 \(U=\Theta\)。用一个简单的代价函数衡量 \(u\) 与 \(\theta\) 的不符：</p>
+<div class="eq">$$L(u,\theta) = \begin{cases} 0 & \text{若 } u = \theta\ \text{（分类正确）}\\ 1 & \text{若 } u \ne \theta\ \text{（分类错误）。}\end{cases} \tag{9.32}$$</div>
+<p>非确定性模型下，只要动作 \(u\) <b>可能</b>分错，代价就是 1；概率模型下，(9.32) 的期望就是动作 \(u\) 分错的概率。用于做分类决策的信息构成<b>特征空间 feature space</b> \(Y\)，每个 \(y\in Y\) 称为一个<b>特征</b>或<b>特征向量</b>（常常 \(y\in\mathbb{R}^n\)）——在这里它不过是 Formulation 9.5 中的观测。最好的<b>分类器 classifier</b>（<b>分类规则</b>）就是一个策略 \(\pi : Y\to U\)，它按所选模型在最坏情况或期望意义下给出最小的分类错误。</p>
+<p><b>贝叶斯分类器 Bayesian classifier</b>：模式分类中最常见的是概率方法，得到贝叶斯分类器。这里假设给定了 \(P(y|\theta)\) 和 \(P(\theta)\)：\(P(y|\theta)\) 描述每个类别的特征分布，\(P(\theta)\) 描述各类别总体出现的频率。如果有大量预先分好类的数据，这些分布可以可靠地学到。特征空间常常是连续的，得到密度 \(p(y|\theta)\)，而 \(P(\theta)\) 仍是离散分布。最优分类器 \(\pi^*\) 按 (9.26) 设计：收到特征向量 \(y\) 后宣布类别 \(u=\pi^*(y)\)；用 (9.32) 时，期望代价就是错误率。</p>
+<p><b>例 9.11（光学字符识别 OCR）</b>：设相机拍下一页文字的数字图像，先做分割确定每个字母的位置，然后要把每个字母正确分类。令 \(\Theta=\{A,B,C,D,E,F,G,H\}\)（实际中应包括整个字母表）。设有三种图像处理算法：</p>
+<ul>
+  <li><b>形状提取器</b>：字母只由直线段构成时返回 \(s=0\)，至少有一段曲线时返回 \(s=1\)。</li>
+  <li><b>端点计数器</b>：返回线段端点的个数 \(e\)。例如 O 没有端点，X 有四个。</li>
+  <li><b>洞计数器</b>：返回字母围成的洞的个数 \(h\)。例如 X 没有洞，O 有一个。</li>
+</ul>
+<p>特征向量是 \(y=(s,e,h)\)。理想情况下应报告的值见图 9.1，它们给出 \(\Theta(s)\)、\(\Theta(e)\)、\(\Theta(h)\)，交集就是任一组合对应的 \(\Theta(y)\)。</p>
+<div class="table-wrap"><table class="data fig91" style="max-width:420px;margin:0 auto">
+  <tr><th>特征</th><th>值</th><th>对应的字母</th></tr>
+  <tr><td rowspan="2">形状 s</td><td>0</td><td>A E F H</td></tr><tr><td>1</td><td>B C D G</td></tr>
+  <tr><td rowspan="5">端点 e</td><td>0</td><td>B D</td></tr><tr><td>1</td><td>—</td></tr><tr><td>2</td><td>A C G</td></tr><tr><td>3</td><td>F E</td></tr><tr><td>4</td><td>H</td></tr>
+  <tr><td rowspan="3">洞 h</td><td>0</td><td>C E F G H</td></tr><tr><td>1</td><td>A D</td></tr><tr><td>2</td><td>B</td></tr>
+</table></div>
+<p class="small muted" style="text-align:center">图 9.1 的重排：从字母到特征值的映射。</p>
+<p>设想在非确定性模型下分类，并假设特征总是给出正确的信息。\(y=(0,2,1)\) 时唯一可能的字母是 A；\(y=(1,0,2)\) 时只有 B。如果每个 \((s,e,h)\) 都至多对应一个字母，就能构造完美的分类器。可惜 \((0,3,0)\) 同时对应 E 和 F，最坏情况下 (9.32) 的代价是 1<sup class="fn"><a href="#fn-ocr" id="fn-ocr-ref">注</a></sup>。补救办法之一是引入新特征：用一个图像处理算法检测<b>拐角</b>——两条线段以直角（90°）相交的地方。令 \(c\) 为拐角数，新的特征向量为 \(y=(s,e,h,c)\)；新算法能漂亮地分开 E 和 F，它们分别有 \(c=2\) 和 \(c=1\)。现在所有字母都能被无误分类。</p>
+<p>当然，实际中图像处理算法偶尔会出错。可以设计一个贝叶斯分类器来最大化成功的概率。假设观测条件独立，于是分类器可以看作<b>朴素</b>的。设把四个图像处理算法在训练集上跑一遍并记录结果；每种情况下都人工确定正确类别，从而得到 \(P(s|\theta)\)、\(P(e|\theta)\)、\(P(h|\theta)\)、\(P(c|\theta)\)。例如洞计数器在文中多次读到字母 A，可能得到 \(P(h=1\,|\,\theta=A)=0.9\)（正确答案），以及较小的 \(P(h=0\,|\,\theta=A)=0.09\)、\(P(h=2\,|\,\theta=A)=0.01\)。假设给定输入字母时各算法的输出独立，联合概率为</p>
+<div class="eq">$$P(y\,|\,\theta) = P(s,e,h,c\,|\,\theta) = P(s|\theta)P(e|\theta)P(h|\theta)P(c|\theta). \tag{9.33}$$</div>
+<p>先验 \(P(\theta)\) 可以在大量人工分类的文本上统计各字母的相对频率得到。有意思的是还能融入与上下文相关的信息：如果知道文本是西班牙语，\(P(\theta)\) 就应该与英语不同；按文本类型定制 \(P(\theta)\) 能提高分类器的表现。分类器选择使错误概率最小的动作。忽略贝叶斯规则 (9.26) 分母中的常数 \(P(y)\)，动作 \(u\) 的错误概率正比于</p>
+<div class="eq">$$\sum_{\theta\in\Theta} L(u,\theta)\,P(s|\theta)P(e|\theta)P(h|\theta)P(c|\theta)P(\theta) \tag{9.34}$$</div>
+<p>（按 (9.32)，这就是对 \(\theta\neq u\) 求和；等价地，选使 \(P(s|u)P(e|u)P(h|u)P(c|u)P(u)\) 最大的 \(u\)）<sup class="fn"><a href="#fn-6" id="fn-6-ref">6</a></sup>。</p>
+
+<div class="widget wide" data-widget="ocr"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>非确定性模式，只用 s、e、h：E/F 和 C/G 两组变红。点亮「c 直角」：全部分开（蓝色小方块就是被数的直角）。</li>
+  <li>切到概率模式，ε = 0.1、只用 s、e、h：精确错误率约 19.1%；加上 c 降到约 9.8%（参考代码第 7 项）。</li>
+  <li>把先验换成「均匀」：错误率反而升高——知道 E 很常见是有用的信息（这就是例中说的按语言定制 P(θ)）。点「随机写一个字母」，看后验条和红色的「报错」特征。</li>
+</ul></div>
+
+<h4>参数估计 parameter estimation</h4>
+<p>本节框架的另一个重要应用是<b>参数估计</b>。这里自然选一个<b>参数</b> \(\theta\in\Theta\)，\(\Theta\) 是<b>参数空间</b>。经过一次或多次独立试验得到一些观测；理想情况下每个观测都是 \(\Theta\) 的直接测量，但测量过程的缺陷会扭曲观测。通常 \(\Theta\subseteq Y\)，很多时候 \(Y=\Theta\)。机器人的动作是猜自然选的参数，所以 \(U=\Theta\)。大多数应用中这些空间都是 \(\mathbb{R}^n\) 的连续子集；代价函数随误差 \(\|u-\theta\|\) 增大而增大。</p>
+<p><b>例 9.12（参数估计）</b>：设 \(U=Y=\Theta=\mathbb{R}\)。自然选一个实数参数，机器人去估计它；犯错的代价是</p>
+<div class="eq">$$L(u,\theta) = (u-\theta)^2. \tag{9.35}$$</div>
+<p>采用贝叶斯方法。先验密度 \(p(\theta)\) 在区间 \([a,b]\subset\mathbb{R}\) 上均匀。收到一个有噪声的观测；噪声可以按 9.2.3 节那样建模为自然的第二个动作，得到密度 \(p(y|\theta)\)。设噪声是高斯的：</p>
+<div class="eq">$$p(y\,|\,\theta) = \frac{1}{\sqrt{2\pi\sigma^2}}\,e^{-(y-\theta)^2/2\sigma^2}, \tag{9.36}$$</div>
+<p>均值为 \(\theta\)、标准差为 \(\sigma\)。基于 \(y\) 的最优参数估计选 \(u\in\mathbb{R}\) 使下式最小：</p>
+<div class="eq">$$\int_{-\infty}^{\infty} L(u,\theta)\,p(\theta|y)\,d\theta, \tag{9.37}$$</div>
+<p>其中由贝叶斯规则</p>
+<div class="eq">$$p(\theta\,|\,y) = \frac{p(y|\theta)p(\theta)}{p(y)}. \tag{9.38}$$</div>
+<p>\(p(y)\) 不依赖 \(\theta\)，在优化中可以忽略。先验在 \([a,b]\) 外为 0，所以积分域可以限制在 \([a,b]\) 上；\(p(\theta)=1/(b-a)\) 也是常数，也可以忽略。于是 \(u\) 的选取是优化</p>
+<div class="eq">$$\int_a^b L(u,\theta)\,p(y|\theta)\,d\theta, \tag{9.39}$$</div>
+<p>它可以用标准误差函数 \(\mathrm{erf}(x)\)（高斯密度在一个区间上的积分）表示。若得到一列独立观测 \(y_1,\ldots,y_k\)，(9.39) 换成</p>
+<div class="eq">$$\int_a^b L(u,\theta)\,p(y_1|\theta)\cdots p(y_k|\theta)\,d\theta. \tag{9.40}$$</div>
+<div class="box intuition"><div class="box-title">补充：平方损失下的最优估计是后验均值</div>
+<p style="margin:0">把 (9.37) 对 \(u\) 展开：\(\int(u-\theta)^2p(\theta|y)\,d\theta = \mathrm{Var}(\theta\,|\,y) + \big(u - E[\theta\,|\,y]\big)^2\)。第一项与 \(u\) 无关，所以 \(u^* = E[\theta|y]\)，最小期望代价就是后验方差。对例 9.12，后验是截断在 \([a,b]\) 上的正态分布，\(u^*\) 就是截断正态的均值；观测靠近边界时它会被「拉回」区间内部。</p></div>
+
+<div class="widget wide" data-widget="param-est"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>均匀先验 U[0,10]、真实 θ = 9：观测几次，看绿线 u* 总比 ȳ 更靠里——截断的效果。把真实 θ 拖到区间外（如 12）：后验被挤在 10 的边上，先验「错了」也能看出来。</li>
+  <li>切到习题 16：选 k = 1、10、1000 再点「令 yᵢ = 4」，u* 依次是 0.6598、2.6556、3.9799（参考代码第 8 项）——数据越多，先验的影响越小。</li>
+  <li>下面那条抛物线就是 (9.37) 作为 u 的函数；它的最低点永远在后验均值处，最低值永远等于后验方差。</li>
+</ul></div>
+</section>
+
+<!-- ============================================================ 9.3 -->
+<section id="s9-3">
+<h2>9.3 二人零和博弈 <span class="en">Two-Player Zero-Sum Games</span></h2>
+<p>9.2 节只有一个真正的 DM——机器人——它在和一个虚构的 DM「自然」对弈。现在设第二个 DM 是一个聪明的对手，它做决策的方式和机器人一样。这导致一种对称的局面：两个 DM 同时做决策，都不知道对方会怎么行动。本节假设两个 DM 的利益<b>完全对立</b>：一方的损失就是另一方的收益。这就是博弈论最基本的形式，称为<b>零和博弈 zero-sum game</b>。</p>
+
+<h3 id="s9-3-1">9.3.1 博弈的表述 <span class="en">Game Formulation</span></h3>
+<p>两个<b>玩家</b> \(\mathrm{P}_1\)、\(\mathrm{P}_2\) 各做一个决策，各有有限的动作集合 \(U\) 和 \(V\)。\(V\) 可以看作 Formulation 9.3 中 \(\Theta\) 的「替代品」——由真正的对手而不是自然选择。每个玩家有一个代价函数 \(L_i : U\times V\to\mathbb{R}\)（\(i=1,2\)）。零和博弈的一个重要约束是</p>
+<div class="eq">$$L_1(u,v) = -L_2(u,v), \tag{9.41}$$</div>
+<p>即一方的代价就是另一方的回报——这正是「零和」一词的来源：两个代价加起来是零。零和博弈中玩家的利益完全对立；9.4 节会去掉这个约束。由 (9.41)，没必要表示两个代价函数：下标省掉，\(L\) 指 \(\mathrm{P}_1\) 的代价 \(L_1\)。\(\mathrm{P}_1\) 的目标是最小化 \(L\)；由 (9.41)，\(\mathrm{P}_2\) 的目标是最大化 \(L\)。所以 \(L\) 对 \(\mathrm{P}_2\) 是<b>回报</b>，对 \(\mathrm{P}_1\) 是<b>代价</b>。</p>
+<div class="box def formulation">
+  <div class="box-title">Formulation 9.7（零和博弈 A Zero-Sum Game）</div>
+  <ol>
+    <li>两个玩家 \(\mathrm{P}_1\)、\(\mathrm{P}_2\)。</li>
+    <li>非空有限集合 \(U\)，称为 \(\mathrm{P}_1\) 的动作空间。为方便举例，设 \(U\) 是从 1 到 \(|U|\) 的连续整数。每个 \(u\in U\) 称为 \(\mathrm{P}_1\) 的一个动作。</li>
+    <li>非空有限集合 \(V\)，称为 \(\mathrm{P}_2\) 的动作空间；设 \(V\) 是从 1 到 \(|V|\) 的连续整数。每个 \(v\in V\) 称为 \(\mathrm{P}_2\) 的一个动作。</li>
+    <li>函数 \(L : U\times V\to\mathbb{R}\cup\{-\infty,\infty\}\)，称为 \(\mathrm{P}_1\) 的代价函数；由 (9.41) 它也是 \(\mathrm{P}_2\) 的回报函数。</li>
+  </ol>
+</div>
+<p>讨论「求解」零和博弈之前还需要一些假设。假设玩家<b>知道彼此的代价函数</b>——对手的动机被完全理解。另一个假设是玩家是<b>理性的 rational</b>：只要可能就会设法得到最好的代价；有更低代价的动作可选时，\(\mathrm{P}_1\) 不会选代价更高的，\(\mathrm{P}_2\) 也不会选让代价更低的动作。最后，假设双方<b>同时</b>做决策，没有任何关于对方决策的信息可以被利用。</p>
+<p>Formulation 9.7 常被称为<b>矩阵博弈 matrix game</b>，因为 \(L\) 可以像 9.2 节那样写成代价矩阵，只是现在矩阵表示 \(\mathrm{P}_1\) 与 \(\mathrm{P}_2\) 的代价，而不是机器人与自然的。<b>例 9.13（零和博弈的矩阵表示）</b>：\(U\) 有三个动作、\(V\) 有四个动作，需要 \(3\times4=12\) 个值：</p>
+<div class="table-wrap" style="text-align:center"><table class="mx" style="margin:0 auto"><tr><th class="corner">L(u, v)</th><th class="c">v=1</th><th class="c">v=2</th><th class="c">v=3</th><th class="c">v=4</th></tr>
+<tr><th class="r">u=1</th><td>1</td><td>3</td><td>3</td><td>2</td></tr><tr><th class="r">u=2</th><td>0</td><td>−1</td><td>2</td><td>1</td></tr><tr><th class="r">u=3</th><td>−2</td><td>2</td><td>0</td><td>1</td></tr></table></div>
+<p class="small muted" style="text-align:center">(9.42)。每行对应一个 u，每列对应一个 v，元素是 \(\mathrm{P}_1\) 的代价 L(u, v)；\(\mathrm{P}_2\) 的代价是 −L(u, v)。</p>
+
+<h3 id="s9-3-2">9.3.2 确定性策略 <span class="en">Deterministic Strategies</span></h3>
+<p>什么是 Formulation 9.7 的好解？从 \(\mathrm{P}_1\) 的角度看，为了对付 \(\mathrm{P}_2\) 会采取的动作，用最坏情况分析似乎很合理——等于假设 \(\mathrm{P}_2\) 是 9.2.2 节非确定性模型下的自然。对矩阵博弈，先求每一行的最大代价，再选最大代价最小的那一行，这是 \(\mathrm{P}_1\) 能为自己保证的最低代价。这个选择称为 \(\mathrm{P}_1\) 的<b>安全策略 security strategy</b>。对 (9.42)，行最大分别是 3、2、2（式 9.43），\(u=2\) 和 \(u=3\) 都是最好的动作：无论 \(\mathrm{P}_2\) 选什么，代价都不超过 2。形式化地，</p>
+<div class="eq">$$u^* = \operatorname*{argmin}_{u\in U}\Big\{\max_{v\in V}\Big\{L(u,v)\Big\}\Big\}. \tag{9.44}$$</div>
+<p>可能有多个安全策略满足 argmin，这不会造成麻烦（马上解释）。把得到的最坏代价记为 \(\overline{L}^*\)，称为博弈的<b>上值 upper value</b>：</p>
+<div class="eq">$$\overline{L}^* = \max_{v\in V}\Big\{L(u^*,v)\Big\}. \tag{9.45}$$</div>
+<p>现在换位，从想最大化 \(L\) 的 \(\mathrm{P}_2\) 的角度看。它也可以用最坏情况分析：选一个动作，保证即使 \(\mathrm{P}_1\) 想把代价压低，也能得到较高的代价。\(\mathrm{P}_2\) 的安全策略 \(v^*\) 定义为</p>
+<div class="eq">$$v^* = \operatorname*{argmax}_{v\in V}\Big\{\min_{u\in U}\Big\{L(u,v)\Big\}\Big\}. \tag{9.46}$$</div>
+<p>注意它和 (9.44) 的对称性——\(\mathrm{P}_2\) 的安全策略不过是 9.2.2 节最坏情况分析的「倒过来」版本。<b>下值 lower value</b> \(\underline{L}^*\) 定义为</p>
+<div class="eq">$$\underline{L}^* = \min_{u\in U}\Big\{L(u,v^*)\Big\}. \tag{9.47}$$</div>
+<p>回到 (9.42)：列最小分别是 −2、−1、0、1（式 9.48），按 (9.46) 选最后一列 \(v^*=4\)。上值与下值之间有一个有趣的关系：对 Formulation 9.7 的任何博弈都有 \(\underline{L}^*\le\overline{L}^*\)，因为</p>
+<div class="eq">$$\underline{L}^* = \min_{u\in U}\Big\{L(u,v^*)\Big\} \le L(u^*,v^*) \le \max_{v\in V}\Big\{L(u^*,v)\Big\} = \overline{L}^*, \tag{9.49}$$</div>
+<p>其中 \(L(u^*,v^*)\) 是双方各用安全策略时得到的代价。如果博弈由理性的 DM 来玩，结果代价总落在 \(\underline{L}^*\) 与 \(\overline{L}^*\) 之间。</p>
+<h4>遗憾</h4>
+<p>设双方都用安全策略 \(u^*=2\)、\(v^*=4\)，代价 \(L(2,4)=1\)。结果出来后双方感觉如何？\(\mathrm{P}_1\) 可能很满意：既然 \(\mathrm{P}_2\) 选了 \(v^*=4\)，它已经得到了可能的最低代价。\(\mathrm{P}_2\) 却可能对自己的决策感到后悔：如果早知道 \(\mathrm{P}_1\) 会选 \(u=2\)，它本可以选 \(v=3\) 得到 \(L(2,3)=2\)，比 \(L(2,4)=1\) 好<sup class="fn"><a href="#fn-7" id="fn-7-ref">7</a></sup>。如果博弈重复进行，\(\mathrm{P}_2\) 会想改变策略，希望骗 \(\mathrm{P}_1\) 给它更高的回报。</p>
+<p>有没有办法让双方都满意？只要 \(\underline{L}^*\) 与 \(\overline{L}^*\) 之间有缺口，就有一方或双方有遗憾。若 \(r_1\)、\(r_2\) 分别是 \(\mathrm{P}_1\)、\(\mathrm{P}_2\) 的遗憾，则总遗憾为</p>
+<div class="eq">$$r_1 + r_2 = \overline{L}^* - \underline{L}^*. \tag{9.50}$$</div>
+<p>所以让双方都满意的唯一办法是 \(\underline{L}^*=\overline{L}^*\)。但这是博弈本身的性质，不由玩家决定。有些博弈两者相等，但很多博弈 \(\underline{L}^* < \overline{L}^*\)。幸运的是，用随机化策略后上值与下值总会重合（9.3.3 节）。</p>
+<h4>鞍点 saddle points</h4>
+<p>若 \(\underline{L}^*=\overline{L}^*\)，双方的安全策略称为一个<b>鞍点 saddle point</b>，\(L^*=\underline{L}^*=\overline{L}^*\) 称为博弈的<b>值 value</b>。此时 max 与 min 的顺序可以交换而不改变值：</p>
+<div class="eq">$$L^* = \min_{u\in U}\Big\{\max_{v\in V}\Big\{L(u,v)\Big\}\Big\} = \max_{v\in V}\Big\{\min_{u\in U}\Big\{L(u,v)\Big\}\Big\}. \tag{9.51}$$</div>
+<p>鞍点有时也叫<b>均衡 equilibrium</b>，因为玩家没有改变选择的动机（没有遗憾）。鞍点就是满足下式的任意 \(u^*\in U\)、\(v^*\in V\)：</p>
+<div class="eq">$$L(u^*,v) \le L(u^*,v^*) \le L(u,v^*) \tag{9.52}$$</div>
+<p>对所有 \(u\in U\)、\(v\in V\) 成立。注意 \(L^*=L(u^*,v^*)\)。在矩阵里找鞍点，就是找图 9.2 那种简单的图案。</p>
+<div class="figpat">
+  <figure>
+    <svg viewBox="0 0 150 150" width="150" height="150" role="img" aria-label="图 9.2 鞍点图案">
+      <rect x="50" y="5" width="50" height="140" fill="none" stroke="var(--border-strong)"/><rect x="5" y="50" width="140" height="50" fill="none" stroke="var(--border-strong)"/>
+      <rect x="50" y="50" width="50" height="50" fill="color-mix(in srgb, var(--ok) 30%, var(--surface))" stroke="var(--ok)" stroke-width="2"/>
+      <text x="75" y="80" text-anchor="middle" font-size="15" fill="var(--text)">L*</text>
+      <text x="75" y="32" text-anchor="middle" font-size="16" fill="var(--accent-text)">≥</text><text x="75" y="128" text-anchor="middle" font-size="16" fill="var(--accent-text)">≥</text>
+      <text x="27" y="80" text-anchor="middle" font-size="16" fill="var(--warn)">≤</text><text x="123" y="80" text-anchor="middle" font-size="16" fill="var(--warn)">≤</text>
+    </svg>
+    <figcaption>图 9.2：L* 在所在列里最小（上下都 ≥），在所在行里最大（左右都 ≤）。</figcaption>
+  </figure>
+  <figure>
+    <svg viewBox="0 0 260 150" width="260" height="150" role="img" aria-label="图 9.5 Nash 均衡图案">
+      <text x="10" y="80" font-size="14" fill="var(--text)">A:</text>
+      <rect x="55" y="5" width="44" height="140" fill="none" stroke="var(--border-strong)"/>
+      <rect x="55" y="53" width="44" height="44" fill="color-mix(in srgb, var(--ok) 30%, var(--surface))" stroke="var(--ok)" stroke-width="2"/>
+      <text x="77" y="80" text-anchor="middle" font-size="13" fill="var(--text)">L*ₐ</text>
+      <text x="77" y="32" text-anchor="middle" font-size="16" fill="var(--accent-text)">≥</text><text x="77" y="128" text-anchor="middle" font-size="16" fill="var(--accent-text)">≥</text>
+      <text x="138" y="80" font-size="14" fill="var(--text)">B:</text>
+      <rect x="160" y="53" width="96" height="44" fill="none" stroke="var(--border-strong)"/>
+      <rect x="186" y="53" width="44" height="44" fill="color-mix(in srgb, var(--ok) 30%, var(--surface))" stroke="var(--ok)" stroke-width="2"/>
+      <text x="208" y="80" text-anchor="middle" font-size="13" fill="var(--text)">L*_b</text>
+      <text x="173" y="80" text-anchor="middle" font-size="15" fill="var(--warn)">≥</text><text x="243" y="80" text-anchor="middle" font-size="15" fill="var(--warn)">≥</text>
+    </svg>
+    <figcaption>图 9.5（9.4 节）：Nash 均衡 = A 中列最小且 B 中行最小。</figcaption>
+  </figure>
+</div>
+<p><b>例 9.14（确定性鞍点）</b>：下面的矩阵博弈有鞍点：</p>
+<div class="table-wrap" style="text-align:center"><table class="mx" style="margin:0 auto"><tr><th class="corner">L(u, v)</th><th class="c">v=1</th><th class="c">v=2</th><th class="c">v=3</th></tr>
+<tr><th class="r">u=1</th><td>3</td><td>3</td><td>5</td></tr><tr><th class="r">u=2</th><td>1</td><td>−1</td><td>7</td></tr><tr><th class="r">u=3</th><td>0</td><td>−2</td><td>4</td></tr></table></div>
+<p class="small muted" style="text-align:center">(9.53)</p>
+<p>用 (9.52)（或图 9.2）可以找到鞍点 \(u=3\)、\(v=3\)，\(L^*=4\)。此时博弈结束后双方都没有遗憾：\(\mathrm{P}_2\) 选了第三列，4 是 \(\mathrm{P}_1\) 能得到的最低代价；\(\mathrm{P}_1\) 选了最下一行，4 是 \(\mathrm{P}_2\) 能得到的最高代价。</p>
+<p>如果同一个博弈有多个鞍点呢？这看起来是个问题，因为玩家无法协调决策：\(\mathrm{P}_1\) 想实现一个鞍点、\(\mathrm{P}_2\) 想实现另一个怎么办？结果是：如果有不止一个鞍点，就至少有四个，如图 9.3 所示——一旦试图画两个图 9.2 那样的「+」形，它们就会相交，产生四个鞍点；加更多鞍点时也有类似情况。</p>
+<p><b>例 9.15（多个鞍点）</b>：这个博弈有多个鞍点，符合图 9.3 的图案：</p>
+<div class="table-wrap" style="text-align:center"><table class="mx" style="margin:0 auto"><tr><th class="corner">L(u, v)</th><th class="c">v=1</th><th class="c">v=2</th><th class="c">v=3</th><th class="c">v=4</th><th class="c">v=5</th></tr>
+<tr><th class="r">u=1</th><td>4</td><td>3</td><td>5</td><td>1</td><td>2</td></tr><tr><th class="r">u=2</th><td>−1</td><td>0</td><td>−2</td><td>0</td><td>−1</td></tr><tr><th class="r">u=3</th><td>−4</td><td>1</td><td>4</td><td>3</td><td>5</td></tr><tr><th class="r">u=4</th><td>−3</td><td>0</td><td>−1</td><td>0</td><td>−2</td></tr><tr><th class="r">u=5</th><td>3</td><td>2</td><td>−7</td><td>3</td><td>8</td></tr></table></div>
+<p class="small muted" style="text-align:center">(9.54)</p>
+<p>记 \((i,j)\) 为 \(\mathrm{P}_1\)、\(\mathrm{P}_2\) 的一对选择。\((2,2)\) 和 \((4,4)\) 都是鞍点，值 \(L^*=0\)<sup class="fn"><a href="#fn-8" id="fn-8-ref">8</a></sup>。如果 \(\mathrm{P}_1\) 选 \(u=2\) 而 \(\mathrm{P}_2\) 选 \(v=4\) 呢？没问题，因为 \((2,4)\) 也是鞍点；同样 \((4,2)\) 也是。一般地，多个鞍点不会引起问题，因为无论每个玩家去实现哪一个鞍点，得到的代价都一样。</p>
+
+<div class="widget wide" data-widget="matrix-game"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>(9.42)：默认选中双方的安全策略 (2, 4)。P₂ 的遗憾是 1——这一行里最大的是 v = 3 的 2。点 (2,3) 看看：这回轮到 P₁ 后悔了。</li>
+  <li>(9.53)：右下的 4 变绿——它在所在行最大、所在列最小。点它，两人的遗憾都是 0。</li>
+  <li>(9.54)：四个绿格两两组成「#」形（图 9.3），值都是 0。随机生成几个 4×4 矩阵：大多数没有鞍点，但「随机化值 𝓛*」总夹在下值与上值之间。</li>
+</ul></div>
+
+<h3 id="s9-3-3">9.3.3 随机化策略 <span class="en">Randomized Strategies</span></h3>
+<p>有些零和博弈没有鞍点，这令人失望，因为那时遗憾无法避免。稍微改一下规则：同一个博弈由 \(\mathrm{P}_1\)、\(\mathrm{P}_2\) 反复玩很多次。如果用确定性策略，它们每次都选同样的动作，得到同样的代价；也可以在几个安全策略之间切换，这会让代价波动。如果双方都执行<b>随机化策略</b>会怎样？用 9.1.3 节的想法，每个策略是动作上的一个概率分布；博弈次数趋于无穷时，得到一个期望代价。博弈论最著名的结果之一是：在随机化策略的空间上，<b>任何零和矩阵博弈都存在鞍点</b>——不过要用期望代价。所以使用随机化后就没有遗憾了：单次试验中仍可能后悔，但对所有试验取平均后，双方都会满意。</p>
+<h4>扩展表述</h4>
+<p>Formulation 9.7 的博弈可以优雅地写成矩阵，所以很自然地用线性代数来表示期望代价。令 \(|U|=m\)、\(|V|=n\)。和 9.1.3 节一样，\(\mathrm{P}_1\) 的随机化策略可以表示为一个 \(m\) 维向量</p>
+<div class="eq">$$w = [w_1\ \ w_2\ \ \ldots\ \ w_m]. \tag{9.55}$$</div>
+<p>它必须满足 9.1.2 节的概率公理：对所有 \(i\) 有 \(w_i\ge0\)，且 \(w_1+\cdots+w_m=1\)。把 \(w\) 看成 \(\mathbb{R}^m\) 中的点，这两个约束说明它位于一个 \((m-1)\) 维<b>单纯形</b>上（回忆 6.3.1 节）。\(m=3\) 时 \(w\) 落在 \(\mathbb{R}^3\) 的一个三角形子集里。同样，用 \(n\) 维向量表示 \(\mathrm{P}_2\) 的随机化策略</p>
+<div class="eq">$$z = [z_1\ \ z_2\ \ \ldots\ \ z_n]^T, \tag{9.56}$$</div>
+<p>它也满足概率公理；转置 \(T\) 让它成为列向量，满足后面矩阵乘法的维数要求。令 \(\bar L(w,z)\) 表示 \(\mathrm{P}_1\) 用 \(w\)、\(\mathrm{P}_2\) 用 \(z\) 时的期望代价：</p>
+<div class="eq">$$\bar L(w,z) = \sum_{i=1}^{m}\sum_{j=1}^{n} L(i,j)\,w_i z_j. \tag{9.57}$$</div>
+<p>这里 \(L(i,j)\) 用到了 Formulation 9.7 中「动作是连续整数」的假设。期望代价也可以用代价矩阵 \(A\) 表示：</p>
+<div class="eq">$$\bar L(w,z) = wAz, \tag{9.58}$$</div>
+<p>乘积 \(wAz\) 是一个标量，恰好等于 (9.57)。先看 \(Az\)：它是一个 \(m\) 维向量，第 \(i\) 个元素是 \(\mathrm{P}_1\) 试 \(u=i\) 时会得到的期望代价——看起来 \(\mathrm{P}_1\) 把 \(\mathrm{P}_2\) 当成了概率模型下的自然。再乘上 \(w\)，按 \(w\) 的概率对 \(Az\) 中的代价取平均。</p>
+<p>令 \(W\)、\(Z\) 分别为 \(\mathrm{P}_1\)、\(\mathrm{P}_2\) 的所有随机化策略的集合。它们包含了与 9.3.2 节确定性策略等价的策略（把概率 1 放在一个动作上），所以是确定性情形下可选策略集合的扩展。用 \(W\)、\(Z\) 定义 \(\mathrm{P}_1\)、\(\mathrm{P}_2\) 的<b>随机化安全策略</b>：</p>
+<div class="eq">$$w^* = \operatorname*{argmin}_{w\in W}\Big\{\max_{z\in Z}\Big\{\bar L(w,z)\Big\}\Big\} \tag{9.59}$$</div>
+<div class="eq">$$z^* = \operatorname*{argmax}_{z\in Z}\Big\{\min_{w\in W}\Big\{\bar L(w,z)\Big\}\Big\}. \tag{9.60}$$</div>
+<p>与 (9.44)、(9.46) 相比，差别在于策略空间扩大了，并且用的是期望代价。<b>随机化上值</b>与<b>随机化下值</b>分别定义为</p>
+<div class="eq">$$\overline{\mathcal{L}}^* = \max_{z\in Z}\Big\{\bar L(w^*,z)\Big\}, \tag{9.61}$$</div>
+<div class="eq">$$\underline{\mathcal{L}}^* = \min_{w\in W}\Big\{\bar L(w,z^*)\Big\}. \tag{9.62}$$</div>
+<p>\(W\)、\(Z\) 包含确定性的安全策略，所以 \(\overline{\mathcal{L}}^*\le\overline{L}^*\)、\(\underline{\mathcal{L}}^*\ge\underline{L}^*\)：随机化安全策略总有希望缩小两个值之间的缺口。</p>
+<p>零和博弈论最基本的结果由 von Neumann 证明：对 Formulation 9.7 的任何博弈都有 \(\underline{\mathcal{L}}^*=\overline{\mathcal{L}}^*\)。这给出博弈的<b>随机化值</b> \(\mathcal{L}^*=\underline{\mathcal{L}}^*=\overline{\mathcal{L}}^*\)。这意味着只要玩家坚持用安全策略，就永远不会有<b>期望</b>遗憾；双方都用随机化安全策略时，得到的是一个<b>随机化鞍点</b>。它不能像矩阵 \(A\) 中的简单图案那样被看出来，因为它存在于 \(W\) 和 \(Z\) 上。随机化鞍点的保证存在很重要，它说明了与有智能的对手做决策时随机化的价值。例 9.7 中我们直观地论证过，随机化在对抗聪明的对手时似乎有帮助：用确定性策略反复玩时，对方可以学会你的策略、每次都赢；一旦用随机化策略，玩家就不会有遗憾。</p>
+<h4>计算随机化鞍点</h4>
+<p>已经知道随机化鞍点总存在，但怎么找？两个关键观察使问题可以用组合方法求解：</p>
+<ol>
+  <li>每个玩家的安全策略都可以只考虑对手的<b>确定性</b>策略来求。</li>
+  <li>如果另一个玩家的策略固定，期望代价是未定概率的<b>线性</b>函数。</li>
+</ol>
+<p>先考虑求 \(\mathrm{P}_1\) 的安全策略。第一个观察说明 (9.59) 不必考虑 \(\mathrm{P}_2\) 的随机化策略。在 argmin 内部 \(w\) 是固定的，哪个随机化策略 \(z\in Z\) 使 \(\bar L(w,z)=wAz\) 最大？\(w\) 固定时 \(wA\) 可以看作常数 \(n\) 维向量 \(s\)，于是 \(\bar L(w,z)=s\cdot z\)（点积）。任务变成选 \(z\) 使 \(s\cdot z\) 最大：只要找到 \(s\) 的最大元素 \(s_i\)，把全部概率质量放在动作 \(i\) 上即可。于是 \(z_i=1\)、其余 \(z_j=0\)（\(i\ne j\)）的策略给出最高代价，而且它是确定性的。由第一个观察，对每个 \(w\in W\) 只需考虑 \(\mathrm{P}_2\) 的 \(n\) 个可能回应——\(n\) 个确定性策略，每个对某个 \(i\in\{1,\ldots,n\}\) 令 \(z_i=1\)。</p>
+<p>再看第二个观察。\(z\) 固定时期望代价 \(\bar L(w,z)=wAz\) 是 \(w\) 的线性函数。\(z\) 只需固定在 \(n\) 个不同的值上，所以 \(w\) 取在 \(n\) 个线性函数的最大值最小的地方——这是这组线性函数的<b>上包络 upper envelope</b> 的最小值（6.5.2 节提到过这种包络）。例 9.16 会演示。这个优化的定义域可以方便地取成 \(\mathbb{R}^{m-1}\) 中的三角形：虽然 \(W\subset\mathbb{R}^m\)，但最后一个坐标 \(w_m\) 不需要，因为总有 \(w_m=1-(w_1+\cdots+w_{m-1})\)。得到的优化属于<b>线性规划 linear programming</b>，有许多组合算法。</p>
+<p>上面的解释对 \(\mathrm{P}_1\) 并没有什么特殊之处，同样的方法可以求 \(\mathrm{P}_2\) 的安全策略，只是每个最小化换成最大化、反之亦然。总之，(9.60) 中的 min 只需考虑 \(W\) 中的确定性策略；\(w\) 固定后 \(\bar L(w,z)=wAz\) 又是 \(z\) 的线性函数，最好的随机化动作是在 \(m\) 个线性函数中使最小值最大的点 \(z\in Z\)——这些线性函数的<b>下包络 lower envelope</b> 的最大值。优化在 \(\mathbb{R}^{n-1}\) 上进行，最后一个坐标 \(z_n=1-(z_1+\cdots+z_{n-1})\)。</p>
+<p><b>例 9.16（计算随机化鞍点）</b>：最简单的情形是双方都只有两个动作，代价矩阵为</p>
+<div class="table-wrap" style="text-align:center"><table class="mx" style="margin:0 auto"><tr><th class="corner">L(u, v)</th><th class="c">v=1</th><th class="c">v=2</th></tr><tr><th class="r">u=1</th><td>3</td><td>0</td></tr><tr><th class="r">u=2</th><td>−1</td><td>1</td></tr></table></div>
+<p class="small muted" style="text-align:center">(9.63)</p>
+<p>先求 \(\mathrm{P}_1\) 的安全策略。\(W\)、\(Z\) 都只是 \(\mathbb{R}^2\) 的一维子集。\(\mathrm{P}_1\) 的随机化策略是 \(w=[w_1\ w_2]\)，\(w_1,w_2\ge0\)、\(w_1+w_2=1\)，所以优化在 \(w_1\in[0,1]\) 上进行（\(w_2=1-w_1\)）。由第一个观察，只需考虑 \(\mathrm{P}_2\) 的两个确定性策略。作为 \(w\) 的线性函数，它们是</p>
+<div class="eq">$$(3)w_1 + (-1)(1-w_1) = 4w_1 - 1 \tag{9.64}$$</div>
+<p>（对 \(z_1=1\)）和</p>
+<div class="eq">$$(0)w_1 + (1)(1-w_1) = 1 - w_1 \tag{9.65}$$</div>
+<p>（对 \(z_2=1\)）。两条直线画在图 9.4a 中。安全策略由上包络（图中加粗的折线，一般总是分段线性函数）的最低点决定：最低点在 \(w_1=2/5\)，值 \(\mathcal{L}^*=3/5\)，所以 \(w^*=[2/5\ \ 3/5]\)。类似地可以求 \(z^*\)：对应 \(\mathrm{P}_1\) 确定性策略的直线画在图 9.4b 中，沿下包络（加粗）找最大值，得到 \(z^*=[1/5\ \ 4/5]^T\)，值同样是 \(\mathcal{L}^*=3/5\)（必须和前面一致，因为随机化上值和下值相同！）。</p>
+<p>只有两个动作时这个过程看起来很简单。若 \(n=m=100\)，上下包络就是 \(\mathbb{R}^{99}\) 中的分段线性函数。书中说这在计算上可能不现实，因为「所有现有的线性规划算法在维数上的运行时间至少是指数的」<span class="small muted">（补充说明：这句话指的是固定维数的组合型线性规划算法，其运行时间关于维数是指数的；单纯形法在实践中通常很快，而内点法的运行时间关于输入规模是多项式的。100×100 的矩阵博弈今天用普通 LP 求解器瞬间就能解出。）</span></p>
+
+<div class="widget wide" data-widget="envelope"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>例 9.16：左图就是图 9.4a，上包络最低点 w₁ = 2/5；右图是图 9.4b，下包络最高点 z₁ = 1/5，值都是 3/5。拖动紫色竖线，看 P₂ 的最好回应在 w₁ = 2/5 处从 v = 2 换成 v = 1。</li>
+  <li>「2×4（补充）」：四条线的上包络最低点只由其中两条决定——z* 只把概率放在这两列上，另两列在均衡中不会被用到。</li>
+  <li>「石头剪刀布」「3×3（补充）」：W 是三角形（6.3.1 节的单纯形），颜色是 max_z L̄(w,z)，最绿的点就是 w*。石头剪刀布的最优点在正中央 (1/3,1/3,1/3)。也可以编辑矩阵：这个图就是习题 17 要你实现的东西。</li>
+</ul></div>
+</section>
+
+<!-- ============================================================ 9.4 -->
+<section id="s9-4">
+<h2>9.4 非零和博弈 <span class="en">Nonzero-Sum Games</span></h2>
+<p>这一节平行于 9.3 节，只是考虑更一般的非零和博弈。这样可以对任意程度的冲突建模；有些决策甚至可能让所有玩家都受益。这门学问的主要应用之一在经济学，用来解释相互竞争的企业的行为。鞍点解被 <b>Nash 均衡 Nash equilibrium</b> 取代，它同样基于消除遗憾。由于玩家不一定彼此对立，可以对任意多个玩家建模。非零和博弈出现了新困难：Nash 均衡不唯一，而且随机化 Nash 均衡的计算一般不能纳入线性规划。</p>
+
+<h3 id="s9-4-1">9.4.1 二人博弈 <span class="en">Two-Player Games</span></h3>
+<p>为了与 9.3 节衔接得更顺，先考虑二人博弈；记号更简单，也更好理解。这些想法可以毫无困难地推广到多个玩家。</p>
+<div class="box def formulation">
+  <div class="box-title">Formulation 9.8（二人非零和博弈 A Two-Player Nonzero-Sum Game）</div>
+  <ol>
+    <li>除代价函数外，组成部分与 Formulation 9.7 相同。</li>
+    <li>函数 \(L_1 : U\times V\to\mathbb{R}\cup\{\infty\}\)，称为 \(\mathrm{P}_1\) 的代价函数。</li>
+    <li>函数 \(L_2 : U\times V\to\mathbb{R}\cup\{\infty\}\)，称为 \(\mathrm{P}_2\) 的代价函数。</li>
+  </ol>
+</div>
+<p>与 Formulation 9.7 的唯一区别是现在有两个<b>独立</b>的代价函数，每个玩家一个，每个玩家都想最小化自己的代价。这里没有最大化——那只在 \(\mathrm{P}_2\) 与 \(\mathrm{P}_1\) 利益对立的零和博弈中出现。令 \(L_1=L\)、\(L_2=-L\)，零和博弈就成了 Formulation 9.8 的特例。</p>
+<p>仿照 9.3 节，先考虑用确定性策略求解。和之前一样，玩家可以用自己的安全策略——为此它甚至不需要看另一个玩家的代价函数。但做决策时完全不考虑两个代价函数似乎不妥；多数情况下安全策略会导致遗憾，所以不适合非零和博弈。</p>
+<p>下面给出一个避免遗憾的策略。一对动作 \((u^*,v^*)\) 称为 <b>Nash 均衡</b>，如果</p>
+<div class="eq">$$L_1(u^*,v^*) = \min_{u\in U}\Big\{L_1(u,v^*)\Big\} \tag{9.66}$$</div>
+<div class="eq">$$L_2(u^*,v^*) = \min_{v\in V}\Big\{L_2(u^*,v)\Big\}. \tag{9.67}$$</div>
+<p>这两个式子意味着 \(\mathrm{P}_1\)、\(\mathrm{P}_2\) 都没有遗憾。(9.66) 说明给定 \(\mathrm{P}_2\) 选的 \(v^*\)，\(\mathrm{P}_1\) 对自己的动作 \(u^*\) 满意——改动作也不能进一步降低代价；(9.67) 说明 \(\mathrm{P}_2\) 对 \(v^*\) 满意。</p>
+<p>Formulation 9.8 的博弈可以用两个代价矩阵完整表示：\(A\)、\(B\) 分别是 \(\mathrm{P}_1\)、\(\mathrm{P}_2\) 的代价矩阵。回忆图 9.2 检测鞍点的图案；Nash 均衡可以按图 9.5 检测（见上面 9.3.2 节的图）：找某个 \((i,j)\)，使 \(L_a^*=L_1(i,j)\) 是 \(A\) 第 \(j\) 列中最小的元素，且 \(L_b^*=L_2(i,j)\) 是 \(B\) 第 \(i\) 行中最小的元素。想想两者的关系：若 \(A=-B\)，把 \(B\) 取负后叠在 \(A\) 上，就得到图 9.2 的图案（取负使 ≥ 变成 ≤），\(L_a^*\) 与 \(L_b^*\) 重合。这说明 \(A=-B\) 时 Nash 均衡和鞍点其实是同一个概念；但 Nash 均衡适用于一般得多的博弈。</p>
+<p><b>例 9.17（确定性 Nash 均衡）</b><sup class="fn"><a href="#fn-typo" id="fn-typo-ref">注</a></sup>：考虑由代价矩阵 \(A\)、\(B\) 给出的博弈：</p>
+<div class="table-wrap" style="text-align:center"><table class="mx pair" style="margin:0 auto"><tr><th class="corner">(L₁, L₂)</th><th class="c">v=1</th><th class="c">v=2</th><th class="c">v=3</th></tr>
+<tr><th class="r">u=1</th><td><span class="a">9</span><span class="comma">,</span><span class="b">2</span></td><td><span class="a">4</span><span class="comma">,</span><span class="b">1</span></td><td><span class="a">7</span><span class="comma">,</span><span class="b">6</span></td></tr>
+<tr><th class="r">u=2</th><td><span class="a">6</span><span class="comma">,</span><span class="b">5</span></td><td><span class="a">−1</span><span class="comma">,</span><span class="b">0</span></td><td><span class="a">5</span><span class="comma">,</span><span class="b">2</span></td></tr>
+<tr><th class="r">u=3</th><td><span class="a">1</span><span class="comma">,</span><span class="b">2</span></td><td><span class="a">4</span><span class="comma">,</span><span class="b">2</span></td><td><span class="a">2</span><span class="comma">,</span><span class="b">5</span></td></tr></table></div>
+<p class="small muted" style="text-align:center">(9.68)，把 A（蓝）和 B（橙）合写在一张表里。</p>
+<p>用 (9.66)、(9.67) 或图 9.5 的图案可以看出 \(u=3\)、\(v=1\) 是 Nash 均衡，代价 \(L_1=1\)、\(L_2=2\)。另一个 Nash 均衡在 \(u=2\)、\(v=2\)，代价 \(L_1=-1\)、\(L_2=0\)，对双方都更好。零和博弈中多个鞍点不会造成任何问题；非零和博弈却有大麻烦。这个例子中一个 Nash 均衡明显对双方都比另一个好，所以理性的 DM 似乎会选更好的那个。</p>
+<h4>处理多个 Nash 均衡</h4>
+<p>例 9.17 有点令人沮丧，因为存在多个 Nash 均衡。一般可以有任意多个均衡。每个玩家怎么知道该玩哪一个？如果两人各选了不同的均衡，它们不保证落到另一个均衡上（零和博弈的鞍点则有这个保证）。许多均衡可以用 Pareto 最优（9.1.1 节、7.7.2 节）排除：把选择写成多目标优化问题，套进 Formulation 9.2。考虑二维向量 \((x_i,y_i)\)，\(x\)、\(y\) 是 Nash 均衡 \(\pi_i\) 下的代价 \(L_1\)、\(L_2\)。对两个不同的均衡 \(\pi_1\)、\(\pi_2\)，得到代价向量 \((x_1,y_1)\)、\((x_2,y_2)\)；例 9.17 中它们是 \((1,2)\) 和 \((-1,0)\)。一般地，若 \(x_1\le x_2\)、\(y_1\le y_2\) 且至少一个不等式严格，就说 \(\pi_1\) <b>好于</b> \(\pi_2\)。例 9.17 中产生 \((-1,0)\) 的均衡显然好于产生 \((1,2)\) 的，因为双方都受益。</p>
+<p>「好于」在 Nash 均衡空间上诱导一个偏序。它只是偏序，因为有些向量不可比：例如 \((-1,1)\) 和 \((1,-1)\)，前者 \(\mathrm{P}_1\) 更喜欢，后者 \(\mathrm{P}_2\) 更喜欢。博弈论中关于这个偏序极小的 Nash 均衡称为<b>可容许的 admissible</b>，也可以叫 Pareto 最优。</p>
+<p>最好的情况是博弈只有一个 Nash 均衡。如果有多个，还可以指望其中只有一个是可容许的；这时理性的玩家应该足够聪明，能想到非可容许的均衡应该被丢掉。可惜很多博弈有多个可容许的 Nash 均衡。这时分析表明，玩家必须以某种方式沟通或合作来消除遗憾的可能，否则最坏情况下遗憾不可避免。也可能根本没有 Nash 均衡；幸运的是，允许随机化策略后，随机化 Nash 均衡总是存在的——在下面两个例子之后讨论。</p>
+<p><b>例 9.18（性别之战 The Battle of the Sexes）</b>：</p>
+<div class="table-wrap" style="text-align:center"><table class="mx pair" style="margin:0 auto"><tr><th class="corner">(L₁, L₂)</th><th class="c">v=1</th><th class="c">v=2</th></tr>
+<tr><th class="r">u=1</th><td><span class="a">−2</span><span class="comma">,</span><span class="b">−1</span></td><td><span class="a">0</span><span class="comma">,</span><span class="b">0</span></td></tr>
+<tr><th class="r">u=2</th><td><span class="a">0</span><span class="comma">,</span><span class="b">0</span></td><td><span class="a">−1</span><span class="comma">,</span><span class="b">−2</span></td></tr></table></div>
+<p class="small muted" style="text-align:center">(9.69)</p>
+<p>这是有名的「性别之战」。一男一女是一对，对晚上怎么过各有偏好：男方想去购物，女方想看一场足球赛。博弈就是在这两个活动中选一个。对任何一方，最好的情况是做自己喜欢的事、同时两人在一起；最坏的情况是各做各的，两人分开。这个博弈有点不现实，因为大多数情况下两人之间是会合作的。\(u=v=1\) 和 \(u=v=2\) 都是 Nash 均衡，代价向量分别是 \((-2,-1)\) 和 \((-1,-2)\)。两个解谁也不比谁好，所以都是可容许的。除非两人合作，否则无法避免遗憾的可能（「这你大概早就知道了」）。</p>
+<p>下面是最有名的非零和博弈之一。<b>例 9.19（囚徒困境 The Prisoner's Dilemma）</b>：这个博弈表述非常简单，却展示了许多有趣的问题。设两个人犯了一桩重罪。当局知道他们有罪，但证据不足以定罪。于是当局设计了一个圈套：每个嫌疑人（玩家）被关在单独的牢房里，有两个选择——与当局<b>合作</b>（\(u=1\) 或 \(v=1\)），或<b>拒绝</b>（\(u=2\) 或 \(v=2\)）。合作意味着认罪并交出能指证对方的证据；拒绝意味着声称无辜、拒绝帮助当局。代价 \(L_i\) 表示该玩家要被判的年数：</p>
+<div class="table-wrap" style="text-align:center"><table class="mx pair" style="margin:0 auto"><tr><th class="corner">(L₁, L₂)</th><th class="c">v=1 合作</th><th class="c">v=2 拒绝</th></tr>
+<tr><th class="r">u=1 合作</th><td><span class="a">8</span><span class="comma">,</span><span class="b">8</span></td><td><span class="a">0</span><span class="comma">,</span><span class="b">30</span></td></tr>
+<tr><th class="r">u=2 拒绝</th><td><span class="a">30</span><span class="comma">,</span><span class="b">0</span></td><td><span class="a">2</span><span class="comma">,</span><span class="b">2</span></td></tr></table></div>
+<p class="small muted" style="text-align:center">(9.70)</p>
+<p>设计思路是：双方都合作则各判 8 年——这是罪行被定罪、又因合作而减刑后的刑期。双方都拒绝则各判 2 年，因为当局证据不足以判更久。有意思的是一人拒绝、一人合作：拒绝的人麻烦大了，对方提供的证据会被用来对付他；合作的人可以免罪（代价 0），而另一个人被定罪、坐 30 年牢。</p>
+<p>玩家该怎么做？如果能协调决策，双方都拒绝似乎是个好选择，代价 \((2,2)\)。但这时会有遗憾：每个人都会想，自己本可以通过合作而免罪（代价 0）。如果再玩一次，他们可能会想改变决策。这个问题的 Nash 均衡是<b>双方都合作</b>，得到 \((8,8)\)。所以他们为无法沟通、协调策略付出了代价。这个解同时也是玩家的安全策略，因为它在最坏情况分析下代价最低。<span class="small muted">（注意：本书的「合作」指与<b>当局</b>合作，即坦白；许多教材从两名囚徒的角度称之为「背叛 defect」。）</span></p>
+<h4>随机化 Nash 均衡</h4>
+<p>如果一个博弈在确定性策略空间上没有 Nash 均衡怎么办？同样可以把策略空间扩大到随机化策略来缓解。9.3.3 节说明了 Formulation 9.7 的每个零和博弈都在随机化策略空间上有随机化鞍点；Nash 证明了 Formulation 9.8 的每个非零和博弈都有<b>随机化 Nash 均衡</b>。这是个好结果，但有两点顾虑：仍可能有多个可容许的均衡，所以除非玩家合作，否则没有可靠的办法避免遗憾；另一个顾虑是随机化 Nash 均衡不能用 9.3.3 节的线性规划方法计算，需要的优化是一种<b>非线性规划</b>，未必有好的组合解法。</p>
+<p>回忆 9.3.3 节随机化策略的定义。对一对随机化策略 \((w,z)\)，期望代价 \(\bar L^1(w,z)\)、\(\bar L^2(w,z)\) 可以用 (9.57) 计算。一对策略 \((w^*,z^*)\) 称为<b>随机化 Nash 均衡</b>，如果</p>
+<div class="eq">$$\bar L^1(w^*,z^*) = \min_{w\in W}\Big\{\bar L^1(w,z^*)\Big\} \tag{9.71}$$</div>
+<div class="eq">$$\bar L^2(w^*,z^*) = \min_{z\in Z}\Big\{\bar L^2(w^*,z)\Big\}. \tag{9.72}$$</div>
+<p>博弈论文献中通常叫<b>混合 Nash 均衡 mixed Nash equilibrium</b>。(9.71)、(9.72) 只是把 (9.66)、(9.67) 从确定性策略空间推广到随机化策略空间。用代价矩阵 \(A\)、\(B\)，Nash 均衡条件可以写成</p>
+<div class="eq">$$w^*Az^* = \min_{w\in W}\Big\{wAz^*\Big\} \tag{9.73}$$</div>
+<div class="eq">$$w^*Bz^* = \min_{z\in Z}\Big\{w^*Bz\Big\}. \tag{9.74}$$</div>
+<p>可惜随机化 Nash 均衡的计算比鞍点难得多。主要困难是 Nash 均衡不一定是安全策略。用安全策略时，可以把玩家的决策解耦成两个独立的线性规划问题（例 9.16）；对随机化 Nash 均衡，玩家之间的优化仍然耦合在一起。得到的优化常被称为<b>线性互补问题 linear complementarity problem</b>，可以写成非线性规划问题——同时带有等式和不等式约束的非线性优化（在这个特例中得到一个<b>双线性规划 bilinear programming</b> 问题）。</p>
+<p><b>例 9.20（求随机化 Nash 均衡）</b>：为了体会需要什么样的优化，回到例 9.18。可以找到一个不同于两个确定性均衡的随机化 Nash 均衡。用例 9.18 的代价矩阵，给定随机化策略 \(w\)、\(z\) 时 \(\mathrm{P}_1\) 的期望代价是</p>
+<div class="eq">$$\begin{aligned}\bar L^1(w,z) &= wAz = \begin{pmatrix}w_1 & w_2\end{pmatrix}\begin{pmatrix}-2&0\\0&-1\end{pmatrix}\begin{pmatrix}z_1\\z_2\end{pmatrix}\\ &= -2w_1z_1 - w_2z_2\\ &= -3w_1z_1 + w_1 + z_1 - 1,\end{aligned} \tag{9.75}$$</div>
+<p>最后一步用到 \(w_2=1-w_1\)、\(z_2=1-z_1\)。类似地，\(\mathrm{P}_2\) 的期望代价是</p>
+<div class="eq">$$\begin{aligned}\bar L^2(w,z) &= wBz = \begin{pmatrix}w_1 & w_2\end{pmatrix}\begin{pmatrix}-1&0\\0&-2\end{pmatrix}\begin{pmatrix}z_1\\z_2\end{pmatrix}\\ &= -w_1z_1 - 2w_2z_2\\ &= -3w_1z_1 + 2w_1 + 2z_1 - 2.\end{aligned} \tag{9.76}$$</div>
+<p>（这两个末行的常数项 −1、−2 原书漏掉了<sup class="fn"><a href="#fn-9" id="fn-9-ref">9</a></sup>；它们不影响下面的求导。）若 \(z\) 固定，(9.75) 的最后一个式子对 \(w\) 是线性的；若 \(w\) 固定，(9.76) 对 \(z\) 是线性的。求零和博弈的鞍点时可以利用这一点，但这里不行：必须选 \((w^*,z^*)\)，使 \(z=z^*\) 时 (9.75) 最优，同时 \(w=w^*\) 时 (9.76) 最优。</p>
+<p>这个问题简单到可以用微积分求解。用经典的求导方法，可以通过计算</p>
+<div class="eq">$$\frac{\partial\bar L^1(w_1,z_1)}{\partial w_1} = 1 - 3z_1 \tag{9.77}$$</div>
+<div class="eq">$$\frac{\partial\bar L^2(w_1,z_1)}{\partial z_1} = 2 - 3w_1 \tag{9.78}$$</div>
+<p>找到候选解。两者同时为 0 时出现极值：解 \(1-3z_1=0\)、\(2-3w_1=0\) 得 \((w^*,z^*)=(2/3,1/3)\)（即 \(w_1^*=2/3\)、\(z_1^*=1/3\)），这是一个随机化 Nash 均衡。确定性的 Nash 均衡用这个方法检测不到，因为它们出现在 \(W\)、\(Z\) 的边界上，那里导数没有定义。</p>
+<p>例 9.20 的计算看起来不难，因为每个玩家只有两个动作，而且一半的矩阵元素是 0。一般要同时解两个复杂的方程。不过这些表达式总是二次多项式；而且只要 \(w\) 或 \(z\) 之一固定，它们就对另一组变量线性。</p>
+<h4>可能的解：小结</h4>
+<p>对 Formulation 9.8 的非零和博弈，要记住的几种可能：(1) 可能有多个可容许的（确定性）Nash 均衡；(2) 可能没有（确定性）Nash 均衡；(3) 总至少有一个随机化 Nash 均衡。</p>
+
+<div class="widget wide" data-widget="bimatrix"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>性别之战：右下的「最好回应图」里，蓝线（P₁ 的最好回应）和橙线（P₂ 的）交于三点——两个角是纯均衡，中间是 (w₁, z₁) = (2/3, 1/3) 的混合均衡（例 9.20）。注意混合均衡的期望代价 (−2/3, −2/3) 比两个纯均衡都差。</li>
+  <li>囚徒困境：唯一绿格是 (1,1)。点「编辑数字」把「双方拒绝」改成 (1, 1)：(2,2) 依然不是均衡——单方面改成坦白只判 0 年。再改成 (−1, −1)，(2,2) 才变绿（而且是唯一可容许的）——但那时坦白已没有诱惑，它不再是「困境」了。</li>
+  <li>例 9.16 写成 (A, −A)：没有绿格，最好回应图只交于内部一点 (2/5, 1/5)——Nash 均衡就是随机化鞍点。</li>
+</ul></div>
+
+<h3 id="s9-4-2">9.4.2 多于两个玩家 <span class="en">More Than Two Players</span></h3>
+<p>9.4.1 节的想法很容易推广到任意多个玩家。主要的困难是复杂的记号让概念显得更难；但要记住，没有本质区别。\(n\) 个玩家的非零和博弈表述如下：</p>
+<div class="box def formulation">
+  <div class="box-title">Formulation 9.9（n 人非零和博弈 An n-Player Nonzero-Sum Game）</div>
+  <ol>
+    <li>\(n\) 个玩家的集合：\(\mathrm{P}_1,\mathrm{P}_2,\ldots,\mathrm{P}_n\)。</li>
+    <li>对每个玩家 \(\mathrm{P}_i\)，有限非空集合 \(U^i\)，称为 \(\mathrm{P}_i\) 的动作空间。为方便起见，设每个 \(U^i\) 是从 1 到 \(|U^i|\) 的连续整数。每个 \(u^i\in U^i\) 称为 \(\mathrm{P}_i\) 的一个动作。</li>
+    <li>对每个玩家 \(\mathrm{P}_i\)，函数 \(L_i : U^1\times U^2\times\cdots\times U^n\to\mathbb{R}\cup\{\infty\}\)，称为 \(\mathrm{P}_i\) 的代价函数。</li>
+  </ol>
+</div>
+<p>矩阵表述不再可行，因为维数太多。例如 \(n=3\)、每人 \(|U^i|=2\) 时，\(L_i(u^1,u^2,u^3)\) 由一个 \(2\times2\times2\) 共 8 个元素的立方体给出，需要三个这样的立方体才能描述博弈。所以把 \(L_i\) 想成多元函数、避免用矩阵可能更有帮助（喜欢张量的话，可以用张量刻画 \(n\) 人的代价函数）。</p>
+<p>Nash 均衡的想法推广为：给定其它 \(n-1\) 个玩家选的动作，每个 \(\mathrm{P}_i\) 都没有遗憾。形式化地，一组动作 \((u^{1*},\ldots,u^{n*})\) 称为（确定性）<b>Nash 均衡</b>，如果对每个 \(i\in\{1,\ldots,n\}\)：</p>
+<div class="eq">$$L_i(u^{1*},\ldots,u^{i*},\ldots,u^{n*}) = \min_{u^i\in U^i}\Big\{L_i(u^{1*},\ldots,u^{(i-1)*},u^i,u^{(i+1)*},\ldots,u^{n*})\Big\}. \tag{9.79}$$</div>
+<p>\(n>2\) 时，9.4.1 节末尾总结的每种情况都会出现：可能没有确定性 Nash 均衡，也可能有多个。可容许 Nash 均衡的定义推广为在 \(n\) 维代价向量上定义「好于」；关于所得偏序的极小向量仍称为可容许的（或 Pareto 最优的）。可惜仍可能有多个可容许的 Nash 均衡。</p>
+<p>可以证明 Formulation 9.9 的任何博弈都有随机化 Nash 均衡。令 \(z^i\) 表示 \(\mathrm{P}_i\) 的随机化策略，每个 \(\mathrm{P}_i\) 的期望代价是</p>
+<div class="eq">$$\bar L^i(z^1,z^2,\ldots,z^n) = \sum_{i_1=1}^{m_1}\sum_{i_2=1}^{m_2}\cdots\sum_{i_n=1}^{m_n} L_i(i_1,i_2,\ldots,i_n)\,z^1_{i_1}z^2_{i_2}\cdots z^n_{i_n}. \tag{9.80}$$</div>
+<p>令 \(Z^i\) 为 \(\mathrm{P}_i\) 的随机化策略空间。一组随机化策略 \((z^{1*},\ldots,z^{n*})\) 称为<b>随机化 Nash 均衡</b>，如果对所有 \(i\in\{1,\ldots,n\}\)：</p>
+<div class="eq">$$\bar L^i(z^{1*},\ldots,z^{i*},\ldots,z^{n*}) = \min_{z^i\in Z^i}\Big\{\bar L^i(z^{1*},\ldots,z^{(i-1)*},z^i,z^{(i+1)*},\ldots,z^{n*})\Big\}. \tag{9.81}$$</div>
+<p>可以想见，\(n>2\) 时计算随机化 Nash 均衡比 \(n=2\) 更难。例 9.20 的方法可以推广到 \(n\) 人博弈，只是表达式更复杂：有 \(n\) 个方程，固定其余 \(n-1\) 个玩家的随机化策略后每个都是线性的。结果是一组 \(n\) 次多项式，要在其上同时解 \(n\) 个优化问题。</p>
+<p><b>例 9.21（三人非零和博弈）</b>：三个玩家 \(\mathrm{P}_1\)、\(\mathrm{P}_2\)、\(\mathrm{P}_3\) 各有两个动作 1、2。确定性策略由一个向量给出，例如 \((1,2,1)\) 表示 \(u^1=1\)、\(u^2=2\)、\(u^3=1\)。方便起见对每个 \(i,j,k\in\{1,2\}\) 令</p>
+<div class="eq">$$L(i,j,k) = \big(L_1(i,j,k),\ L_2(i,j,k),\ L_3(i,j,k)\big), \tag{9.82}$$</div>
+<p>代价为</p>
+<div class="eq">$$\begin{aligned}
+L(1,1,1) &= (1,1,-2) & L(1,1,2) &= (-4,3,1)\\
+L(1,2,1) &= (2,-4,2) & L(1,2,2) &= (-5,-5,10)\\
+L(2,1,1) &= (3,-2,-1) & L(2,1,2) &= (-6,-6,12)\\
+L(2,2,1) &= (2,2,-4) & L(2,2,2) &= (-2,3,-1).
+\end{aligned} \tag{9.83}$$</div>
+<p>书中说有两个确定性 Nash 均衡，代价分别是 \((2,-4,2)\) 和 \((3,-2,-1)\)，并且两者都可容许，所以玩家之间需要一些合作才能确保没有遗憾。用 (9.79) 逐个验证会发现：\((1,2,1)\)（代价 \((2,-4,2)\)）确实是均衡；但 \((2,1,1)\)（代价 \((3,-2,-1)\)）不是——\(\mathrm{P}_1\) 单独改选 \(u^1=1\) 时代价从 3 降到 \(L_1(1,1,1)=1\)。按印出来的数据，纯 Nash 均衡只有一个<sup class="fn"><a href="#fn-10" id="fn-10-ref">10</a></sup>。</p>
+
+<div class="widget wide" data-widget="three-player"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>原书数据：只有 (1,2,1) 没有箭头离开（绿色）。点 (2,1,1)：一条蓝色箭头（P₁ 改选）指向 (1,1,1)。</li>
+  <li>换成「把 L₁(1,1,1) 改成 4」：那条蓝箭头反向，(2,1,1) 也变绿——这时书中的说法成立，两个均衡的代价 (2,−4,2) 与 (3,−2,−1) 互不可比，都可容许。</li>
+  <li>随机生成几次：有时一个绿点都没有。这时只剩随机化 Nash 均衡 (9.81)，它不在这张图的顶点上。</li>
+</ul></div>
+</section>
+
+<!-- ============================================================ 9.5 -->
+<section id="s9-5">
+<h2>9.5 审视决策论 <span class="en">Decision Theory Under Scrutiny</span></h2>
+<p>本章引入了许多决策模型，它们为 Part III 的主题——不确定性下的规划——奠定了基础。在这个基础上构建规划模型之前，有必要批判性地评估它们在应用中是否合适。读 9.1–9.4 节时你可能已经有很多疑问：代价是怎么定的？为什么相信优化<b>期望</b>代价是对的？没有先验分布怎么办？最坏情况分析是不是太保守？能确信博弈中的玩家都具有假设的理性吗？玩家知道彼此的代价函数现实吗？本节试图对这些问题做些说明。「大楼只和它的地基一样牢固」：因误解决策论的局限而犯的错误，最终会渗进由它构建的规划表述里。</p>
+
+<h3 id="s9-5-1">9.5.1 效用理论与理性 <span class="en">Utility Theory and Rationality</span></h3>
+<p>这一节为在 Formulation 9.3、9.4 下使用代价函数并最小化其期望值提供一些理由。这一框架叫<b>效用理论 utility theory</b>，通常用回报而不是代价来表述。如 9.1.1 节所说，代价乘以 −1、再把每个最大化换成最小化，就能变成回报。所以下面谈回报 \(R\)，直觉是回报越高越好。</p>
+<h4>比较回报</h4>
+<p>想象给决策过程的各种结果赋回报值。有些应用里数值自然而然：例如回报是一笔金融投资赚的钱；机器人应用中，可以把执行任务的时间或消耗的能量取负；回报也可以是移动机器人建完地图后剩余的电量。有些应用里回报的来源可能是主观的：洗碗的回报和扫地相比是多少？每个人都会给出不同的回报，甚至每天都不一样——取决于干活时的享受或痛苦、花的时间、别人怎么看等等。如果用决策论为一个人类「客户」自动化决策过程，最好仔细咨询客户，确保知道他们的偏好；这时也许可以先把偏好排序，再赋给与排序一致的回报。</p>
+<p>回报赋好后，考虑在不涉及自然的 Formulation 9.1 下做决策：每个结果直接对应一个动作 \(u\in U\)。若回报由 \(R:U\to\mathbb{R}\) 给出，可以对每个 \(u\) 定义代价 \(L(u)=-R(u)\)，满足客户就是选 \(u\) 最小化 \(L\)。现在考虑与自然对弈：决策要比较<b>结果上的概率分布</b>。所有概率分布构成的空间可能极大，但用期望把每个分布（或密度）映成一个实数，问题就简化了。要关心的是：这种往实数上的投影，会不会无法反映客户真实的偏好。下面的例子说明这一点。</p>
+<p><b>例 9.22（你喜欢赌博吗？）</b>：设你有三个选择：(1) 拿 1000 欧元；(2) 抛一枚均匀硬币，正面得 2000 欧元，否则什么也没有；(3) 以 2/3 的概率得 3000 欧元，但以 1/3 的概率你要给我 3000 欧元。三个选择的期望回报都是 1000 欧元，你真的会认为它们等价吗？期望没有考虑你对赌博的喜爱或厌恶。在与自然对弈时应该怎样考虑这件事？</p>
+<p>为了修补，先看另一种情形。多数人会同意钱多更好（钱太多让你烦恼的话，总可以把多余的捐给慈善机构）。有趣的是，富有会降低钱的感知价值，下面的例子说明这一点。</p>
+<p><b>例 9.23（真人秀）</b>：设你幸运地参加一个真人秀，节目要考验你为了挣钱愿意出多大的丑、甚至折磨自己——比如吃蟑螂、把头长时间泡在水里等。令 \(u_1\) 表示同意做这件事，\(u_2\) 表示拒绝；奖金以美元计。想象你是一个手头拮据的穷学生，考虑下面几种情形你会怎么反应：</p>
+<ol>
+  <li>\(u_1\) 赚 \$1，\(u_2\) 什么也没有。单纯优化回报会选 \(u_1\)，即去做那件不愉快的事。值 \$1 吗？问题在于我们没考虑完成任务的不适。也许应该把美元值减去你刚好愿意做这件事的那个金额。</li>
+  <li>\(u_1\) 赚 \$10,000，\(u_2\) 什么也没有。\$10,000 被假定为一大笔钱，显然值得忍受节目的任何折磨，所以 \(u_1\) 更好。</li>
+  <li>现在想象主持人先因为你上节目给你 1000 万美元。你还愿意为了额外的 \$10,000 去做那件不愉快的事吗？大概不会。这是怎么回事？你对钱的价值感随着钱变多而降低了，对吧？如果参赛者都是富有的石油大亨，这节目就不好看了。</li>
+  <li>假设你已经完成了任务，即将领奖。为了增加戏剧性，主持人给你一次赌博的机会：选 \(u_1\) 拿 \$10,000，或者选 \(u_2\) 做赌徒——抛一枚均匀硬币，以 1/2 的概率赢 \$25,000。按期望回报显然选 \(u_2\)；但你刚做完那件不愉快的事、正等着拿钱，输光的风险可能难以承受。不同的人会有不同的偏好。</li>
+  <li>再假设你又完成了任务，这次选择是 \(u_1\) 得 \$100，或 \(u_2\) 以 1/2 的概率得 \$250（抛均匀硬币）。主持人很善良，让你玩 100 次。两种动作的期望总额分别是 \$10,000 和 \$12,500。这次似乎明显该赌：100 次独立试验之后，我们预期以极高的概率挣到超过 \$10,000<span class="small muted">（补充：概率约 97.2%，参考代码第 13 项）</span>。所以如果允许大量独立试验，按期望情况分析的推理似乎是成立的：此时以高概率会得到接近期望回报的值。</li>
+</ol>
+<p>由这些例子看来，决策系统的客户或评估者必须指出<b>结果上的概率分布之间</b>的偏好。有一种形式化的方法能保证一旦这些偏好给定，就能设计一个代价函数，使其期望忠实地反映对分布的偏好。这就是<b>效用理论</b>，它包括下面几步：</p>
+<ol>
+  <li>要求客户在给出偏好时是<b>理性的 rational</b>。这个概念由公理定义。</li>
+  <li>如果偏好与公理一致，就保证存在一个<b>效用函数 utility function</b>；优化期望效用时，偏好与客户的完全一致。</li>
+  <li>代价函数可以由效用函数导出。</li>
+</ol>
+<p>客户必须给出结果上概率分布之间的偏好。设用的是 Formulation 9.3<sup class="fn"><a href="#fn-11" id="fn-11-ref">11</a></sup>，方便起见设 \(U\)、\(\Theta\) 有限。令 \(X\) 为基于结果的<b>状态空间</b>（多数效用理论文献称之为回报空间 \(\mathcal{R}\)），\(f:U\times\Theta\to X\) 给每个结果赋一个状态。一个简单的例子是令 \(X=U\times\Theta\)、\(f\) 为恒等映射，使结果空间与状态空间重合。也可以用 \(f\) 把结果空间压缩成一个更小的集合：如果两个结果映到同一个状态，说明就回报或代价而言它们无法区分。</p>
+<p>令 \(z\) 表示 \(X\) 上的一个概率分布，\(Z\) 为 \(X\) 上所有概率分布的集合。每个 \(z\in Z\) 表示为 \(n=|X|\) 维概率向量，看作 \(\mathbb{R}^n\) 的元素，便于「混合」两个分布：令 \(\alpha\in(0,1)\) 是常数，\(z_1\)、\(z_2\) 是任意两个分布，用标量乘法得到新分布 \(\alpha z_1+(1-\alpha)z_2\)，称为 \(z_1\) 与 \(z_2\) 的<b>混合 blend</b>。方便的是不需要再归一化：\(z_1\)、\(z_2\) 的「长度」都是 1，混合的长度是 \(\alpha+(1-\alpha)=1\)。</p>
+<p>建模者必须咨询客户来表示 \(Z\) 中元素之间的偏好。\(z_1\prec z_2\) 表示 \(z_2\) <b>严格优于</b> \(z_1\)；\(z_1\approx z_2\) 表示两者偏好相当；\(z_1\preceq z_2\) 表示 \(z_1\prec z_2\) 或 \(z_1\approx z_2\)。</p>
+<p><b>例 9.24（表示偏好）</b>：设 \(U=\Theta=\{1,2\}\)，得到四个可能的结果 \((1,1)\)、\((1,2)\)、\((2,1)\)、\((2,2)\)。想象自然是一台按某个概率分布产生 1 或 2 的机器，动作是猜机器会产生哪个数：猜中就赢得那个数目的金币，猜错什么也不赢、也不输。用 \(f\) 构造状态空间 \(X\)：结果 \((2,1)\) 和 \((1,2)\) 在任何可想到的回报上都一样，应映到同一状态；另两个结果各不相同。所以状态空间只需三个元素，\(X=\{0,1,2\}\)：令 \(f(2,1)=f(1,2)=0\)、\(f(1,1)=1\)、\(f(2,2)=2\)，后两个状态表示能赢到一些金币。现在考虑 \(X\) 上的概率分布集合 \(Z\)，每个 \(z\) 是三维向量。例如 \(z_1=[1/2\ \ 1/4\ \ 1/4]\) 表示状态以概率 1/2 为 0、1/4 为 1、1/4 为 2。设 \(z_2=[1/3\ \ 1/3\ \ 1/3]\)：你更喜欢哪个？这里 \(z_2\) 似乎一致地更好，因为赢到金币的机会更大，于是声明 \(z_1\prec z_2\)。分布 \(z_3=[1\ \ 0\ \ 0]\) 似乎是能想象的最差的，于是可以放心地声明 \(z_3\prec z_1\)、\(z_1\prec z_2\)。对复杂问题，确定偏好的过程会相当繁琐。本例中 \(Z\) 是 \(\mathbb{R}^3\) 的一个二维子集，可以划分成有限个区域，让客户在其上清楚地表明偏好。这一框架的主要批评之一就是确定 \(Z\) 上偏好的不现实性。</p>
+<p>偏好确定后，是否有办法保证存在一个 \(X\) 上的实值函数，其期望值恰好反映偏好？如果偏好的赋值满足理性公理，答案是<b>肯定</b>的。</p>
+<h4>理性公理 axioms of rationality</h4>
+<p>为了达到设计效用函数的目标，偏好必须遵守一些称为<b>理性公理</b>的规则。它们是偏好之间合理的一致性要求；只要遵守了，效用函数就保证存在（详细论证见文献；也存在别的公理体系）。决策者被认为是理性的，若定义 \(\prec\) 和 \(\approx\) 时遵守下列公理：</p>
+<ol>
+  <li>若 \(z_1,z_2\in Z\)，则 \(z_1\preceq z_2\) 或 \(z_2\preceq z_1\)。「你必须能拿定主意。」</li>
+  <li>若 \(z_1\preceq z_2\) 且 \(z_2\preceq z_3\)，则 \(z_1\preceq z_3\)。「偏好必须是传递的。」</li>
+  <li>若 \(z_1\prec z_2\)，则对任意 \(z_3\in Z\)、\(\alpha\in(0,1)\)，
+    <div class="eq">$$\alpha z_1 + (1-\alpha)z_3 \prec \alpha z_2 + (1-\alpha)z_3. \tag{9.84}$$</div>
+    「均匀地混入一个新分布不改变偏好。」</li>
+  <li>若 \(z_1\prec z_2\prec z_3\)，则存在 \(\alpha\in(0,1)\) 和 \(\beta\in(0,1)\) 使得
+    <div class="eq">$$\alpha z_1 + (1-\alpha)z_3 \prec z_2 \tag{9.85}$$</div>
+    <div class="eq">$$z_2 \prec \beta z_1 + (1-\beta)z_3. \tag{9.86}$$</div>
+    「既没有天堂，也没有地狱。」</li>
+</ol>
+<p>每条公理都有说得通的直观解释。第一条只是说对任何一对分布都能判断偏好方向。第二条说偏好必须传递（书中脚注：对某些合理的问题，传递性并不是想要的，见 Condorcet 悖论与 Simpson 悖论）。后两条复杂一些。第三条中 \(z_2\) 严格优于 \(z_1\)；试图通过混入第三个分布 \(z_3\) 来制造混乱，但如果混进 \(z_1\) 和 \(z_2\) 的 \(z_3\)「分量」相同，偏好就不应受影响。最后一条涉及 \(z_1\)、\(z_2\)、\(z_3\)，每个都严格好于前一个。(9.85) 说明，若 \(z_2\) 严格好于 \(z_1\)，那么可以往 \(z_1\) 里混入一丁点 \(z_3\)，\(z_2\) 仍然更好；如果 \(z_3\) 像「天堂」（无限回报），这就不可能了。类似地，(9.86) 说明可以往 \(z_3\) 里混入一丁点 \(z_1\)，结果仍好于 \(z_2\)——这意味着 \(z_1\) 不能是「地狱」（无限负回报）。（有些公理体系允许无限回报，导致取无限值的效用与代价函数，这里不考虑。）</p>
+<h4>构造效用函数</h4>
+<p>如果偏好是以与公理一致的方式确定的，就可以证明<b>效用函数</b>一定存在：存在函数 \(\mathcal{U}:X\to\mathbb{R}\)，使对所有 \(z_1,z_2\in Z\)，</p>
+<div class="eq">$$z_1\prec z_2 \quad\text{当且仅当}\quad E_{z_1}[\mathcal{U}] < E_{z_2}[\mathcal{U}], \tag{9.87}$$</div>
+<p>其中 \(E_{z_i}\) 表示把 \(\mathcal{U}\) 当作概率分布 \(z_i\) 下的随机变量时的期望。\(\mathcal{U}\) 的存在说明通过<b>最大化期望效用</b>来确定最好的动作是安全的。</p>
+<p>可以用效用函数定义回报函数 \(R(u,\theta)=\mathcal{U}(f(u,\theta))\)，再转换成代价函数 \(L(u,\theta)=-R(u,\theta)=-\mathcal{U}(f(u,\theta))\)。在 \(\mathcal{U}\) 被正确地构造以保持偏好的前提下，Formulation 9.3、9.4 在概率不确定性下推荐的「最小化期望代价」现在看来是有道理的。</p>
+<p>可惜，证明效用函数存在并不给出构造它的系统方法。多数情况下只能通过反复核对偏好的试错过程来设计 \(\mathcal{U}\)。在绝大多数应用中，人们构造效用与代价函数时并不考虑本节讨论的这些含义，所以可能得到不理想的结论——不要对最优决策规则的质量过于自信。注意如果用的是最坏情况分析，这里讨论的大多数问题本可以避免；但最坏情况分析有它自己的弱点（9.5.3 节）。</p>
+<p><b>例 9.25（钱的效用）</b>：本节最后描绘一个常用于金钱的效用函数。设状态空间 \(X=\mathbb{R}\)，表示挣到的美元数。多数人对金钱的效用表明：随着累积财富增加，新增的钱的价值下降。效用函数甚至可能有界：想象存在某个最大金额，比如 \(\$10^{100}\)，超过它之后更多的钱就没有价值了。典型的效用曲线见图 9.6——一条从原点陡升、然后逐渐变平的凹曲线。</p>
+
+<div class="widget wide" data-widget="utility"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>例 9.22 + 线性效用：三个选择的确定性等价都是 1000；换成对数效用，选择 3 的确定性等价掉到约 40 欧元（初始财富 5000 时，参考代码第 13 项）。</li>
+  <li>例 9.23 情形 4 + 对数效用：穷学生（W₀ ≈ $1,000）选稳拿 $10,000；把 W₀ 拉到 $10,000,000，改选赌博——效用曲线在这么小的一段上几乎是直的。</li>
+  <li>选「有界」效用并把 R 调小：曲线很快变平（图 9.6 那种饱和），对风险非常厌恶；连情形 5 这样几乎稳赢的赌局，确定性等价也会被压低。</li>
+</ul></div>
+
+<div class="widget" data-widget="pref-triangle"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>拖动「𝒰(1 枚)」：无论取 (0, 1) 中的什么值，书中的顺序 z₃ ≺ z₁ ≺ z₂ 都不变——例 9.24 的偏好与「金币多更好」的任何效用一致。</li>
+  <li>把 z₁ 拖到与 z₂ 同一条绿线上：两者变成 ≈（无差别）。期望效用对 z 线性，所以无差异线是平行直线。</li>
+  <li>拖动「混入 z₃ 的比例」：两个空心点沿虚线一起向 z₃ 靠拢，它们的先后顺序始终保持——这就是公理 3 (9.84)。</li>
+</ul></div>
+
+<h3 id="s9-5-2">9.5.2 对概率模型的质疑 <span class="en">Concerns Regarding the Probabilistic Model</span></h3>
+<p>9.5.1 节讨论了代价函数的来源以及取期望的合理性。这一节对 9.2 节所用概率分布的合理性提出疑问。两个主要话题是：对贝叶斯方法的一般批评，以及构造概率分布的难处。</p>
+<h4>贝叶斯派与频率派</h4>
+<p>过去一个半世纪里，统计学家之间一直在争论概率的<b>含义</b>。几乎所有人都满意于概率公理，但除此之外，用概率做推断时它们究竟意味着什么？两大阵营是<b>频率派 frequentists</b> 和<b>贝叶斯派 Bayesians</b>。贝叶斯规则的一种形式在 Bayes 去世后的 1763 年发表。十九世纪的大部分时间里贝叶斯分析在文献中占主导；二十世纪，频率派哲学作为对概率更严格的解释流行起来；近年来贝叶斯方法的可信度又在上升。</p>
+<p>如前所见，贝叶斯派把概率解释为对一个假设的<b>相信程度</b>。在这种哲学下，完全可以从一个先验分布出发，收集几个观测，再根据用贝叶斯规则得到的后验分布做决策。从频率派的角度看，贝叶斯分析对概率的使用过于随意。频率派认为，概率只定义为独立试验次数趋于无穷时得到的极限量。例如一枚均匀硬币抛很多次，概率 1/2 表示试验次数趋于无穷时正面次数与总次数之比收敛到的值。贝叶斯派可能会说「<b>下一次</b>是正面的概率是 1/2」，对频率派来说，这种对概率的解释太强了。</p>
+<p>频率派按自己的哲学发展了一套决策论。例如频率派会主张优化下面的<b>频率学派风险 frequentist risk</b> 来得到决策规则：</p>
+<div class="eq">$$R(\theta,\pi) = \int_y L(\pi(y),\theta)P(y|\theta)\,dy, \tag{9.88}$$</div>
+<p>其中 \(\pi\) 是策略 \(\pi:Y\to U\)。频率学派风险对所有数据取平均，而不是像贝叶斯派在 (9.26) 中那样基于单个观测做决策。概率 \(P(y|\theta)\) 被假定为独立数据试验次数趋于无穷时得到的极限。用 (9.88) 的主要缺点是优化依赖于 \(\theta\)：最好的决策规则必须依赖未知的 \(\theta\)。在少数情况下可以选到一个对所有 \(\theta\) 都最优的 \(\pi\)，但这很少发生。所以频率学派风险可以看成对策略可取性的一种约束，但通常不足以选出唯一一个。这让人想起 9.1.1 节讨论的 Pareto 最优。频率派方法试图更保守、更严格，结果是对决策做出的论断更弱。</p>
+
+<div class="widget wide" data-widget="freq-risk"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>灰色曲线：c = 0（永远猜 0）在 θ = 0 时风险为 0，别处却很糟；c = 1 是一条水平线。它们交叉——没有一个规则处处最好。</li>
+  <li>把「自选 c」拖到 1.1：紫线处处高于 c = 1 的灰线，它被支配了——频率学派风险能排除的只是这种规则（与 Pareto 最优同一思路）。</li>
+  <li>调 τ：贝叶斯最优的 c = τ²/(τ²+σ²) 随先验变化。先验越宽（τ 大），越接近「直接用 y」。</li>
+</ul></div>
+
+<h4>先验分布从哪里来</h4>
+<p>设已经采用贝叶斯方法。所有贝叶斯分析中最普遍的担忧是<b>先验分布的来源</b>。在 9.2 节它表示为 \(P(\theta)\)（或 \(p(\theta)\)），是自然动作空间上的分布（或密度）。获得 \(P(\theta)\) 最好的办法是通过大量独立试验来估计——这让它的定义与频率派的观点一致。例 9.11 就做到了这一点：\(P(\theta)\) 可以从大量文本中各字母的出现频率可靠地估计出来；分布甚至可以针对特定的语言或主题调整。</p>
+<p>但在大多数决策论应用中，做这样的实验不可能或代价太高。这时怎么办？如果先验分布只是「编出来的」，得到的后验概率就值得怀疑；事实上称它们为概率可能都不合适。这种情况下有时用<b>主观概率 subjective probabilities</b> 一词。尽管如此，人们常常这么做，因为别无选择。选项之一是转向频率派决策论，但如前所述，它不适用于单个观测。</p>
+<p>幸运的是，观测越多，先验对贝叶斯后验的影响越小。如果只有一个观测，甚至像 Formulation 9.3 那样一个都没有，先验就非常有影响。如果关于 \(P(\theta)\) 几乎没有信息，就应尽可能仔细地设计这个分布；还应明白，在这个假设下得出的任何结论都受先验左右。假设把这个模型作为规划方法的基础，你可能为算出了「最优」计划而高兴，但这种最优性仍可能取决于先验赋值带来的某种任意偏差。</p>
+<p>如果没有任何信息，让 \(P(\theta)\) 在 \(\Theta\) 上尽可能均匀似乎是合理的。Laplace 称之为「<b>不充分理由原则 principle of insufficient reason</b>」：如果没有理由相信一个元素比另一个更可能，就应赋予相等的值。这也可以用信息论中 Shannon 的熵来论证。离散情形下熵是</p>
+<div class="eq">$$-\sum_{\theta\in\Theta}P(\theta)\lg P(\theta), \tag{9.89}$$</div>
+<p>连续情形下是</p>
+<div class="eq">$$-\int_\Theta p(\theta)\lg p(\theta)\,d\theta. \tag{9.90}$$</div>
+<p>这个熵度量是在通信系统中提出的，用来估计通过有噪声介质传送消息所需的最少比特数；一般表示与分布相关的不确定性大小，熵越大不确定性越大。可以证明熵在 \(P(\theta)\) 均匀时最大，这似乎为不充分理由原则提供了依据，于是它可以被看作<b>无信息先验 noninformative prior</b>。这个想法甚至常常用于 \(\Theta=\mathbb{R}\)，得到<b>非正常先验 improper prior</b>：密度不可能在整个 \(\mathbb{R}\) 上保持一个非零常数，因为积分会是无穷。但 9.2 节的决策不依赖任何归一化因子，所以可以给 \(p(\theta)\) 赋一个常数值，决策不受先验非正常的影响。</p>
+<p>用熵论证来选先验的主要困难是 \(\Theta\) 本身可能以很多任意的方式选取；对不同的 \(\Theta\) 做均匀赋值，最终会产生关于先验的不同信息。</p>
+<p><b>例 9.26（无信息先验的一个问题）</b>：考虑根据天气决定做什么活动。设完全不知道会是什么天气。一种可能的赋值是 \(\Theta=\{p,c\}\)，\(p\) 表示「降水」，\(c\) 表示「晴」。最大化 (9.89) 建议 \(P(p)=P(c)=1/2\)。仔细一想，也许想区分不同种类的降水，更好的自然动作集合是 \(\Theta=\{r,s,c\}\)：\(c\) 仍是「晴」，降水 \(p\) 被分成 \(r\)「雨」和 \(s\)「雪」。现在最大化 (9.89) 给每个自然动作赋概率 1/3，明显不同于原来的赋值：区分了降水的种类之后，降水看起来可能得多。我们想区分不同形式的降水，真的会影响天气吗？</p>
+<p><b>例 9.27（连续空间的无信息先验）</b><sup class="fn"><a href="#fn-typo">注</a></sup>：连续空间里也会出现类似的麻烦。回忆例 9.12 的参数估计问题。现在设任务是估计一条直线：一些数据点本应落在这条直线上，但因测量噪声偏离了。应该给 \(\Theta\)——所有直线的集合——赋什么初始概率密度？设直线位于 \(Z=\mathbb{R}^2\) 中，方程可以写成</p>
+<div class="eq">$$\theta_1z_1 + \theta_2z_2 + \theta_3 = 0. \tag{9.91}$$</div>
+<p>问题在于参数向量 \(\theta=[\theta_1\ \theta_2\ \theta_3]\) 乘以一个标量常数后得到同一条直线。所以即使 \(\theta\in\mathbb{R}^3\)，也必须加一个约束。设要求</p>
+<div class="eq">$$\theta_1^2 + \theta_2^2 + \theta_3^2 = 1 \tag{9.92}$$</div>
+<p>且 \(\theta_1\ge0\)<sup class="fn"><a href="#fn-12" id="fn-12-ref">12</a></sup>。这大体上解决了问题，保证每个参数值对应唯一一条直线（\(\theta_1=0\) 处有些重复，这里可以放心地忽略）。于是参数空间是球面 \(\mathbb{S}^2\) 的上半部分。最大熵先验建议给 \(\Theta\) 赋均匀的概率密度。这也许感觉理所当然，但这种均匀性的概念被为保证唯一性而施加的特定约束所左右。还有很多别的选择，例如可以把 (9.92) 换成强迫点落在立方体表面上半部分的约束，而不是球面；在这个新参数空间上赋的均匀概率密度当然不同于球面上的。</p>
+<p>有些情形下参数空间有对某些变换不变的自然表示。5.1.4 节介绍过 <b>Haar 测度</b>的概念。如果用 Haar 测度作为无信息先验，就能得到有意义的均匀性。例如参数空间是 SO(3) 时，按例 5.14 的建议，在单位四元数空间上赋均匀的概率质量是无信息先验的绝佳选择，因为它与 Haar 测度一致——对作用于事件的群运算不变。可惜对实践中出现的大多数空间，Haar 测度并不存在（它要求局部紧的拓扑群）。</p>
+
+<div class="widget wide" data-widget="noninformative"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>天气：从 {降水, 晴} 切到 {小雨, 大雨, 雪, 晴}，晴天的「无信息」概率从 1/2 掉到 1/4，熵从 1 比特升到 2 比特。</li>
+  <li>直线：两种参数化下各抽一批直线。球面版本的法向角 φ 直方图是平的；立方体版本在 φ = ±π/4 附近更高、在 0 附近更低（|φ| &lt; π/8 的比例约 20.8%，不是 25%）。</li>
+  <li>「重新抽样」几次：差别是系统性的，不是抽样噪声。</li>
+</ul></div>
+
+<h4>对条件分布的错误假设</h4>
+<p>最后一个担忧是：很多时候连分布 \(P(y|\theta)\) 也估计错了，因为它被任意地假定属于某个分布族。例如用高斯密度很容易，于是很想假设 \(p(y|\theta)\) 是高斯的。可以做实验估计均值和方差参数；但即使找到了最佳拟合，也不意味着高斯是好的表示。基于这个模型的结论可能是错的，尤其当真实分布形状不同时，例如尾巴更长或是多峰的。很多情况下需要<b>非参数 nonparametric</b> 方法来避免这种偏差：这类方法不假设特定的分布族。例如，想象对固定的 \(\theta\) 做一个直方图，记录 \(y\) 出现的频率；把直方图归一化，就得到一个不必假设初始形式的概率分布表示。</p>
+
+<h3 id="s9-5-3">9.5.3 对非确定性模型的质疑 <span class="en">Concerns Regarding the Nondeterministic Model</span></h3>
+<p>鉴于概率建模的这些问题，很想放弃整个框架、完全使用非确定性模型。这只需指定 \(\Theta\)，不必说明各动作的相对可能性。于是 9.5.1、9.5.2 节的大部分复杂问题都消失了。可惜这个好处是以相当的代价换来的：用非确定性模型的最坏情况分析做决策有它自己的缺点。权衡之后，你可以决定哪个更适合具体的应用。</p>
+<p>第一个困难是保证 \(\Theta\) 足够大，覆盖所有可能性。考虑自然行动两次的 Formulation 9.6：通过自然观测动作空间 \(\Psi(\theta)\)，测量过程引入干扰。设 \(\Theta=\mathbb{R}\)、\(h(\theta,\psi)=\theta+\psi\)，这时 \(\Psi(\theta)\) 可以解释为测量误差。可能出现的最大误差是多少？也许是声呐在测量机器人到墙的距离。根据传感器规格，可能可以给误差构造一个漂亮的界；但偶尔误差会比这个界大。声呐有时听不到计算距离所需的回声，这时报告的距离是 \(\infty\)；由于反射，偶尔还会出现极大的误差。虽然这样的误差不常见，但如果要<b>有保证</b>的表现，就必须把很大甚至无限的误差包括在 \(\Psi(\theta)\) 中。问题是，最坏情况的推理可能总是得出「传感器毫无用处」的结论——因为它可能一直报告 \(\infty\)。从传感器能获得的任何统计上有效的信息都会被忽略。在概率模型下，很容易把 \(\Psi(\theta)\) 设得很大，再给大误差赋很小的概率。非确定性不确定性的问题在于：\(\Psi(\theta)\) 需要更小才能做出合适的决策，但这样理论上的「保证」在实践中可能并不真正有保证。（9.2.3 节的「噪声传感器」互动图里可以亲眼看到这一点。）</p>
+<p>即使建立了非确定性模型，最优决策规则给出的结果在预期应用中也可能显得荒谬。问题在于决策者不能容忍任何风险：只有结果能被保证时才采取行动，比最坏情况做得更好的希望不被考虑。考虑下面的例子：</p>
+<p><b>例 9.28（保守决策的一个问题）</b>：一个朋友让你选：一张 1000 欧元的支票，或 1 欧元现金。支票要拿去银行兑现，有一点点可能账户余额不足，那样你什么也得不到；选 1 欧元现金则保证有所收获。下面的矩阵反映了结果（不考虑效用理论）<sup class="fn"><a href="#fn-13" id="fn-13-ref">13</a></sup>：</p>
+<div class="table-wrap" style="text-align:center"><table class="mx" style="margin:0 auto"><tr><th class="corner">收益</th><th class="c">现金</th><th class="c">支票</th></tr>
+<tr><th class="r">兑现</th><td>1</td><td>1000</td></tr><tr><th class="r">跳票</th><td>1</td><td>0</td></tr></table></div>
+<p class="small muted" style="text-align:center">(9.93)，照原书排法：行是自然的 θ，列是你的动作 u，数值是收到的欧元。</p>
+<p>用概率分析，也许会得出拿支票最好的结论——也许你知道这位朋友很富有、对银行账户很负责。但这种信息无法纳入（非确定性的）决策过程。用最坏情况分析，最优动作是拿 1 欧元现金。不过你可能感觉不太好：想象一下，后来得知账户其实有足够的钱兑现那张 1000 欧元的支票，该有多后悔。</p>
+<p>所以要记住：想要绝对有保证的结果是要付出代价的。概率模型提供了纳入统计信息的灵活性。有时可以把概率模型看成非确定性模型的推广：如果假设自然在机器人之后行动，自然动作就能考虑机器人的动作，如 Formulation 9.4 那样。非确定性情形下指定 \(\Theta(u)\)，概率情形下指定 \(P(\theta|u)\)。可以把分布 \(P(\theta|u)\) 设计成自然以极高的概率选择使 \(L(u,\theta)\) 最大的那个 \(\theta\in\Theta\)。在例 9.28 中，这意味着支票跳票（毫无收益）的概率极高，比如 0.999999；这时即使在概率模型下，最优动作也是选 1 欧元现金。几乎对任何用最坏情况分析建模的决策问题，都可以反向推导出某些先验，使概率分析做出同样的决策。在例 9.28 中<sup class="fn"><a href="#fn-14" id="fn-14-ref">14</a></sup>，看起来决策正是基于「支票以极高概率跳票」这一假设做出的，尽管并没有概率模型。<span class="small muted">（补充：按期望收益，拿支票更好当且仅当 \(1000(1-p)>1\)，即跳票概率 \(p<0.999\)，参考代码第 15 项。）</span></p>
+<p>这说明非确定性模型下的最坏情况分析可以看作概率模型的一个特例：先验分布给最坏的结果赋了很高的概率。对这种赋值的理由，可以像批评贝叶斯分析中的其它先验赋值一样提出质疑：这种特定赋值的根据是什么？</p>
+
+<h3 id="s9-5-4">9.5.4 对博弈论的质疑 <span class="en">Concerns Regarding Game Theory</span></h3>
+<p>博弈论最基本的局限之一是每个玩家必须知道其他玩家的代价函数。9.5.1 节已经说明，即使为单个决策者确定合适的代价函数也相当困难；确定其他玩家的代价和动机就更难了。在大多数实际情境中这些信息是得不到的。一种可能是对另一个玩家代价函数的知识中的不确定性建模：可以用贝叶斯分析，根据观察到的该玩家的动作来推理他的代价——先验赋值的问题又出现了。允许代价函数中有不确定性的最大困难之一，是会出现一种「无限反射 infinite reflection」：比如我在玩一个博弈，对方知道我的代价函数吗？我可能对此不确定。再进一步，对方知道我并不完全知道他的代价函数吗？这种揣测可以无限进行下去，导致嵌套推理和先验分布赋值的噩梦。（书中脚注：看过电影《公主新娘 The Princess Bride》的读者，也许还记得 Vizzini 和恐怖海盗罗伯茨关于哪只酒杯里有致命的 Iocane 毒药的那段幽默对话。）</p>
+<p>鞍点或 Nash 均衡的存在是通过随机化策略保证的。数学上这看起来是对一个令人沮丧的问题的干净解答，但它也代表了对模型的实质性改变。很多博弈只玩一次；要使期望情况的结果收敛，博弈必须玩无穷多次。如果只玩一次或几次，即使基于期望情况分析的理论表明遗憾已被消除，玩家也很可能会后悔。</p>
+<p>另一个问题是，有智能的人类玩家在玩过几次之后可能会从根本上改变策略。人类很难模拟一个随机化策略（假设他们真的想这样做，而这不太可能）。甚至有经典博弈（如石头剪刀布和囚徒困境）的国际锦标赛，玩家反复参加。对一个人们设计程序反复参加囚徒困境比赛的锦标赛的有趣讨论，见书中文献。人们观察到，经过多次迭代后甚至会出现一些合作，即使玩家无法沟通，这也为双方带来了更高的回报。在这种背景下出现了一个著名策略叫 <b>Tit-for-Tat（以牙还牙）</b>（由 Anatol Rapoport 编写）：每一轮都重复另一个玩家上一轮的动作。这个方法简单却出奇地成功。</p>
+<p>在非零和博弈中，可能存在多个 Nash 均衡这一点尤其令人沮丧。假设多个 Nash 均衡中只有一个可容许，对手真的会仔细思考各个 Nash 均衡、并挑出那个可容许的吗？也许有些玩家很保守，甚至会玩安全策略——这彻底破坏了最小化遗憾的假设。如果有多个可容许的 Nash 均衡，看来除非玩家之间有某种合作，否则遗憾不可避免。如果这种合作不可能，结果就令人遗憾。</p>
+
+<div class="widget wide" data-widget="ipd"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>默认 5 种策略、每场 20 轮：以牙还牙和「冷酷」并列第一（总刑期 342，参考代码第 16 项），而以牙还牙在<b>每一场</b>里都不比对手判得少。</li>
+  <li>加入「交替」：以牙还牙掉到第三——它会和「交替」陷入你来我往的报复循环。锦标赛的赢家取决于参赛的是谁。</li>
+  <li>单场对局里看「以牙还牙 对 总是坦白」：第一轮被出卖之后，它就一直坦白。把轮数调成 1：重复的结构消失，回到单次的囚徒困境，坦白是唯一的 Nash 均衡。</li>
+</ul></div>
+</section>
+
+<!-- ============================================================ 末尾 -->
+<section id="further">
+<h2>延伸阅读 <span class="en">Further Reading</span></h2>
+<p>书中的文献指引（按原书顺序整理）：</p>
+<ul>
+  <li><b>9.1 节</b>的概念在许多书和网上都能找到；Pareto 最优见多目标优化方面的文献（Sawaragi 等、Stadler、Vanderpooten、Zionts）。</li>
+  <li><b>9.2 节</b>主要受决策论书籍启发，Berger 的《Statistical Decision Theory》是极好的入门；还有 DeGroot、Devijver &amp; Kittler、Makarov 等、Robert。「与自然对弈」的观点主要来自 Blackwell &amp; Girshick。模式分类是决策论的重要形式，见 Alpaydin、Devijver &amp; Kittler、Duda–Hart–Stork、Mitchell。<b>贝叶斯网络</b>（Pearl）是人工智能研究中流行的表示方法，常能为复杂的决策问题提供紧凑的信息编码。</li>
+  <li><b>9.3、9.4 节</b>的博弈论可在许多书中找到（如 Başar &amp; Olsder、Owen）；Straffin 的《Game Theory and Strategy》是一本有趣、有很多例子和直觉的书。无限动作集的博弈见 Başar &amp; Olsder。随机化 Nash 均衡的计算仍是活跃的研究课题（McKelvey &amp; McLennan 的综述，以及 Koller 等、Miller &amp; Zucker）。计算随机化 Nash 均衡时出现的耦合多项式方程，似乎提示可以用计算代数几何的算法（6.4 节解组合运动规划问题时就用过），Datta 给出了这样的方法。与 9.4 节的非合作博弈相反，<b>合作博弈论 cooperative game theory</b> 研究玩家怎样结成联盟来提高回报（Peleg &amp; Sudhölter）。</li>
+  <li><b>9.5 节</b>的部分内容受 Berger 启发。效用理论出现在大多数决策论书籍和一些人工智能书籍中（如 Russell &amp; Norvig）；贝叶斯与频率派问题的深入讨论见 Robert 的《The Bayesian Choice》；构造决策代价模型的全面介绍见 Klugman 等的《Loss Models》。</li>
+</ul>
+</section>
+
+<section id="cheatsheet">
+<h2>本章速查表</h2>
+<div class="table-wrap">
+<table class="data">
+  <thead><tr><th style="width:9em">概念</th><th>要点</th></tr></thead>
+  <tbody>
+    <tr><td>Formulation 9.1</td><td>\(U\)、\(L(u)\)；(9.1) argmin；无限 \(U\) 时 min 可能不存在 → 闭且有界，或用 inf (9.2)；最大化回报 \(R\)：\(L=-R\)，sup。</td></tr>
+    <tr><td>Pareto 最优</td><td>Formulation 9.2，\(L:U\to\mathbb{R}^d\)；\(u\) 支配 \(u'\)：不等价且每个分量 \(\le\)；不被支配 = Pareto 最优（偏序的极小元）；可能是连续统（例 9.3）。</td></tr>
+    <tr><td>概率</td><td>\((S,\mathcal{F},P)\)；(9.4) 条件概率；独立 \(P(E\cap F)=P(E)P(F)\)；条件独立；(9.6) 贝叶斯；(9.8) 边缘化；(9.9)；(9.10)–(9.12) 期望与条件期望。</td></tr>
+    <tr><td>随机化策略</td><td>\(w\in W\) 是 \(U\) 上的分布（纯 / 混合）；(9.13) \(\bar L(w)\) 线性，单人优化时随机化无益；对抗会学习的对手时有用。</td></tr>
+    <tr><td>与自然对弈</td><td>Formulation 9.3（同时）/ 9.4（自然知道 \(u\)，\(\Theta(u)\)）；代价矩阵 \(|U|\times|\Theta|\)。</td></tr>
+    <tr><td>非确定性</td><td>(9.14) \(\operatorname{argmin}_u\max_\theta L\)（minimax、最坏情况）；(9.18) 用 \(\Theta(u)\)。</td></tr>
+    <tr><td>概率</td><td>(9.15)(9.16) \(\operatorname{argmin}_u\sum_\theta L(u,\theta)P(\theta)\)；(9.19) 用 \(P(\theta|u)\)；决策依赖先验。</td></tr>
+    <tr><td>遗憾</td><td>(9.20) \(T(u,\theta)=L(u,\theta)-\min_{u'}L(u',\theta)\)；(9.21) 最坏遗憾；(9.22) 期望遗憾（与期望代价选同一个动作）。</td></tr>
+    <tr><td>观测</td><td>Formulation 9.5：\(Y(\theta)\) 或 \(P(y|\theta)\)，策略 \(\pi:Y\to U\)；(9.23) \(\Theta(y)\)；(9.24)；(9.25) 后验；(9.26) 条件贝叶斯风险。</td></tr>
+    <tr><td>自然行动两次</td><td>Formulation 9.6：\(\psi\in\Psi(\theta)\)、\(y=h(\theta,\psi)\)；(9.27)；(9.28) 单射时 \(P(y|\theta)=P(\psi|\theta)\)。</td></tr>
+    <tr><td>多个观测</td><td>(9.29) \(\pi:Y_1\times\cdots\times Y_n\to U\)；(9.30) 交集；(9.31) 条件独立 → 朴素贝叶斯。</td></tr>
+    <tr><td>分类 / 估计</td><td>(9.32) 0-1 代价 → 期望 = 错误率；(9.33) 朴素贝叶斯；(9.35)–(9.40) 平方损失 → 后验均值。</td></tr>
+    <tr><td>零和博弈</td><td>Formulation 9.7，(9.41) \(L_1=-L_2\)；安全策略 (9.44)(9.46)；上值 (9.45)、下值 (9.47)；\(\underline L^*\le\overline L^*\) (9.49)；总遗憾 (9.50)。</td></tr>
+    <tr><td>鞍点</td><td>\(\underline L^*=\overline L^*\)；(9.51) min-max 可交换；(9.52) 行最大 + 列最小（图 9.2）；多个鞍点至少四个、值相同（图 9.3）。</td></tr>
+    <tr><td>随机化鞍点</td><td>(9.55)(9.56) 单纯形；(9.57)(9.58) \(\bar L=wAz\)；(9.59)–(9.62)；von Neumann：\(\underline{\mathcal L}^*=\overline{\mathcal L}^*\)；对手只需考虑纯策略；上包络最低点 / 下包络最高点；线性规划。</td></tr>
+    <tr><td>Nash 均衡</td><td>Formulation 9.8；(9.66)(9.67)：A 的列最小 + B 的行最小（图 9.5）；\(A=-B\) 时 = 鞍点；可容许 = 代价向量的 Pareto 最优；可能多个、可能没有。</td></tr>
+    <tr><td>混合 Nash</td><td>(9.71)–(9.74)；总存在（Nash）；不能用 LP，是线性互补 / 双线性规划；2×2 时用无差别条件 (9.77)(9.78)。</td></tr>
+    <tr><td>n 人博弈</td><td>Formulation 9.9；(9.79) 每人单独改选都不更好；(9.80)(9.81) 随机化版本，\(n\) 次多项式。</td></tr>
+    <tr><td>效用</td><td>分布 \(z\in Z\)、混合、\(\prec\)/\(\approx\)；四条理性公理 (9.84)–(9.86)；(9.87) 期望效用表示偏好；\(L=-\mathcal U(f(u,\theta))\)；钱的效用凹且可能有界（图 9.6）。</td></tr>
+    <tr><td>对概率模型</td><td>频率学派风险 (9.88) 依赖 \(\theta\)；先验来源；不充分理由、最大熵 (9.89)(9.90)、非正常先验；无信息先验依赖于 \(\Theta\) 的划分 / 参数化（例 9.26、9.27）；Haar 测度。</td></tr>
+    <tr><td>对非确定性模型</td><td>\(\Psi(\theta)\) 要大到包括罕见大误差 → 传感器「无用」；拒绝任何风险（例 9.28）；最坏情况 = 给最坏结果赋高先验的概率模型。</td></tr>
+    <tr><td>对博弈论</td><td>要知道别人的代价；无限反射；随机化需要无穷次重复；人会学习、难以随机化；Tit-for-Tat；多个可容许 Nash 均衡 → 需要合作。</td></tr>
+  </tbody>
+</table>
+</div>
+</section>
+
+<section id="pitfalls">
+<h2>常见陷阱</h2>
+<ol>
+  <li><b>把 min 写成 inf / 把 inf 当成能取到</b>：开区间、无界集合上最优值可能不存在；inf 告诉你下界，但未必有动作达到它。</li>
+  <li><b>以为 Pareto 最优能给出唯一答案</b>：它只是去掉被支配的动作，剩下的可能很多（例 9.3 是整个连续统）。</li>
+  <li><b>混淆 \(P(E|F)\) 和 \(P(F|E)\)</b>：检测准确率 95% 不等于阳性后有 95% 的概率患病——先验很小时后验可能很小。</li>
+  <li><b>把「独立」当成「互斥」</b>：互斥的两个非空事件恰恰<b>不</b>独立（知道一个发生，另一个就不可能发生）。</li>
+  <li><b>以为随机化总能降低代价</b>：对固定的代价函数，(9.13) 是线性的，最优总在纯策略上；随机化只在对手能学习时才有价值。</li>
+  <li><b>把均匀先验当成「没有假设」</b>：均匀本身是一个假设，而且依赖于 \(\Theta\) 怎么划分、怎么参数化（例 9.26、9.27）。</li>
+  <li><b>行列方向搞反</b>：本书的约定是行 = 机器人 / \(\mathrm{P}_1\)、列 = 自然 / \(\mathrm{P}_2\)，元素是 \(\mathrm{P}_1\) 的<b>代价</b>。找鞍点：行最大、列最小；找 Nash：A 的<b>列</b>最小、B 的<b>行</b>最小。</li>
+  <li><b>以为多个 Nash 均衡和多个鞍点一样无害</b>：鞍点的值都相同、可以互换；Nash 均衡的代价可能不同、不可比，各选各的可能落到非均衡上。</li>
+  <li><b>把混合 Nash 均衡当成更好的结果</b>：性别之战里混合均衡给双方的期望代价 (−2/3, −2/3) 比两个纯均衡都差。</li>
+  <li><b>用安全策略对付非零和博弈</b>：它不看对方的代价，通常导致遗憾；囚徒困境是安全策略恰好等于 Nash 均衡的特例。</li>
+  <li><b>认为期望效用最大化等于期望金额最大化</b>：只有效用是线性时才成立；风险厌恶的人会放弃期望更高的赌局（例 9.22、9.23）。</li>
+  <li><b>把「最坏情况保证」当成真的保证</b>：保证只在 \(\Theta\)、\(\Psi(\theta)\) 足够大时成立，而足够大的集合往往让决策毫无用处（9.5.3 节）。</li>
+</ol>
+</section>
+
+<section id="exercises">
+<h2>习题导引</h2>
+<p class="small muted">只给思路，不给完整解答。标「互动」的可以先在本页对应的图里做实验；数值都由参考代码核对。</p>
+<ol>
+  <li><b>\(L=[u^2\ \ u-1]\)，\(U=[-10,10]\) 的 Pareto 集</b>：\(u>0\) 时 \(u=0\) 支配它；\(u\le0\) 时一个分量变好另一个就变坏。（互动：Pareto 图的「习题 1」。）</li>
+  <li><b>3×4 矩阵、自然策略 [1/5 2/5 1/10 3/10]</b>：(a) 先求行最大；(b) 用 (9.16) 求期望。（互动：决策准则实验室的「习题 2」。）</li>
+  <li><b>乐观与 Hurwicz 系数</b>：(a) 取行最小再取最小；(b) 每个动作的值是 \(\alpha\) 的一次函数 \(\alpha\max+(1-\alpha)\min\)，画出三条直线看下包络在哪里换动作——答案按 \(\alpha\) 分成两段。（互动：拖动 α。）</li>
+  <li><b>遗憾</b>：先写出遗憾矩阵（每列减去列最小），再分别用 (9.21)、(9.22)。思考为什么 (b) 的答案与习题 2(b) 相同。</li>
+  <li><b>哪些先验让 minimax 与期望最优一致</b>：写出「\(u_1\) 的期望 ≤ 其它动作的期望」的线性不等式；它们在概率单纯形里切出一个凸多面体。（三列的情形可以在「先验单纯形」图里直接看到这样的区域。）</li>
+  <li><b>\(L\to aL+b\)（\(a>0\)）不改变决策规则</b>：期望和 max 都与正的仿射变换可交换，argmin 不变。想想 \(a<0\) 时会发生什么。</li>
+  <li><b>两个正态类别的分类规则</b>：比较 \(p(y|\omega_1)\) 与 \(p(y|\omega_2)\)（先验相等），取对数后是 \(y\) 的二次不等式。方差不同，所以 \(\omega_1\) 的区域是一个有限区间、\(\omega_2\) 占两侧。（参考代码第 17 项给出了数值答案供核对。）</li>
+  <li><b>另一个 3×4 矩阵</b>：同习题 2、5 的做法。（互动：决策准则实验室的「习题 8」。）</li>
+  <li><b>常和博弈</b>：令 \(L'_2=L_2-c\)，就得到零和博弈，安全策略与鞍点不变。</li>
+  <li><b>把猜硬币写成零和博弈</b>：代价矩阵 \(\begin{pmatrix}1&-1\\-1&1\end{pmatrix}\)；没有确定性鞍点；随机化值为 0。（互动：矩阵博弈实验室和包络图的「猜硬币」。）</li>
+  <li><b>代价矩阵乘以常数 c</b>：\(c>0\) 时 (9.52) 的不等式方向不变。注意原书写的是「非零 c」，而 \(c<0\) 时结论不成立<sup class="fn"><a href="#fn-15" id="fn-15-ref">15</a></sup>。</li>
+  <li><b>所有元素加常数 c</b>：(9.52) 的不等式两边同时加 c；随机化情形下 \(wAz\) 整体加 c（因为 \(w\)、\(z\) 的分量和为 1）。</li>
+  <li><b>可互换的 Nash 均衡</b>：若 \((A,B)\) 的 Nash 均衡与 \((A,-A)\) 相同，后者是零和博弈，其鞍点可以互换（图 9.3 的论证）。</li>
+  <li><b>三人石头剪刀布</b>：先定规则（例如三人出的都不同或都相同算平局）；用 (9.79) 检查 27 个纯组合；猜想对称的随机化均衡。（互动：三人博弈图只处理每人两个动作，但「改选箭头」的思路一样。）</li>
+  <li><b>(9.97) 的随机化均衡</b>：双方都是 2×2，用包络或无差别条件。（互动：矩阵博弈实验室与包络图的「习题 15」，答案可在那里核对。）</li>
+  <li><b>正态先验 + 正态观测</b>（实现题）：后验仍是正态，均值是先验均值与样本均值按精度加权；\(k\) 越大，先验影响越小。（互动：参数估计图的「习题 16」按钮。）</li>
+  <li><b>实现「一方最多两个动作」的随机化鞍点</b>（实现题）：就是本页包络图左半边做的事——对 \(w_1\in[0,1]\) 求 \(n\) 条直线上包络的最低点。</li>
+  <li><b>多目标的值迭代</b>（实现题）：每个状态存一组互不支配的代价向量（Pareto 前沿），而不是一个数；回溯时对每个动作加上单步代价再合并、去掉被支配者。注意原书对 \(l_F\) 的设定写反了<sup class="fn"><a href="#fn-16" id="fn-16-ref">16</a></sup>。</li>
+</ol>
+</section>
+
+<section id="notes">
+<h2>脚注：原书笔误</h2>
+<p class="small muted">以下每一条都对照原书 PDF 的原页核对过（页码为书中页码），能用数值核对的都在参考代码里有对应的断言。</p>
+<div class="box small">
+  <p id="fn-1" style="margin:0 0 6px"><sup>1</sup> 第 444 页例 9.5：原书写「Using (9.11), the expected value, E[X], is 3.5」。骰子是离散的，应当用 (9.10)；(9.11) 是连续情形的积分。同一段还有「greater then 3」（应为 than）、「even though it is not contained in S」（逻辑上应为 because）两处小笔误。<a href="#fn-1-ref">↩</a></p>
+  <p id="fn-2" style="margin:0 0 6px"><sup>2</sup> 第 451 页例 9.10：原书写「In this case, u* = u₁, which yields the optimal expected regret, calculated as 1」。按遗憾矩阵和均匀先验，三个动作的期望遗憾是 (2+0+2)/3 = 4/3、(0+3+0)/3 = 1、(3+0+3)/3 = 2，最优的是 \(u_2\)；「值为 1」对应的正是 \(u_2\)。另一个佐证：期望遗憾与期望代价只差一个与 \(u\) 无关的常数，均匀先验下期望代价 (0, −1/3, 2/3) 也选 \(u_2\)（参考代码第 4 项）。<a href="#fn-2-ref">↩</a></p>
+  <p id="fn-3" style="margin:0 0 6px"><sup>3</sup> 第 451 页：原书说「a |Θ| × |U| regret matrix」，而代价矩阵是 \(|U|\times|\Theta|\)，例 9.10 印出来的遗憾矩阵也是行 = \(U\)、列 = \(\Theta\)。应为 \(|U|\times|\Theta|\)（小问题）。<a href="#fn-3-ref">↩</a></p>
+  <p id="fn-4" style="margin:0 0 6px"><sup>4</sup> 第 453 页：原书写「for which the denominator (9.26) represents P(y)」。(9.26) 里没有分母，指的是 (9.25) 的分母（小问题）。<a href="#fn-4-ref">↩</a></p>
+  <p id="fn-5" style="margin:0 0 6px"><sup>5</sup> 第 454 页 Formulation 9.6 之后：原书写「A strategy still takes the form π : Θ → U」。机器人看不到 \(\theta\)，策略只能依赖观测，应为 \(\pi : Y\to U\)（与 Formulation 9.5 之后的定义一致）。<a href="#fn-5-ref">↩</a></p>
+  <p id="fn-6" style="margin:0 0 6px"><sup>6</sup> 第 458 页 (9.34)：原书说错误概率正比于 \(\sum_{\theta\in\Theta}P(s|\theta)P(e|\theta)P(h|\theta)P(c|\theta)P(\theta)\)。这个和对所有 \(\theta\) 求和，正好等于 \(P(y)\)，与动作 \(u\) 无关，没法用来选 \(u\)。缺了代价因子 \(L(u,\theta)\)（本页已补上）。<a href="#fn-6-ref">↩</a></p>
+  <p id="fn-7" style="margin:0 0 6px"><sup>7</sup> 第 462 页：原书写「it could have picked v = 2 to receive cost L(2,2) = 2」。按 (9.42)，\(L(2,2)=-1\)，比 \(L(2,4)=1\) 还差；能让 \(\mathrm{P}_2\) 得到 2 的是 \(v=3\)：\(L(2,3)=2\)（参考代码第 9 项）。<a href="#fn-7-ref">↩</a></p>
+  <p id="fn-8" style="margin:0 0 6px"><sup>8</sup> 第 464 页例 9.15：原书写「saddle points with value V = 0」。\(V\) 是 \(\mathrm{P}_2\) 的动作集合，值应记作 \(L^*=0\)（记号小问题）。<a href="#fn-8-ref">↩</a></p>
+  <p id="fn-9" style="margin:0 0 6px"><sup>9</sup> 第 475 页 (9.75)、(9.76)：原书末行分别是 \(-3w_1z_1+w_1+z_1\) 和 \(-3w_1z_1+2w_1+2z_1\)。代入 \(w_2=1-w_1\)、\(z_2=1-z_1\) 展开，分别还有常数项 \(-1\) 和 \(-2\)（例如 \(w_1=z_1=0\) 时 \(wAz=-1\)，书中末行给 0）。常数不影响 (9.77)、(9.78) 的导数和均衡位置（参考代码第 11 项）。<a href="#fn-9-ref">↩</a></p>
+  <p id="fn-10" style="margin:0 0 6px"><sup>10</sup> 第 477 页例 9.21：原书说有两个确定性 Nash 均衡，代价为 \((2,-4,2)\) 和 \((3,-2,-1)\)，「可以用 (9.79) 验证」。按印出的 (9.83) 逐个验证，只有 \((1,2,1)\) 是均衡；代价 \((3,-2,-1)\) 对应的 \((2,1,1)\) 不满足 (9.79)：\(\mathrm{P}_1\) 改选 \(u^1=1\) 得到 \(L_1(1,1,1)=1<3\)。也许原书本意中 \(L_1(1,1,1)\ge3\)——那样两个均衡都成立（本页三人博弈图的第二个数据集；参考代码第 12 项）。我们无法确定原意，所以页面按印出的数据讲解。<a href="#fn-10-ref">↩</a></p>
+  <p id="fn-11" style="margin:0 0 6px"><sup>11</sup> 第 481 页：原书写「Suppose that Formulation 9.2 is used. For convenience, assume that U and Θ are finite」。Formulation 9.2 是多目标优化，没有自然动作 \(\Theta\)；接下来的 \(f:U\times\Theta\to X\) 和例 9.24 都是与自然对弈，应为 Formulation 9.3。<a href="#fn-11-ref">↩</a></p>
+  <p id="fn-12" style="margin:0 0 6px"><sup>12</sup> 第 487 页 (9.92)：原书印作 \(\theta_1^2+\theta_2^2+\theta_3^1=1\)，第三项的指数应为 2（单位球面）。<a href="#fn-12-ref">↩</a></p>
+  <p id="fn-13" style="margin:0 0 6px"><sup>13</sup> 第 489 页 (9.93)：原书称之为「cost matrix」，但表中的数（1、1000、0）是收到的<b>欧元</b>，即回报；按代价最小化读这张表会得出相反的结论。而且它的行是 \(\Theta\)、列是 \(U\)，与全章「行 = 机器人」的约定相反。本页照原样转录并注明；决策准则实验室的「例 9.28」预设把它换成了代价 = −收益、行 = 动作。<a href="#fn-13-ref">↩</a></p>
+  <p id="fn-14" style="margin:0 0 6px"><sup>14</sup> 第 490 页：原书写「In Example 9.4, it seemed as if the decision was based on assuming that with very high probability, the check would bounce」。例 9.4 是掷骰子，这里说的是支票的例 9.28。同页还有「would by very high」（应为 be）。<a href="#fn-14-ref">↩</a></p>
+  <p id="fn-15" style="margin:0 0 6px"><sup>15</sup> 第 494 页习题 11：原书说「exists some nonzero c ∈ ℝ」。\(c<0\) 时乘以 \(c\) 等于交换了谁最小化、谁最大化，鞍点一般会变。反例：\(A=\begin{pmatrix}1&2\\3&4\end{pmatrix}\) 的鞍点是 (1,2)，\(-A\) 的鞍点是 (2,1)（参考代码第 10 项）。命题应要求 \(c>0\)。<a href="#fn-15-ref">↩</a></p>
+  <p id="fn-16" style="margin:0 0 6px"><sup>16</sup> 习题 18：原书写「Assume that \(l_F(x_F)=\infty\) if \(x_F\in X_{goal}\) … and \(l_F(x_F)=0\) otherwise」，正好反了：按第 2 章的约定，终点在目标区域内时终端代价为 0、否则为 \(\infty\)。另外 (9.99) 里每个代价泛函 \(L_i\) 用的单步代价也应带下标 \(l_i\)，否则 \(N\) 个泛函完全相同。<a href="#fn-16-ref">↩</a></p>
+  <p id="fn-ocr" style="margin:0 0 6px"><sup>注</sup> 例 9.11（补充，不是笔误）：书中只指出 (0,3,0) 同时对应 E 和 F。按图 9.1，C 和 G 也都是 \((s,e,h)=(1,2,0)\)。书中说加上直角数 \(c\) 后「所有字母都能被无误分类」，这要求 G 至少有一个直角（横杠与竖笔相接处），而 C 没有。书中只给了 E（c = 2）和 F（c = 1）的直角数，本页 OCR 图里其余字母的 \(c\) 是我们按画出的字形补充的。<a href="#fn-ocr-ref">↩</a></p>
+  <p id="fn-typo" style="margin:0"><sup>注</sup> 其它拼写小错：例 9.17 标题「Equlibrium」（应为 Equilibrium），例 9.27 标题「Noninformitive」（应为 Noninformative），9.1.3 节「it not known」（缺 is），图 9.6 图注「may even bounded」（缺 be）。<a href="#fn-typo-ref">↩</a></p>
+</div>
+</section>
+
+<nav class="pager">
+  <a href="../part1/ch2-discrete-planning.html"><span class="dir">← 前置章节</span>第 2 章 离散规划</a>
+  <a class="next" href="../index.html"><span class="dir">回到首页 →</span>全书路线图与进度</a>
+</nav>
+
+<footer class="page-foot">
+  内容依据 Steven M. LaValle《Planning Algorithms》（Cambridge University Press, 2006）Part III 第 9 章整理与讲解，原书可在 <a href="https://lavalle.pl/planning/" target="_blank" rel="noopener">lavalle.pl/planning</a> 免费阅读，本章 PDF：<a href="https://lavalle.pl/planning/ch9.pdf" target="_blank" rel="noopener">ch9.pdf ↗</a>。互动图为学习辅助，标「补充」的内容不是书中原文；数值例子由 <a href="code/ch9_decision_theory.py">part3/code/ch9_decision_theory.py</a> 核对。
+</footer>
+
+</main>
+</div>
+</body>
+</html>
