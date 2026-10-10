@@ -19,6 +19,7 @@
  12. 14.5 节：带插值的值迭代 (14.27) 算出的 cost-to-go 与 T* 对照
  13. 图 14.23：双切线 LPM（只用 CSC）与 Dubins 最优长度对照
  14. (14.47) 打靶法：u(t) = w1 + w2 t 的梯度下降
+ 15. 补充：双积分器两点间最短时间 T*(x0 → x1)，与格点上 BFS（14.4.1 节）的结果对照
 """
 import math
 import random
@@ -614,9 +615,84 @@ def check_shooting():
     print("   ⇒ 初值不同，梯度下降会停在不同的局部极小（14.7 节：结果强烈依赖初始猜测）")
 
 
+# =========================================================== 15. 两点最短时间 vs 格点 BFS
+def t_star2(q0, v0, q1, v1):
+    """补充：q̈ = u，|u| ≤ 1，从 (q0, v0) 到 (q1, v1) 的最短时间。最优控制是先 +1 后 −1 或先 −1 后 +1。"""
+    best = math.inf
+    for s in (1, -1):
+        vs2 = (v0 * v0 + v1 * v1) / 2 + s * (q1 - q0)    # 切换时速度的平方
+        if vs2 < 0:
+            continue
+        vs = s * math.sqrt(vs2)
+        t1, t2 = s * (vs - v0), s * (vs - v1)            # 第一段加速度 s，第二段 −s
+        if t1 >= -1e-12 and t2 >= -1e-12:
+            best = min(best, t1 + t2)
+    return best
+
+
+def lattice_bfs(q0, v0, q1, v1, dt, vmax=10.0, tol=None):
+    """在 Δt 格点上 BFS（每步 u ∈ {−1, 0, 1}），返回到达目标所需的阶段数。q 以 Δt²/2 为单位、v 以 Δt 为单位。
+    tol = None 时要求恰好落在目标格点上；否则 |q − q1| ≤ tol 且 |v − v1| ≤ tol 就算到达。"""
+    hq = dt * dt / 2
+    s = (round(q0 / hq), round(v0 / dt))
+    g = (round(q1 / hq), round(v1 / dt))
+    jmax = int(vmax / dt)
+    seen = {s: 0}
+    Q = deque([s])
+    while Q:
+        c = Q.popleft()
+        if (c == g) if tol is None else (abs(c[0] * hq - q1) <= tol and abs(c[1] * dt - v1) <= tol):
+            return seen[c]
+        i, j = c
+        for u in (-1, 0, 1):
+            n = (i + 2 * j + u, j + u)
+            if abs(n[1]) > jmax or abs(n[0]) > 40000 or n in seen:
+                continue
+            seen[n] = seen[c] + 1
+            Q.append(n)
+    return None
+
+
+def check_lattice_time():
+    print("15. 补充：两点最短时间 T* 与格点 BFS 的「阶段数 × Δt」")
+    rnd = random.Random(5)
+    for _ in range(2000):
+        q0, v0, q1, v1 = (rnd.uniform(-3, 3) for _ in range(4))
+        T = t_star2(q0, v0, q1, v1)
+        assert T < math.inf
+        # 用细分的 bang-bang 仿真核对终点
+        for s in (1, -1):
+            vs2 = (v0 * v0 + v1 * v1) / 2 + s * (q1 - q0)
+            if vs2 >= 0:
+                vs = s * math.sqrt(vs2)
+                t1, t2 = s * (vs - v0), s * (vs - v1)
+                if t1 >= -1e-12 and t2 >= -1e-12 and abs(t1 + t2 - T) < 1e-12:
+                    q = q0 + v0 * t1 + 0.5 * s * t1 * t1
+                    v = v0 + s * t1
+                    q, v = q + v * t2 - 0.5 * s * t2 * t2, v - s * t2
+                    assert abs(q - q1) < 1e-9 and abs(v - v1) < 1e-9
+    assert abs(t_star2(1.0, 0.0, 0.0, 0.0) - t_star(1.0, 0.0)) < 1e-12
+    # 目标要落在从原点可达的格点上（i ≡ j mod 2）
+    for (q0, v0, q1, v1) in ((0, 0, 4, 0), (0, 0, 1.5, 1), (0, 0, -2, 0), (0, 0, 2.5, -1)):
+        T = t_star2(q0, v0, q1, v1)
+        row = []
+        for dt in (1.0, 0.5, 0.25):
+            k = lattice_bfs(q0, v0, q1, v1, dt)
+            row.append(f"Δt={dt}: {k} 步 = {k * dt:.2f}" if k is not None else f"Δt={dt}: 不在格点上")
+        print(f"   ({q0},{v0}) → ({q1},{v1})：T* = {T:.4f}；BFS " + "，".join(row))
+    print("   恰好落在目标上时，Δt 的整数倍未必能凑出 T*（例如静止到静止走 2 需要加速 √2 秒）；允许 0.05 的容差后：")
+    for (q0, v0, q1, v1) in ((0, 0, -2, 0), (0, 0, 2.5, -1)):
+        T = t_star2(q0, v0, q1, v1)
+        row = []
+        for dt in (0.5, 0.25, 0.125, 0.0625):
+            k = lattice_bfs(q0, v0, q1, v1, dt, tol=0.05)
+            row.append(f"Δt={dt}: {k * dt:.3f}")
+        print(f"   ({q0},{v0}) → ({q1},{v1})：T* = {T:.4f}；BFS（容差 0.05）" + "，".join(row))
+
+
 if __name__ == "__main__":
     for fn in (check_ex141, check_ex144, check_dense_circle, check_manhattan, check_lattice, check_cone,
                check_integrators, check_tstar, check_dubins, check_ex146, check_path_constrained, check_vi,
-               check_bitangent, check_shooting):
+               check_bitangent, check_shooting, check_lattice_time):
         fn()
         print()
