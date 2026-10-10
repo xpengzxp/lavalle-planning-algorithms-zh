@@ -1,0 +1,1006 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>序贯决策论 · 第 10 章</title>
+<meta name="description" content="LaValle《Planning Algorithms》第 10 章的中文互动教程：与自然的序贯博弈、前向投影与反向投影、反馈计划、值迭代与策略迭代、非确定 Dijkstra、无限时域（折扣与平均代价）、强化学习（TD(λ)、Q-learning）、序贯博弈论与连续状态空间。">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<link rel="stylesheet" href="../assets/style.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+<script src="../assets/common.js"></script>
+<script defer src="js/ch10-lib.js"></script>
+<script defer src="js/ch10-model.js"></script>
+<script defer src="js/ch10-vi.js"></script>
+<script defer src="js/ch10-infinite.js"></script>
+<script defer src="js/ch10-rl.js"></script>
+<script defer src="js/ch10-games.js"></script>
+<script defer src="js/ch10-continuous.js"></script>
+<style>
+  .ch10-stage { width: 100%; }
+  .ch10-stage canvas { margin: 0 auto; border-radius: 6px; }
+  .box.intuition ul { margin: 0; padding-left: 1.2em; }
+  .fn { font-size: .8em; }
+  .fig { max-width: 640px; margin: 0 auto; display: block; }
+  .figcap { text-align: center; }
+  .color-key { display: inline-flex; gap: 4px; align-items: center; }
+  .color-key i { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+  table.ch10-mini th, table.ch10-mini td { padding: 4px 7px; }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <a class="brand" href="../index.html">Planning Algorithms 学习站</a>
+  <span class="crumbs"><a href="../index.html">首页</a> › Part III › 第 10 章 序贯决策论</span>
+  <button class="icon-btn" id="theme-toggle" type="button" aria-label="切换深浅色">☾</button>
+</header>
+
+<div class="layout">
+<nav class="toc" aria-label="目录">
+  <p class="toc-title">本章目录</p>
+  <ol>
+    <li><a href="#overview">本章导读</a></li>
+    <li><a href="#s10-1">10.1 与自然的序贯博弈</a>
+      <ol>
+        <li><a href="#s10-1-1">模型定义</a></li>
+        <li><a href="#s10-1-2">前向投影与反向投影</a></li>
+        <li><a href="#s10-1-3">计划及其执行</a></li>
+      </ol>
+    </li>
+    <li><a href="#s10-2">10.2 计算反馈计划的算法</a>
+      <ol>
+        <li><a href="#s10-2-1">值迭代</a></li>
+        <li><a href="#s10-2-2">策略迭代</a></li>
+        <li><a href="#s10-2-3">图搜索方法</a></li>
+      </ol>
+    </li>
+    <li><a href="#s10-3">10.3 无限时域问题</a>
+      <ol>
+        <li><a href="#s10-3-1">问题表述</a></li>
+        <li><a href="#s10-3-2">求解技术</a></li>
+      </ol>
+    </li>
+    <li><a href="#s10-4">10.4 强化学习</a>
+      <ol>
+        <li><a href="#s10-4-1">基本思路</a></li>
+        <li><a href="#s10-4-2">用模拟评估计划</a></li>
+        <li><a href="#s10-4-3">Q-learning</a></li>
+      </ol>
+    </li>
+    <li><a href="#s10-5">10.5 序贯博弈论</a>
+      <ol>
+        <li><a href="#s10-5-1">博弈树</a></li>
+        <li><a href="#s10-5-2">状态空间上的序贯博弈</a></li>
+        <li><a href="#s10-5-3">其它序贯博弈</a></li>
+      </ol>
+    </li>
+    <li><a href="#s10-6">10.6 连续状态空间</a>
+      <ol>
+        <li><a href="#s10-6-1">扩展值迭代</a></li>
+        <li><a href="#s10-6-2">与自然对抗的运动规划</a></li>
+      </ol>
+    </li>
+    <li><a href="#further">延伸阅读</a></li>
+    <li><a href="#cheatsheet">本章速查表</a></li>
+    <li><a href="#pitfalls">常见陷阱</a></li>
+    <li><a href="#exercises">习题导引</a></li>
+    <li><a href="#notes">脚注</a></li>
+  </ol>
+</nav>
+
+<main class="content">
+
+<p class="kicker">Part III · 第 10 章</p>
+<h1>序贯决策论 <span class="en">Sequential Decision Theory</span></h1>
+<p class="lede">第 9 章暂时离开了规划，只讨论「在不确定性下做<b>一次</b>决策」。这一章回到规划：把第 2 章的离散规划和第 9 章的「自然」结合起来，得到一连串的决策问题。新的决策者——<b>自然 nature</b>——在计划执行的每一步都会干扰状态转移，所以未来的状态无法预测，计划必须是<b>反馈 feedback</b> 形式的：根据当前状态选动作，而不是一串事先排好的动作。</p>
+
+<section id="overview">
+<h2 style="border-top:0;margin-top:1em">本章导读</h2>
+
+<p>贯穿全章的一个关键假设：<b>当前状态总是已知的</b>。唯一的不确定性在于预测<b>未来</b>的状态。第 11、12 章会处理更难的情形——连当前状态都不知道，只能靠传感器去测，规划于是发生在<b>信息空间 information space</b> 里而不是状态空间里；本章的大部分想法都能推广过去。</p>
+<p>和第 9 章一样，不确定性有两种建模方式：</p>
+<div class="table-wrap">
+<table class="data">
+  <tr><th>模型</th><th>对自然的了解</th><th>计划的目标</th></tr>
+  <tr><td>非确定 <span class="en">nondeterministic</span></td><td>只知道自然会从集合 \(\Theta(x,u)\) 里挑一个动作</td><td>不管自然怎么做都<b>保证</b>到达目标；可以进一步要求<b>最坏情况</b>代价最优</td></tr>
+  <tr><td>概率 <span class="en">probabilistic</span></td><td>知道 \(P(\theta\mid x,u)\)</td><td>使<b>期望</b>代价最优：一次执行的结果不可预测，但同一问题执行很多次时平均代价最小</td></tr>
+</table>
+</div>
+<p>这些问题适用面很广：大部分想法源自<b>随机控制理论 stochastic control theory</b>；在移动机器人里，未来状态通常不可预测，可以用概率或最坏情况来建模；此外还有工程、运筹、经济中的大量应用，比如生产调度、赌博策略和投资规划。</p>
+
+<div class="box">
+  <div class="box-title">本章地图与读法</div>
+  <ul style="margin:0">
+    <li><b>10.1 模型</b>：Formulation 10.1（带自然的离散规划）；前向投影（未来可能到哪儿）与反向投影（从哪儿能到这儿）；反馈计划 \(\pi : X\to U\) 与它的代价。</li>
+    <li><b>10.2 算法</b>：值迭代（最重要）、策略迭代、图搜索（反向投影算法、非确定 Dijkstra）。</li>
+    <li><b>10.3 无限时域</b>：没有目标集时，用<b>折扣</b>或<b>平均代价</b>让总代价有限。</li>
+    <li><b>10.4 强化学习</b>：不知道转移概率，只有一个模拟器：蒙特卡罗、时间差分 TD(λ)、Q-learning。</li>
+    <li><b>10.5 序贯博弈</b>：自然换成理性的对手：博弈树、安全计划、alpha-beta、三种信息模型、状态空间上的博弈。</li>
+    <li><b>10.6 连续状态空间</b>：带插值的值迭代用于「与自然对抗」的运动规划与混合系统。</li>
+  </ul>
+  <p style="margin:.6em 0 0">前置知识：第 2 章的值迭代（2.3 节，见 <a href="../part1/ch2-discrete-planning.html">第 2 章教程</a>）、第 9 章的自然与零和博弈（9.2、9.3 节）；10.1.3 和 10.6 节还会用到第 8 章的反馈计划（8.2.1、8.4.1、8.5.2 节）。第一遍读的话，10.1、10.2.1 是核心；10.2.2–10.2.3、10.3、10.4 相对独立；10.5 可以和第 9 章的博弈论一起读。</p>
+</div>
+<p class="small muted">本页颜色约定（Part III）：<span class="color-key"><i style="background:var(--accent)"></i>蓝 = 决策者 / P1 的动作与计划</span>，<span class="color-key"><i style="background:var(--warn)"></i>琥珀 = 自然（可能的下一状态、前向投影）</span>，<span class="color-key"><i style="background:var(--c-alive2)"></i>紫 = 对手 P2</span>，<span class="color-key"><i style="background:var(--ok)"></i>绿 = 目标集 \(X_G\) 与执行轨迹</span>，灰 = 障碍；代价热图里越深代价越大。参考代码 <a href="code/ch10_sequential_decision.py"><code>part3/code/ch10_sequential_decision.py</code></a> 核对了页面上出现的全部数值（下文「参考代码第 N 项」指它打印的第 N 项）。</p>
+</section>
+
+<!-- ============================================================ 10.1 -->
+<section id="s10-1">
+<h2>10.1 引入与自然的序贯博弈 <span class="en">Introducing Sequential Games Against Nature</span></h2>
+<p>这一节把第 2 章的许多想法推广到「自然干扰动作结果」的情形：10.1.1 定义规划问题（它是 2.1 节的直接推广）；由于不可预测，10.1.2 引入<b>前向投影 forward projection</b> 与<b>反向投影 backprojection</b>，分别刻画可能的未来状态和过去状态——第 2 章不需要前向投影，因为从计划和初始状态总能推出未来的状态序列；10.1.3 定义计划，并用前向投影说明同一个计划每次执行的结果为何不同。</p>
+
+<h3 id="s10-1-1">10.1.1 模型定义</h3>
+<p>这是在 Formulation 2.3 上加入「每个阶段都有自然」的推广。\(X\) 是离散状态空间，\(U(x)\) 是决策者（机器人）在 \(x\) 处可用的动作集合。在每个阶段 \(k\)，自然从集合 \(\Theta(x_k,u_k)\) 中选一个<b>自然动作 nature action</b> \(\theta_k\)。这可以看成 Formulation 9.4（那里是 \(\Theta(u)\)）的多阶段推广；现在 \(\Theta\) 还可以依赖状态，因为 \(x_k\) 和 \(u_k\) 在当前阶段都是已知的——这意味着<b>自然在知道决策者所选动作的情况下行动</b>。决策者永远不知道自然在阶段 \(k\) 会选哪个动作，但知道集合 \(\Theta(x_k,u_k)\)。</p>
+<p>和 9.2 节一样有两种自然模型。<b>非确定</b>：只知道自然会从 \(\Theta(x_k,u_k)\) 里选一个，适合做最坏情况分析。<b>概率</b>：模型里给出 \(\Theta(x_k,u_k)\) 上的概率分布。这时要牢记一个重要假设：自然是<b>Markov 的 Markovian</b>——概率只依赖于局部的信息。在大多数应用里「局部」是对时间而言的；在我们的表述里，它意味着 \(\Theta(x_k,u_k)\) 上的分布只依赖于当前阶段得到的信息（在别的场合，Markov 也可以指依赖少数几个阶段，或者空间上的局部依赖，例如 <b>Markov 随机场 Markov random field</b>）。</p>
+<p>为了把 Markov 假设说清楚，沿用 8.2.1 节的状态历史与动作历史：</p>
+<div class="eq">$$\tilde{x}_k = (x_1,x_2,\ldots,x_k) \tag{10.1}$$</div>
+<div class="eq">$$\tilde{u}_k = (u_1,u_2,\ldots,u_k). \tag{10.2}$$</div>
+<p>它们代表到阶段 \(k\) 为止可用的全部信息。没有 Markov 假设，自然的分布可能依赖于全部历史，即 \(P(\theta_k\mid\tilde{x}_k,\tilde{u}_k)\)。Markov 假设声明对所有 \(\theta_k\in\Theta(x_k,u_k)\)：</p>
+<div class="eq">$$P(\theta_k\mid\tilde{x}_k,\tilde{u}_k) = P(\theta_k\mid x_k,u_k), \tag{10.3}$$</div>
+<p>也就是说，一旦知道当前状态和动作，历史中的任何部分都不再提供关于自然动作的额外信息。自然的作用体现在<b>状态转移方程</b>里：</p>
+<div class="eq">$$x_{k+1} = f(x_k,u_k,\theta_k). \tag{10.4}$$</div>
+<p>从决策者的角度看 \(\theta_k\) 是未知的，所以只能推断施加 \(u_k\) 之后可能出现的状态集合：</p>
+<div class="eq">$$X_{k+1}(x_k,u_k) = \{x_{k+1}\in X \mid \exists\theta_k\in\Theta(x_k,u_k) \text{ 使得 } x_{k+1} = f(x_k,u_k,\theta_k)\}. \tag{10.5}$$</div>
+<p>记号 \(X_k(\cdot)\) 一般表示「由括号里的信息能推出的 \(x_k\) 的可能取值」。在概率情形下，给定 \(P(\theta_k\mid x_k,u_k)\) 和 (10.4)，可以推出阶段 \(k+1\) 上的分布：</p>
+<div class="eq">$$P(x_{k+1}\mid x_k,u_k) = \sum_{\theta_k\in\Theta'} P(\theta_k\mid x_k,u_k), \tag{10.6}$$</div>
+<div class="eq">$$\Theta' = \{\theta_k\in\Theta(x_k,u_k) \mid x_{k+1} = f(x_k,u_k,\theta_k)\}. \tag{10.7}$$</div>
+<p>就是把所有能把状态带到 \(x_{k+1}\) 的自然动作的概率加起来。</p>
+
+<div class="box def formulation">
+  <div class="box-title">Formulation 10.1（带自然的离散规划 Discrete Planning with Nature）</div>
+  <ol>
+    <li>非空的<b>状态空间</b> \(X\)：有限或可数无穷个状态。</li>
+    <li>对每个 \(x\in X\)，有限非空的<b>动作空间</b> \(U(x)\)。假设 \(U\) 含有一个特殊的<b>终止动作 termination action</b> \(u_T\)，作用与 Formulation 2.3 中相同。</li>
+    <li>对每个 \(x\in X\)、\(u\in U(x)\)，有限非空的<b>自然动作空间</b> \(\Theta(x,u)\)。</li>
+    <li><b>状态转移函数</b> \(f\)：对每个 \(x\)、\(u\in U\)、\(\theta\in\Theta(x,u)\) 给出 \(f(x,u,\theta)\)。</li>
+    <li>一组<b>阶段</b>，从 \(k=1\) 开始无限延续；或者有一个固定的最大阶段 \(k = K+1 = F\)。</li>
+    <li><b>初始状态</b> \(x_I\in X\)。有的问题不指定它，这时要找一个对所有初始状态都适用的计划。</li>
+    <li><b>目标集</b> \(X_G\subset X\)。</li>
+    <li>阶段可加的<b>代价泛函</b> \(L\)。记 \(\tilde\theta_K\) 为到阶段 \(K\) 为止的自然动作历史，
+      <div class="eq">$$L(\tilde{x}_F,\tilde{u}_K,\tilde\theta_K) = \sum_{k=1}^{K} l(x_k,u_k,\theta_k) + l_F(x_F), \tag{10.8}$$</div>
+      其中 \(F = K+1\)。若在某个阶段 \(k\) 施加了 \(u_T\)，则对所有 \(i\ge k\)：\(u_i = u_T\)、\(x_i = x_k\)、\(l(x_i,u_T,\theta_i) = 0\)。</li>
+  </ol>
+</div>
+<p>用 Formulation 10.1 可以定义<b>可行</b>规划问题，也可以定义<b>最优</b>规划问题。可行问题：令所有 \(l(x_k,u_k,\theta_k) = 0\)，并且</p>
+<div class="eq">$$l_F(x_F) = \begin{cases} 0 & x_F\in X_G \\ \infty & \text{否则}. \end{cases} \tag{10.9}$$</div>
+<p>最优问题：\(x_k\notin X_G\) 时 \(l(x_k,u_k,\theta_k)\) 可以取任何非负有限值。对概率不确定性，有时让 \(l_F(x_F)\) 在 \(x_F\notin X_G\) 时取一个<b>很大的有限值</b>比取 \(\infty\) 更合适（下面的值迭代实验室会看到为什么）。注意每个阶段的代价项一般可以依赖自然动作 \(\theta_k\)。</p>
+<p><b>术语</b>：用概率不确定性时，Formulation 10.1 常被称为<b>受控 Markov 过程 controlled Markov process</b> 或 <b>Markov 决策过程 Markov decision process（MDP）</b>；去掉动作就只是 <b>Markov 过程</b>。统计文献里离散阶段的情形多叫 <b>Markov 链 Markov chain</b>，所以「受控 Markov 链」「Markov 决策链」也许更贴切。</p>
+<p><b>不显式写出自然</b>：若 \(l(x_k,u_k,\theta_k) = l(x_k,u_k)\)，非确定情形可以直接给出 \(X_{k+1}(x_k,u_k)\) 代替状态转移方程——施加 \(u_k\) 就直接落到 \(X\) 的一个指定子集；概率情形则直接给出 \(P(x_{k+1}\mid x_k,u_k)\)。本书大多数时候用带自然的状态转移方程，但这两种写法在很多书和论文里都会出现。</p>
+<p><b>图表示</b>：和 2.1 节一样可以画有向状态转移图，顶点集是 \(X\)，只是边的定义要反映自然：若存在 \(u\in U(x)\) 和 \(\theta\in\Theta(x,u)\) 使 \(x' = f(x,u,\theta)\)，就有一条 \(x\to x'\) 的边；边上可以标代价 \(l(x,u,\theta)\)，概率模型下还可以标转移概率。决策者和自然共同决定到达哪个顶点：决策者选定 \(u\) 时，从 \(x\) 出发会有好几条出边；换一个动作，这组出边就变了；自然再从中选一条——这不完全由决策者控制。</p>
+
+<p><b>例 10.1（在数轴上移动 Traversing the Number Line）</b>：\(X = \mathbb{Z}\)，\(U = \{-2, 2, u_T\}\)，\(\Theta = \{-1, 0, 1\}\)，所有状态的动作集都相同。状态转移方程 \(x_{k+1} = x_k + u_k + \theta_k\)。每个阶段代价 1（\(u\ne u_T\) 时 \(l(x,u,\theta) = 1\)），\(x_I = 100\)，\(X_G = \{-1,0,1\}\)。在非确定模型下连续执行 \(-2\)：第一次之后可能的状态是 \(\{97,98,99\}\)——自然可能把前进拖慢到每阶段 1 格，也可能加速到每阶段 3 格。100 个阶段之后一定能到达目标；一到达就施加 \(u_T\)。如果把目标改成 \(X_G = \{0\}\)，就<b>无法保证</b>到达，因为自然可能让机器人冲过头。</p>
+<p>再换一个模型：\(U = \{-1, 1, u_T\}\)，\(\Theta = \{-2,-1,0,1,2\}\)。非确定模型下问题无解：自然强大到足以在最坏情况下把状态完全往反方向推。但可以定义并求解一个合理的概率版本：设 \(P(\theta) = 1/5\)，例如 \(x_k = 100\)、\(u_k = -1\) 时，\(97\le x_{k+1}\le 101\) 的概率各为 \(1/5\)。到达 \(X_G\) 的概率不为零，尽管最坏情况下不能保证。</p>
+
+<p><b>例 10.2（在网格上移动 Moving on a Grid）</b>：图 10.1 是一个 \(15\times15\) 的网格，状态 \((i,j)\)，\(1\le i,j\le15\)，中间的 \(5\times5\) 区域不属于 \(X\)；\(x_I = (1,1)\)，\(X_G\) 是右上角的 \(5\times5\)。令 \(A = \{0,1,2,3,4\}\) 分别表示「停、右、上、左、下」，\(U = A\cup\{u_T\}\)，\(U(x)\) 只含在 \(x\) 处可用的动作（边界上有些方向不可用）。\(\Theta(x,u)\) 是<b>执行 \(u\) 之后</b>可用的 \(A\) 中动作的集合：例如 \(x = (2,2)\)、\(u = 3\)，机器人想移到 \((1,2)\)，那里有三个相邻状态，各对应一个自然动作，于是 \(\Theta(x,u) = \{0,1,2,4\}\)——没有 3，因为 \((1,2)\) 左边没有状态。用概率模型时每个自然动作等可能。\(f\) 把 \(u_k\) 和 \(\theta_k\) 的效果相加：\(x_k = (i,j)\)、\(u_k = 1\)、\(\theta_k = 2\) 时 \(x_{k+1} = (i+1,j+1)\)；若 \(\theta_k = 3\)，两者抵消，\(x_{k+1} = (i,j)\)；没有自然时就是 \(\theta_k = 0\)。一旦施加 \(u_T\)，不论自然怎样状态都不再变。代价 \(l(x_k,u_k) = 1\)（\(u_T\) 时为 0），\(l_F\) 按 (10.9)。合理的任务是<b>以最少的期望阶段数</b>在 \(X_G\) 中终止——这需要 10.1.3 节的反馈计划，最优计划可以用 10.2.1 节的方法高效算出。这个例子很容易推广到二维或更高维的复杂迷宫；网格分辨率高时就得到运动规划的近似；若想允许任意方向而不只是四个方向，就要用 10.6 节的连续状态空间。</p>
+
+<div class="widget wide" data-widget="grid-nature"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>默认就是书中的例子：x = (2, 2)、u = 3（左），x + u = (1, 2)，Θ(x, u) = {0, 1, 2, 4}，四个可能的下一状态各 1/4。</li>
+  <li>点不同的格子：内部格子 |Θ| = 5，贴着墙或障碍时变成 4 或 3——自然只能「推进去」不能「推出去」，这在后面会让期望代价比无自然时还略小。</li>
+  <li>把「一直用这个动作 k 步」拖大：分布像墨水一样扩散开（撞墙时改为停是本页的补充约定）。切到「侧滑（补充）」：自然只能横推，分布沿着前进方向的两侧摊开。</li>
+</ul></div>
+
+<h3 id="s10-1-2">10.1.2 前向投影与反向投影 <span class="en">Forward Projections and Backprojections</span></h3>
+<p><b>前向投影</b>刻画计划执行时的行为。在引入不确定性之前，计划总是严格按预期执行：一串动作施加在初始状态上，得到的状态序列可以用状态转移方程算出来。现在状态转移不可预测了，我们想象几个阶段之后可能处在哪些状态：非确定情形是给定当前状态和计划后可能的未来状态<b>集合</b>；概率情形则是状态上的<b>分布</b>。</p>
+<h4>非确定的前向投影</h4>
+<p>为了记号简单，暂且假设所有 \(x\) 都有 \(U(x) = U\)（10.1.3 节会去掉这个假设）。设初始状态 \(x_1 = x_I\) 已知，施加 \(u_1\in U\) 后可能的下一状态是</p>
+<div class="eq">$$X_2(x_1,u_1) = \{x_2\in X \mid \exists\theta_1\in\Theta(x_1,u_1) \text{ 使得 } x_2 = f(x_1,u_1,\theta_1)\}, \tag{10.10}$$</div>
+<p>这是 (10.5) 的特例。接着施加 \(u_2\)：</p>
+<div class="eq">$$\begin{aligned}X_3(x_1,u_1,u_2) = \{x_3\in X \mid\ &\exists\theta_1\in\Theta(x_1,u_1) \text{ 且 } \exists\theta_2\in\Theta(x_2,u_2) \\ &\text{使得 } x_2 = f(x_1,u_1,\theta_1) \text{ 且 } x_3 = f(x_2,u_2,\theta_2)\}.\end{aligned} \tag{10.11}$$</div>
+<p>这样写下去很快就繁琐了，递归地写更好。设动作历史 \(\tilde{u}_k\) 固定，\(X_{k+1}(X_k,u_k)\) 表示已知阶段 \(k\) 的前向投影为 \(X_k\) 时阶段 \(k+1\) 的前向投影：</p>
+<div class="eq">$$X_{k+1}(X_k,u_k) = \{x_{k+1}\in X \mid \exists x_k\in X_k \text{ 且 } \exists\theta_k\in\Theta(x_k,u_k) \text{ 使得 } x_{k+1} = f(x_k,u_k,\theta_k)\}. \tag{10.12}$$</div>
+<p>从 \(X_1 = \{x_1\}\) 出发反复使用即可。<b>例 10.3（非确定前向投影）</b>：用例 10.1 的第一个模型，\(x_1 = 0\)，施加 \(u = 2\)：一步前向投影 \(X_2(0,2) = \{1,2,3\}\)；再施加一次，\(X_3(0,2,2) = \{2,3,4,5,6\}\)；如此重复，\(k\) 步前向投影是 \(\{k,\ldots,3k\}\)。</p>
+<h4>概率的前向投影</h4>
+<p>动作一旦给定，「决策」部分就消失了，概率前向投影可以看成一个 Markov 过程。已知 \(x_k\)、施加 \(u_k\)，一步前向投影就是 (10.6)。两步前向投影 \(P(x_{k+2}\mid x_k,u_k,u_{k+1})\) 用边缘化计算：</p>
+<div class="eq">$$P(x_{k+2}\mid x_k,u_k,u_{k+1}) = \sum_{x_{k+1}\in X} P(x_{k+2}\mid x_{k+1},u_{k+1})\,P(x_{k+1}\mid x_k,u_k). \tag{10.13}$$</div>
+<p>更多步要嵌套求和，把中间状态都边缘化掉，例如三步：</p>
+<div class="eq">$$P(x_{k+3}\mid x_k,u_k,u_{k+1},u_{k+2}) = \sum_{x_{k+1}\in X}\sum_{x_{k+2}\in X} P(x_{k+3}\mid x_{k+2},u_{k+2})P(x_{k+2}\mid x_{k+1},u_{k+1})P(x_{k+1}\mid x_k,u_k). \tag{10.14}$$</div>
+<p>借用线性代数可以写得很简洁。对每个动作 \(u\)，定义它的 \(n\times n\)（\(n = |X|\)）<b>状态转移矩阵 state transition matrix</b> \(M_u\)：</p>
+<div class="eq">$$M_u = \begin{pmatrix} m_{1,1} & m_{1,2} & \cdots & m_{1,n} \\ m_{2,1} & m_{2,2} & \cdots & m_{2,n} \\ \vdots & \vdots & & \vdots \\ m_{n,1} & m_{n,2} & \cdots & m_{n,n} \end{pmatrix}, \tag{10.15}$$</div>
+<div class="eq">$$m_{i,j} = P(x_{k+1} = i \mid x_k = j,\ u). \tag{10.16}$$</div>
+<p>第 \(j\) 列之和为 1，可以理解为「从 \(x_k = j\) 施加 \(u_k\) 后在 \(X\) 上的分布」（注意是<b>列</b>随机矩阵）。设列向量 \(v\) 是 \(X\) 上任一分布，\(M_u v\) 就是从 \(v\) 出发施加 \(u\) 后的分布：矩阵乘法做了 \(n\) 次内积，每次都是 (10.13) 那样的边缘化。若 \(\tilde{u}_{k-1}\) 固定、\(v = [0\ 0\cdots 0\ 1\ 0\cdots 0]\) 表示 \(x_1\) 确定已知，则</p>
+<div class="eq">$$v' = M_{u_{k-1}} M_{u_{k-2}}\cdots M_{u_2} M_{u_1} v, \tag{10.17}$$</div>
+<p>\(v'\) 的第 \(i\) 个元素就是 \(P(x_k = i\mid x_1,\tilde{u}_{k-1})\)。<b>例 10.4（概率前向投影）</b>：仍用例 10.1 的第一个模型，但每个自然动作的概率是 \(1/3\)。\(x_1 = 0\)，每个阶段都施加 \(u = 2\)。一步前向投影在状态 \((1,2,3)\) 上的概率是</p>
+<div class="eq">$$[1/3\ \ 1/3\ \ 1/3], \tag{10.18}$$</div>
+<p>两步前向投影在 \((2,3,4,5,6)\) 上的概率是</p>
+<div class="eq">$$[1/9\ \ 2/9\ \ 3/9\ \ 2/9\ \ 1/9]. \tag{10.19}$$</div>
+
+<div class="widget wide" data-widget="nl-forward"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>x₁ = 0，选「非确定」，按两次「+2」：{1, 2, 3} → {2, …, 6}，继续按就是 {k, …, 3k}（例 10.3）。切到「概率」：1/3, 1/3, 1/3 → 1/9, 2/9, 3/9, 2/9, 1/9（例 10.4），这正是 \(M_u M_u v\)（参考代码第 2 项）。</li>
+  <li>x₁ = 10、X_G = {−1, 0, 1}：连按「−2」会冲过头，集合越拉越宽；改按「按反馈计划 π 走一步」（进了 X_G 就 u_T，否则朝目标走），9 步之后所有可能状态都在 X_G 里——目标被<b>保证</b>。换成 X_G = {0}：集合永远停在 {−2, …, 2}，保证不了（参考代码第 1 项）。</li>
+  <li>换「模型 2」再用非确定：集合两头一起扩散，永远到不了「保证」；概率模型下落在 X_G 的概率却始终为正——正是例 10.1 第二段的结论。</li>
+</ul></div>
+
+<h4>反向投影</h4>
+<p>有时需要定义可能的<b>过去</b>状态——哪些状态能导致当前的一个或多个状态。10.2.3 节的图搜索算法就要用到它。这需要维护一个与前向投影方向相反的<b>反向投影</b>。8.5.2 节在连续状态空间上用反向投影记录类 Dijkstra 算法里的活跃状态；现在反向投影还要处理不确定性。</p>
+<p>考虑非确定情形。给定状态 \(x\in X\) 和固定动作 \(u\)，哪些先前状态 \(x'\) 可能导致 \(x\)？这只依赖于自然可能的选择：</p>
+<div class="eq">$$\mathrm{WB}(x,u) = \{x'\in X \mid \exists\theta\in\Theta(x',u) \text{ 使得 } x = f(x',u,\theta)\}. \tag{10.20}$$</div>
+<p>\(\mathrm{WB}(x,u)\) 称为 \(x\) 在 \(u\) 下的<b>弱反向投影 weak backprojection</b>：在一个阶段内<b>可能</b>到达 \(x\) 的所有状态。说「弱」，是因为它不保证到达 \(x\)。保证到达 \(x\) 是更强的条件，定义<b>强反向投影 strong backprojection</b>：</p>
+<div class="eq">$$\mathrm{SB}(x,u) = \{x'\in X \mid \forall\theta\in\Theta(x',u),\ x = f(x',u,\theta)\}. \tag{10.21}$$</div>
+<p>两者的区别在于「<b>存在</b>一个自然动作能到 \(x\)」与「<b>所有</b>自然动作都到 \(x\)」。显然 \(\mathrm{SB}(x,u)\subseteq\mathrm{WB}(x,u)\)。很多时候 \(\mathrm{SB}(x,u) = \emptyset\)，而 \(\mathrm{WB}(x,u)\) 很少为空。8.5.2 节 (8.66) 的反向投影不涉及不确定性，所以那里没有强弱之分。</p>
+<p>两个有用的推广：1）从一个状态<b>集合</b>出发；2）动作不必固定。给定 \(S\subseteq X\)，在 \(u\) 下一步可能到达 \(S\) 中某个元素的状态是 \(S\) 在 \(u\) 下的弱反向投影：</p>
+<div class="eq">$$\mathrm{WB}(S,u) = \{x'\in X \mid \exists\theta\in\Theta(x',u) \text{ 使得 } f(x',u,\theta)\in S\}, \tag{10.22}$$</div>
+<div class="eq">$$\mathrm{WB}(S,u) = \bigcup_{x\in S}\mathrm{WB}(x,u). \tag{10.23}$$</div>
+<p>类似地，\(S\) 在 \(u\) 下的强反向投影是</p>
+<div class="eq">$$\mathrm{SB}(S,u) = \{x'\in X \mid \forall\theta\in\Theta(x',u),\ f(x',u,\theta)\in S\}. \tag{10.24}$$</div>
+<p>注意 \(\mathrm{SB}(S,u)\) <b>不能</b>由 \(\mathrm{SB}(x,u)\) 对 \(x\in S\) 取并得到（习题 1）。另一个观察：对每个 \(x_k\in\mathrm{SB}(S,u_k)\) 都有 \(X_{k+1}(x_k,u_k)\subseteq S\)。再去掉对 \(u\) 的依赖，得到「存在某个动作可能到达 \(S\)」的状态——\(S\) 的弱反向投影和强反向投影：</p>
+<div class="eq">$$\mathrm{WB}(S) = \{x'\in X \mid \exists u\in U(x') \text{ 使得 } x'\in\mathrm{WB}(S,u)\}, \tag{10.25}$$</div>
+<div class="eq">$$\mathrm{SB}(S) = \{x'\in X \mid \exists u\in U(x') \text{ 使得 } x'\in\mathrm{SB}(S,u)\}. \tag{10.26}$$</div>
+<p>同样 \(\mathrm{SB}(S)\subseteq\mathrm{WB}(S)\)。<span class="small muted">（原书 (10.25)(10.26) 把这里的 \(x'\) 写成了 \(x\)：「\(\exists u\in U(x)\) 使得 \(x\in\mathrm{WB}(S,u)\)」，按上下文应为 \(x'\)，本页按 \(x'\) 写。）</span></p>
+<p><b>例 10.5（反向投影）</b>：仍是例 10.1 的第一个模型。\(\mathrm{WB}(0,2)\) 是能施加 \(u = 2\) 且<b>可能</b>到达 \(x = 0\) 的状态：\(\{-3,-2,-1\}\)；但从其中任何一个都不能<b>确保</b>到达 0，所以 \(\mathrm{SB}(0,2) = \emptyset\)。再看目标 \(X_G = \{-1,0,1\}\) 在 \(u = 2\) 下的反向投影：</p>
+<div class="eq">$$\mathrm{WB}(X_G,2) = \mathrm{WB}(-1,2)\cup\mathrm{WB}(0,2)\cup\mathrm{WB}(1,2) = \{-4,-3,-2,-1,0\}. \tag{10.27}$$</div>
+<p>强反向投影是 \(\mathrm{SB}(X_G,2) = \{-2\}\)：从 \(\mathrm{WB}(X_G,2)\) 里的其它状态出发，自然都可能让目标落空。注意 \(\mathrm{SB}(X_G,2)\) 不能由各个 \(\mathrm{SB}(x,2)\) 取并得到。最后看不依赖动作的反向投影：\(\mathrm{WB}(X_G) = \{-4,-3,\ldots,4\}\)，\(\mathrm{SB}(X_G) = X_G\)——后者里 \(X_G\) 的所有状态都在，因为可以施加 \(u_T\)；不允许 \(u_T\) 的话 \(\mathrm{SB}(X_G) = \{-2,2\}\)。</p>
+<p>还可以定义别的反向投影，书中不展开：一种是像前向投影那样做多阶段反向投影（习题 3）；另一种是为概率情形定义反向投影——复杂得多，例如求「以至少 \(p\) 的概率到达 \(S\) 中某个状态」的所有状态。</p>
+
+<div class="widget wide" data-widget="backprojection"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>S = {0}、u = +2：WB = {−3, −2, −1}，SB = ∅。把鼠标移到 −2 上：三条弧只有一条落进 S（绿色），所以它只在 WB 里。</li>
+  <li>S = X_G、u = +2：WB(X_G, 2) = {−4, …, 0}，SB(X_G, 2) = {−2}，而逐点求 SB(x, 2) 再并起来是 ∅——这就是习题 1：SB 需要「整个前向投影都落在 S 里」，单个点做不到，三个点合起来才做到。</li>
+  <li>选「所有 u」：WB(X_G) = {−4, …, 4}，SB(X_G) = X_G；取消「允许 u_T」，SB(X_G) 缩成 {−2, 2}（参考代码第 3 项）。</li>
+</ul></div>
+
+<h3 id="s10-1-3">10.1.3 计划及其执行 <span class="en">A Plan and Its Execution</span></h3>
+<p>第 2 章的计划是一串动作，因为动作的效果完全可预测；Part II 的大部分地方，计划是一条路径——动作序列的连续阶段版本。8.2.1 节引入了定义在状态空间上的函数形式的计划，但那是可选的，因为当时没有显式地建模不确定性（初始状态除外）。现在由于自然带来的不可预测性，必须把<b>计划的定义</b>与<b>计划的执行</b>分开：同一个计划可以从同一个初始状态执行很多次，但由于自然，每次得到的未来状态都不同。这就需要<b>反馈</b>：计划把状态映射到动作。</p>
+<p><b>定义计划</b>：Formulation 10.1 的一个<b>（反馈）计划 (feedback) plan</b> 是函数 \(\pi : X\to U\)，对每个 \(x\in X\) 给出 \(\pi(x)\in U(x)\)。虽然未来的状态可能未知，但只要给定 \(\pi\)，就知道将来到了任何状态会采取什么动作。在别的文献里，\(\pi\) 也叫<b>反馈策略 feedback policy</b>、<b>反馈控制律 feedback control law</b>、<b>反应式计划 reactive plan</b> 和<b>条件计划 conditional plan</b>。</p>
+<p>对某些问题，尤其 \(K\) 固定为有限值时，可能需要<b>依赖阶段的计划 stage-dependent plan</b>：同一状态在不同阶段可以选不同动作。令 \(\mathcal{K} = \{1,\ldots,K\}\)，依赖阶段的计划是 \(\pi : X\times\mathcal{K}\to U\)，\(u = \pi(x,k)\)。2.3 节的 \(K\) 步计划是它的特例——那里动作只依赖阶段，因为未来状态总是可预测的；现在未来状态不再可预测，必须放进 \(\pi\) 的定义域。除非特别说明，默认 \(\pi\) <b>不</b>依赖阶段。</p>
+<p>一旦 \(\pi\) 确定，状态转移看起来就只是当前状态和自然动作的函数：下一状态是 \(f(x,\pi(x),\theta)\)，代价项是 \(l(x,\pi(x),\theta)\)。</p>
+<h4>固定计划下的前向投影</h4>
+<p>前向投影现在可以在「执行某个特定计划」的约束下定义：动作序列被 \(\pi\) 取代，每次需要在 \(x\) 处选动作就用 \(\pi(x)\)。在这种写法里，不同的 \(x\) 可以有不同的 \(U(x)\)，只要 \(\pi\) 只用 \(U(x)\) 中实际可用的动作。非确定情形：已知 \(x_1\) 和 \(\pi\)，\(u_1 = \pi(x_1)\) 代入 (10.10) 得到一步前向投影；第二步的 \(u_2\) 由 \(\pi(x_2)\) 决定，代入 (10.11)。递归形式是</p>
+<div class="eq">$$\begin{aligned}X_{k+1}(x_1,\pi) = \{x_{k+1}\in X \mid\ &\exists\theta_k\in\Theta(x_k,\pi(x_k)) \text{ 使得 } \\ &x_k\in X_k(x_1,\pi) \text{ 且 } x_{k+1} = f(x_k,\pi(x_k),\theta_k)\}.\end{aligned} \tag{10.28}$$</div>
+<p>把概率前向投影 (10.13)<sup class="fn"><a href="#fn-1010" id="fn-1010-ref">1</a></sup>改成用 \(\pi\)：</p>
+<div class="eq">$$P(x_{k+2}\mid x_k,\pi) = \sum_{x_{k+1}\in X} P(x_{k+2}\mid x_{k+1},\pi(x_{k+1}))\,P(x_{k+1}\mid x_k,\pi(x_k)). \tag{10.29}$$</div>
+<p>重复 \(k-1\) 次就得到 \(P(x_k\mid x_1,\pi)\)。状态转移矩阵也可以用：(10.15) 中所有列对应同一个动作 \(u\)；而固定计划下的 \(M_\pi\) 每一列可以对应不同的动作，因为每一列代表不同的状态 \(x_k\)：</p>
+<div class="eq">$$m_{i,j} = P(x_{k+1} = i \mid x_k = j,\ \pi(x_k)). \tag{10.30}$$</div>
+<p>这个 \(M_\pi\) 定义了在 \(\pi\) 作用下诱导出的 Markov 过程。</p>
+<h4>计划的图表示</h4>
+<p>与自然的博弈有两个决策者：自然和机器人。计划一旦确定，机器人的决策就固定了，只剩自然在做决策。按这个理解，可以像 2.1 节那样定义一个有向图，只是边由<b>自然的动作</b>而不是机器人的动作给出——甚至可以想象自然自己在面对一个 Formulation 2.1 那样的离散可行规划问题：\(\Theta(x,\pi(x))\) 代替 \(U(x)\)，并且没有目标集。记 \(\mathcal{G}_\pi\) 为<b>基于计划的状态转移图 plan-based state transition graph</b>：顶点集是 \(X\)；若存在 \(\theta\in\Theta(x,\pi(x))\) 使 \(x' = f(x,\pi(x),\theta)\)，就有边 \(x\to x'\)。于是从每个顶点出发的出边集合就是「按 \(\pi\) 施加动作时所有可能的转移」。概率情形下 \(\mathcal{G}_\pi\) 是带权图，每条边赋予概率 \(P(x'\mid x,\pi(x),\theta)\)，这正是常用来画 Markov 链的图。非确定前向投影可以直接从 \(\mathcal{G}_\pi\) 读出：从当前状态沿出边走一步得到一步前向投影，再走一步得到两步前向投影，依此类推；概率前向投影也一样。</p>
+<h4>反馈计划的代价</h4>
+<p>考虑从 \(x_1\in X\) 执行计划 \(\pi\) 的代价到目标 cost-to-go。代价依赖于访问的状态序列、计划施加的动作以及自然施加的动作。第 2 章只需把代价项加起来；现在还依赖于自然，最坏情况和期望情况两种分析都可以，它们把 9.2 节的处理推广到状态空间和多阶段。令 \(\mathcal{H}(\pi,x_1)\) 为从 \(x_1\) 出发、执行 \(\pi\) 时可能出现的所有「状态—动作—自然」历史。<b>最坏情况分析</b>：</p>
+<div class="eq">$$G_\pi(x_1) = \max_{(\tilde{x},\tilde{u},\tilde\theta)\in\mathcal{H}(\pi,x_1)}\Big\{L(\tilde{x},\tilde{u},\tilde\theta)\Big\}, \tag{10.31}$$</div>
+<p>即从 \(x_1\) 出发所有可能轨迹中的最大代价。只要有一条不能终止在目标里，代价就是无穷。(10.31) 里的 \(\tilde{x}\)、\(\tilde{u}\)、\(\tilde\theta\) 是无穷历史，但由于 \(u_T\)，它们对代价的影响会提早结束。最坏情况下的最优计划，是在所有可能的计划（所有给状态分配动作的方式）中使 \(G_\pi(x_1)\) 最小的计划；如果只做可行规划——所有轨迹都必须到达目标、代价无需最优——通常有大量等价的选择。<b>期望情况分析</b>：</p>
+<div class="eq">$$G_\pi(x_1) = E_{\mathcal{H}(\pi,x_1)}\Big[L(\tilde{x},\tilde{u},\tilde\theta)\Big], \tag{10.32}$$</div>
+<p>期望取遍 \(\mathcal{H}(\pi,x_1)\)：每个历史的代价 \(L\) 乘以它的概率再求和，也可以理解为从 \(x_1\) 出发的轨迹的期望代价。只要有概率非零的轨迹不能在目标终止，\(G_\pi(x_1) = \infty\)。概率情形的任务通常是找使 \(G_\pi(x_1)\) 最小的计划。</p>
+<p>一个有趣的问题：同一个 \(\pi\) 能否对所有初始状态都最优？幸运的是能——8.2.1 节也观察到这一点。若 \(\pi\) 从某个 \(x_1\) 出发最优，那么它从执行过程中可能访问的任何其它状态 \(x\) 出发也一定最优：否则从 \(x\) 出发存在更好的计划，到达目标的代价更低，而从 \(x_1\) 出发的解必须经过 \(x\)，这与 \(\pi\) 的最优性矛盾。记 \(\pi^*\) 为对每个初始状态都最优的计划。</p>
+
+<div class="widget wide" data-widget="plan-graph"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>「全部向右」：每一步横坐标都 +1，横滑只改变行，所以每个状态都<b>保证</b>到达，最坏代价 = 期望代价 = 6 − x（像图 10.2b）。</li>
+  <li>「踢皮球」：(3, 1) 向上、(2, 2) 向下，自然可能让这两个状态互相踢皮球——\(\mathcal{G}_\pi\) 里出现不经过目标的环，12 个状态从「保证」降为「可能」，最坏代价 ∞；但每次绕回来的概率都 &lt; 1，期望代价仍有限（x₁ = (0, 0) 时约 6.31，参考代码第 5 项）。这就是下面图 10.2(a) 的情形。</li>
+  <li>「加上死循环」：左下 5 个状态的箭头互相指，自然无论怎么推都出不去——到不了，期望代价也是 ∞。选 x₁ = (0, 0)，把前向投影 k 拖大：概率质量永远困在这 5 格里。</li>
+</ul></div>
+</section>
+
+<!-- ============================================================ 10.2 -->
+<section id="s10-2">
+<h2>10.2 计算反馈计划的算法 <span class="en">Algorithms for Computing Feedback Plans</span></h2>
+
+<h3 id="s10-2-1">10.2.1 值迭代 <span class="en">Value Iteration</span></h3>
+<p>幸运的是，2.3.1.1 节的值迭代可以很好地推广到预测不确定的情形——这正是当初在第 2 章介绍值迭代的主要原因：那里没有自然的复杂性，讲起来容易；在现在的设定下，值迭代依然保持了大部分效率，能轻松解决几千甚至几百万个状态的问题。整个 10.2.1 节假设 \(X\) 有限（若不必增量地计算整个空间上的代价到目标，也可以推广到可数无穷）。这里只讲后向值迭代，前向版本可以类似定义（习题 7、8）。</p>
+<h4>非确定情形</h4>
+<p>下面推导动态规划递推式 (10.39)，它直接给出一个迭代方法，算出使最坏情况代价最小的计划。推导完全对照 2.3.1.1 节，不妨时时翻回去看。最优计划 \(\pi^*\) 通过计算最优代价到目标函数得到。对 \(1\le k\le F\)，令 \(G^*_k\) 为最优计划从阶段 \(k\) 执行到 \(F\) 时可能累积的最坏情况代价（对照 (2.5)）：</p>
+<div class="eq">$$G^*_k(x_k) = \min_{u_k}\max_{\theta_k}\min_{u_{k+1}}\max_{\theta_{k+1}}\cdots\min_{u_K}\max_{\theta_K}\Big\{\sum_{i=k}^{K} l(x_i,u_i,\theta_i) + l_F(x_F)\Big\}. \tag{10.33}$$</div>
+<p>min 和 max 里面是代价泛函 (10.8) 的最后 \(F-k\) 项；为简单起见各个 \(u_i\)、\(\theta_i\) 的取值范围没有写出。\(k = F\) 时的最优代价到目标是</p>
+<div class="eq">$$G^*_F(x_F) = l_F(x_F), \tag{10.34}$$</div>
+<p>与可预测情形的 (2.6) 相同。现在对 \(X\) 做 \(K\) 遍扫描，每遍由 \(G^*_{k+1}\) 算 \(G^*_k\)，\(k\) 从 \(F\) 递减到 1。第一遍 \(G^*_F\) 从 \(l_F\) 拷贝过来；第二遍对每个 \(x_K\in X\) 计算（对照 (2.7)）</p>
+<div class="eq">$$G^*_K(x_K) = \min_{u_K}\max_{\theta_K}\Big\{l(x_K,u_K,\theta_K) + l_F(x_F)\Big\}, \tag{10.35}$$</div>
+<p>其中 \(u_K\in U(x_K)\)、\(\theta_K\in\Theta(x_K,u_K)\)。由于 \(l_F = G^*_F\) 且 \(x_F = f(x_K,u_K,\theta_K)\)，代入 (10.35) 得到（对照 (2.8)）</p>
+<div class="eq">$$G^*_K(x_K) = \min_{u_K}\max_{\theta_K}\Big\{l(x_K,u_K,\theta_K) + G^*_F(f(x_K,u_K,\theta_K))\Big\}, \tag{10.36}$$</div>
+<p>它算出了从阶段 \(K\) 到 \(F = K+1\) 的所有最优一步计划的代价。更一般地，已知 \(G^*_{k+1}\) 就能算 \(G^*_k\)。仔细看 (10.33)，把第一项代价从和式里拿出来，把对 \(u_k\) 的最小化和其余的（\(u_{k+1}\) 到 \(u_K\)）分开（对照 (2.9)）：</p>
+<div class="eq">$$G^*_k(x_k) = \min_{u_k}\max_{\theta_k}\Big\{\min_{u_{k+1}}\max_{\theta_{k+1}}\cdots\min_{u_K}\max_{\theta_K}\Big\{l(x_k,u_k,\theta_k) + \sum_{i=k+1}^{K} l(x_i,u_i,\theta_i) + l_F(x_F)\Big\}\Big\}. \tag{10.37}$$</div>
+<p>第二组 min、max 不影响 \(l(x_k,u_k,\theta_k)\)，可以把它提出来（对照 (2.10)）：</p>
+<div class="eq">$$G^*_k(x_k) = \min_{u_k}\max_{\theta_k}\Big\{l(x_k,u_k,\theta_k) + \min_{u_{k+1}}\max_{\theta_{k+1}}\cdots\min_{u_K}\max_{\theta_K}\Big\{\sum_{i=k+1}^{K} l(x_i,u_i,\theta_i) + l_F(x_F)\Big\}\Big\}. \tag{10.38}$$</div>
+<p>里面那组 min 和 max 正是 \(G^*_{k+1}\)<sup class="fn"><a href="#fn-lf" id="fn-lf-ref">2</a></sup>，于是得到递推式（对照 (2.11)）</p>
+<div class="eq">$$G^*_k(x_k) = \min_{u_k\in U(x_k)}\Big\{\max_{\theta_k}\Big\{l(x_k,u_k,\theta_k) + G^*_{k+1}(x_{k+1})\Big\}\Big\}. \tag{10.39}$$</div>
+<h4>概率情形</h4>
+<p>再次对照 2.3.1.1 节就能得到值迭代方法。对 \(k\) 从 1 到 \(F\)，令 \(G^*_k\) 为最优计划从阶段 \(k\) 执行到 \(F\) 的期望代价（对照 (2.5)）：</p>
+<div class="eq">$$G^*_k(x_k) = \min_{u_k,\ldots,u_K}\Big\{E_{\theta_k,\ldots,\theta_K}\Big[\sum_{i=k}^{K} l(x_i,u_i,\theta_i) + l_F(x_F)\Big]\Big\}. \tag{10.40}$$</div>
+<p>边界条件 \(k = F\) 仍是 (10.34)。算法仍做 \(K\) 遍扫描，\(G^*_F\) 拷贝自 \(l_F\)；第二遍对每个 \(x_K\) 计算（对照 (2.7)）</p>
+<div class="eq">$$G^*_K(x_K) = \min_{u_K}\Big\{E_{\theta_K}\Big[l(x_K,u_K,\theta_K) + l_F(x_F)\Big]\Big\}, \tag{10.41}$$</div>
+<p>其中 \(u_K\in U(x_K)\)，期望对 \(\theta_K\) 取。代入后（对照 (2.8)）</p>
+<div class="eq">$$G^*_K(x_K) = \min_{u_K}\Big\{E_{\theta_K}\Big[l(x_K,u_K,\theta_K) + G^*_F(f(x_K,u_K,\theta_K))\Big]\Big\}. \tag{10.42}$$</div>
+<p>一般的迭代是</p>
+<div class="eq">$$G^*_k(x_k) = \min_{u_k}\Big\{E_{\theta_k}\Big[\min_{u_{k+1},\ldots,u_K}\Big\{E_{\theta_{k+1},\ldots,\theta_K}\Big[l(x_k,u_k,\theta_k) + \sum_{i=k+1}^{K} l(x_i,u_i,\theta_i) + l_F(x_F)\Big]\Big\}\Big]\Big\}, \tag{10.43}$$</div>
+<p>同样是把第一项代价提出来、把对 \(u_k\) 的最小化分开得到的。第二组 min 和期望不影响 \(l(x_k,u_k,\theta_k)\)，把它提到外面（对照 (2.10)）：</p>
+<div class="eq">$$G^*_k(x_k) = \min_{u_k}\Big\{E_{\theta_k}\Big[l(x_k,u_k,\theta_k) + \min_{u_{k+1},\ldots,u_K}\Big\{E_{\theta_{k+1},\ldots,\theta_K}\Big[\sum_{i=k+1}^{K} l(x_i,u_i,\theta_i) + l_F(x_F)\Big]\Big\}\Big]\Big\}. \tag{10.44}$$</div>
+<p>里面的 min 和期望定义了 \(G^*_{k+1}\)，得到递推式（对照 (2.11) 和 (10.39)）</p>
+<div class="eq">$$\begin{aligned}G^*_k(x_k) &= \min_{u_k\in U(x_k)}\Big\{E_{\theta_k}\Big[l(x_k,u_k,\theta_k) + G^*_{k+1}(x_{k+1})\Big]\Big\} \\ &= \min_{u_k\in U(x_k)}\Big\{\sum_{\theta_k\in\Theta(x_k,u_k)}\Big(l(x_k,u_k,\theta_k) + G^*_{k+1}(f(x_k,u_k,\theta_k))\Big)P(\theta_k\mid x_k,u_k)\Big\}.\end{aligned} \tag{10.45}$$</div>
+<p>若代价项不依赖 \(\theta_k\)，可写成 \(l(x_k,u_k)\)，(10.45) 化简为</p>
+<div class="eq">$$G^*_k(x_k) = \min_{u_k\in U(x_k)}\Big\{l(x_k,u_k) + \sum_{x_{k+1}\in X} G^*_{k+1}(x_{k+1})\,P(x_{k+1}\mid x_k,u_k)\Big\}. \tag{10.46}$$</div>
+<p>状态转移对 \(\theta_k\) 的依赖隐含在 \(P(x_{k+1}\mid x_k,u_k)\) 里，它由 \(P(\theta_k\mid x_k,u_k)\) 和状态转移方程 \(f\) 定义。实现时 (10.46) 可能比 (10.45) 更方便。</p>
+
+<h4>收敛问题</h4>
+<p>如果问题定义里阶段数固定，收敛有保证。但若阶段数没有上限呢？回忆 2.3.2 节：每次值迭代把总路径长度增加 1；在后向动态规划里，真正的阶段编号并不重要，任意平移编号不影响结果。最终算法会因为所有能到达目标的状态都已算出代价到目标而停止，得到一个<b>平稳的代价到目标函数 stationary cost-to-go function</b>：能到达目标的状态收敛到有限值，其余保持 \(\infty\)。2.3.2 节提到，唯一能阻止平稳函数存在的是图里的<b>负环</b>：那时最好的计划是永远绕着环走，把代价降到 \(-\infty\)。</p>
+<p>在现在的设定下，平稳的代价到目标函数依然会出现，但由于自然的影响，环带来的收敛困难更复杂。考虑基于计划的状态转移图 \(\mathcal{G}_\pi\) 会有帮助。先看非确定情形：若从某个 \(x_1\) 出发存在计划 \(\pi\)，使自然的所有可能动作都导致遍历累积负代价的环，那么 \(x_1\) 处的最优代价到目标收敛到 \(-\infty\)，值迭代无法终止。这种情形可以预先检测出来，并避开这样的初始状态（有些甚至可能在状态空间的另一个连通分量里）。</p>
+<p>也可能存在<b>无法避免的正环</b>。2.3.2 节里，代价到目标函数的表现取决于目标集是否可达。由于自然，目标集可能是<b>可能可达 possibly reachable</b> 或<b>保证可达 guaranteed reachable</b>，如图 10.2 所示。从某个初始状态「可能可达」，是指存在计划 \(\pi\)，以及一串把状态带进目标集的自然动作；「保证可达」则要求不论自然动作的序列是什么都到达目标。如果从某个 \(x_1\) 出发目标只是可能可达而非保证可达，并且所有边的代价为正，那么重复值迭代时 \(x_1\) 的值趋于无穷。例如每个基于计划的状态转移图都可能含有正代价的环，最坏情况下自然可以让状态无限地绕下去。如果只在「目标保证可达」的状态上判断收敛，并且没有负环，那么所有代价到目标值都不再变化时算法就该停止。</p>
+
+<svg class="fig" viewBox="0 0 640 170" role="img" aria-label="图 10.2：基于计划的状态转移图">
+  <defs><marker id="f102a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--text-2)"/></marker></defs>
+  <g font-size="12" fill="var(--text)">
+    <!-- (a) -->
+    <g stroke="var(--text-2)" stroke-width="1.5" fill="none" marker-end="url(#f102a)">
+      <line x1="32" y1="40" x2="96" y2="40"/><line x1="112" y1="40" x2="176" y2="40"/><line x1="192" y1="40" x2="256" y2="40"/>
+      <line x1="184" y1="48" x2="184" y2="112"/><line x1="176" y1="120" x2="112" y2="120"/><line x1="104" y1="112" x2="104" y2="48"/>
+    </g>
+    <g fill="var(--surface)" stroke="var(--text-2)" stroke-width="1.5">
+      <circle cx="24" cy="40" r="7"/><circle cx="104" cy="40" r="7"/><circle cx="184" cy="40" r="7"/><circle cx="264" cy="40" r="7" fill="var(--ok-soft)" stroke="var(--ok)"/>
+      <circle cx="104" cy="120" r="7"/><circle cx="184" cy="120" r="7"/>
+    </g>
+    <text x="24" y="22" text-anchor="middle">x_I</text><text x="264" y="22" text-anchor="middle" fill="var(--ok)">x_G</text>
+    <text x="144" y="155" text-anchor="middle" fill="var(--muted)">(a) 可能可达</text>
+    <!-- (b) -->
+    <g stroke="var(--text-2)" stroke-width="1.5" fill="none" marker-end="url(#f102a)">
+      <line x1="360" y1="40" x2="424" y2="40"/><line x1="352" y1="48" x2="352" y2="112"/><line x1="432" y1="48" x2="432" y2="112"/>
+      <line x1="360" y1="120" x2="424" y2="120"/><line x1="440" y1="120" x2="496" y2="120"/><line x1="504" y1="112" x2="504" y2="48"/>
+      <line x1="512" y1="40" x2="568" y2="40"/><line x1="512" y1="120" x2="568" y2="120"/><line x1="576" y1="112" x2="576" y2="48"/>
+      <line x1="584" y1="40" x2="616" y2="40"/>
+    </g>
+    <g fill="var(--surface)" stroke="var(--text-2)" stroke-width="1.5">
+      <circle cx="352" cy="40" r="7"/><circle cx="432" cy="40" r="7"/><circle cx="504" cy="40" r="7"/><circle cx="576" cy="40" r="7"/><circle cx="624" cy="40" r="7" fill="var(--ok-soft)" stroke="var(--ok)"/>
+      <circle cx="352" cy="120" r="7"/><circle cx="432" cy="120" r="7"/><circle cx="504" cy="120" r="7"/><circle cx="576" cy="120" r="7"/>
+    </g>
+    <text x="352" y="22" text-anchor="middle">x_I</text><text x="624" y="22" text-anchor="middle" fill="var(--ok)">x_G</text>
+    <text x="488" y="155" text-anchor="middle" fill="var(--muted)">(b) 保证可达</text>
+  </g>
+</svg>
+<p class="small muted figcap">图 10.2 的示意重画：(a) 目标可能可达，但不保证可达，因为可能出现无限循环；(b) 目标保证可达，因为所有的「流」都通向目标。（(b) 的边按「没有环」的原则重新排布，不是原图的逐边复制。）</p>
+
+<p>概率情形有三种情况：</p>
+<ol>
+  <li>值迭代在有限次迭代后到达平稳的代价到目标函数。</li>
+  <li>值迭代在任何意义下都不收敛。</li>
+  <li>值迭代只是<b>渐近地</b>收敛到平稳函数，迭代次数随值收敛而趋于无穷。</li>
+</ol>
+<p>前两种之前已经出现过：第一种发生在存在一个 \(\mathcal{G}_\pi\) 没有环的计划时；第二种发生在存在负环或正环、且环上所有边的概率都是 1 时——这本质上与非确定情形相同：最坏情况分析假定自然总施加最坏的动作，概率情形则是用概率 1 「强迫」了自然的动作。第三种是概率情形<b>特有</b>的：\(\mathcal{G}_\pi\) 中有正环或负环，但环上的边概率在 \((0,1)\) 之间；最优计划本身甚至都可能有这样的环。随着值迭代考虑越来越长的路径，环可能被多绕几圈，但每绕一圈概率就变小：概率随阶段数<b>指数</b>衰减，而代价只是<b>线性</b>累积。代价到目标函数的变化逐渐变小，只在迭代次数趋于无穷时才收敛到平稳值。如果可以接受一些近似误差，当整个 \(X\) 上的最大变化小于某个阈值 \(\epsilon\) 时就可以停止。得到所需质量的解要多少次迭代，取决于沿环走的概率和环的代价：概率越低，收敛越快。</p>
+<p><b>例 10.6（转移图中的环）</b>：设选定的计划 \(\pi\) 给出图 10.3 那样的基于计划的状态转移图，用概率模型，概率标在边上；为简单起见每次转移代价都是 1。从 \(x_I\) 出发的期望代价很好算：以概率 \(1/2\) 到达 \(x_G\) 的代价是 3；以概率 \(1/4\) 是 7；以概率 \(1/8\) 是 11。每多绕一圈代价增加 4，概率减半，于是得到无穷级数</p>
+<div class="eq">$$G_\pi(x_I) = 3 + 4\sum_{i=1}^{\infty}\frac{1}{2^i} = 7. \tag{10.47}$$</div>
+<p>这是标准的几何级数，和为 1，所以 (10.47) 收敛到 7。<span class="small muted">（补充：直接按定义写是 \(\sum_{i\ge1}2^{-i}(3+4(i-1))\)；(10.47) 用的是「绕圈次数 \(N\) 的期望 = \(\sum_{i\ge1}P(N\ge i)\)」这一尾和公式，\(P(N\ge i) = 2^{-i}\)，两者相等。）</span>尽管代价收敛到有限值，这只在极限下发生：理论上需要无穷多次值迭代。大多数应用里近似解就够了，很少几次迭代就能得到很高的精度（书中举的例子是 20 次迭代后变化约十亿分之一）<sup class="fn"><a href="#fn-20it" id="fn-20it-ref">3</a></sup>，所以一般在最大变化小于某个基于精度的阈值时终止。注意如果用非确定不确定性，值迭代不收敛：最坏情况下自然会让状态永远绕圈。尽管目标不是保证可达，概率不确定性模型仍允许得到合理的解。</p>
+
+<div class="widget wide" data-widget="cycle"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>p = 1/2：精确值 7；值迭代（初值 0）第 20 次迭代的变化还有 0.0625，要到第 121 次迭代变化才小于 10⁻⁹（参考代码第 7 项）。右边的对数图是一条阶梯状直线——指数衰减。</li>
+  <li>把 p 调小到 1/4：精确值 15，收敛慢得多（约 293 次）；调到 0.9：几十次就够了。这就是「沿环走的概率越低，收敛越快」。</li>
+  <li>点「抽样 1000 条」，平均代价在 7 附近摆动（这也预告了 10.4 节「用模拟评估计划」）；切到「非确定」，G_n 线性增长，永不收敛。</li>
+</ul></div>
+
+<h4>使用计划</h4>
+<p>假设阶段数没有上限。值迭代终止后得到 \(X\) 上的代价到目标函数——它还不完全是计划，因为计划要对每个 \(x\in X\) 给出一个<b>动作</b>。可以在 (10.45) 或 (10.39) 中记录产生最小值的 \(u\in U(x)\)。假设值迭代已经收敛到平稳的代价到目标函数。引入不确定性之前，最优动作由 (2.19) 决定；它的非确定和概率版本分别是</p>
+<div class="eq">$$\pi^*(x) = \operatorname*{argmin}_{u\in U(x)}\Big\{\max_{\theta\in\Theta(x,u)}\Big\{l(x,u,\theta) + G^*(f(x,u,\theta))\Big\}\Big\} \tag{10.48}$$</div>
+<div class="eq">$$\pi^*(x) = \operatorname*{argmin}_{u\in U(x)}\Big\{E_\theta\Big[l(x,u,\theta) + G^*(f(x,u,\theta))\Big]\Big\}. \tag{10.49}$$</div>
+<p>对每个已知最优代价到目标的 \(x\)，算一次 (10.45) 就得到最好的动作。方便的是，最优动作可以在执行时直接恢复，不必存储动作：每次执行中到达 \(x_k\)，就在 \(x_k\) 处计算 (10.48) 或 (10.49) 选出 \(u_k = \pi^*(x_k)\)。这意味着只要明白需要一个局部算子来恢复动作，代价到目标函数本身就可以看作最优计划的一种表示。局部计算竟能得到全局最优，也许显得奇怪；这之所以成立，是因为代价到目标函数已经编码了全局代价。8.4.1 节的连续状态空间里也观察到同样的现象：导航函数定义了一个反馈运动计划，用梯度算子恢复运动方向；这里 (10.48) 和 (10.49) 起同样的作用。</p>
+
+<div class="widget wide" data-widget="vi-lab"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>默认是例 10.2 的自然、期望代价、非目标 l_F = 100。点「运行到收敛」：约 49 次迭代（最大变化 &lt; 10⁻⁶），G*(x_I) ≈ 19.53，再「模拟 20 次执行」，平均阶段数在它附近（参考代码第 4 项）。<span class="muted">（补充观察：比没有自然时的 20 还小一点——墙边的自然只能把机器人往里推，平均下来反而帮了忙。）</span></li>
+  <li>把 l_F 换成 ∞，或者切到「最坏情况」：X_G 之外全是 ∞。前者是因为任何有限 K 阶段问题都有正概率没到达；后者是因为自然总能把移动抵消掉。这就是书中说的「概率不确定性时，有时给 l_F 一个很大的有限值更合适」。</li>
+  <li>换「侧滑（补充）」再看「最坏情况」：只剩目标附近 20 个状态有限，其中右边贴墙的那一列格外「安全」——墙挡住了自然的一侧。期望代价下 G*(x_I) ≈ 19.40。点任意格子换 x_I。</li>
+</ul></div>
+
+<h3 id="s10-2-2">10.2.2 策略迭代 <span class="en">Policy Iteration</span></h3>
+<p>10.2.1 节的值迭代是在状态空间上迭代地更新代价到目标值；最优计划也可以通过在<b>计划空间</b>里迭代搜索得到，这就是<b>策略迭代 policy iteration</b>（「策略 policy」是「计划」的同义词）。下面针对概率不确定性讲解，并假设 \(X\) 有限；稍作修改也可以得到非确定版本（习题 14）。</p>
+<p>策略迭代反复需要计算给定计划 \(\pi\) 的代价到目标，即 (10.32) 的 \(G_\pi\)。先假设没有不确定性，状态转移方程是 \(x' = f(x,u)\)。2.3.2 节的动态规划方程 (2.18) 可以用来推导执行 \(\pi\) 时每个状态的代价到目标：对每个 \(x\in X\) 抄一份 (2.18)，并把其中的 min 换成给定的动作 \(u = \pi(x)\)：</p>
+<div class="eq">$$G_\pi(x) = l(x,\pi(x)) + G_\pi(f(x,\pi(x))). \tag{10.50}$$</div>
+<p>这里用 \(G_\pi\) 代替 \(G^*\)，因为已经没有变量需要优化（它只是执行 \(\pi\) 的代价）。可以把 (10.50) 看成一种平凡的动态规划：可选的计划被限制为单个 \(\pi\)；动态规划递推在所有计划的空间上成立，在只含一个计划的空间上当然也成立。若有 \(n\) 个状态，(10.50) 给出 \(n\) 个方程，每个都表达某个状态的 \(G_\pi(x)\)。对 \(x\in X_G\) 已知 \(G_\pi(x) = 0\)；于是一步能到达 \(X_G\) 的所有状态的代价可以用 (10.50) 及 \(G_\pi(f(x,\pi(x))) = 0\) 算出；接着又能算出一步能到达这些状态的状态……这一过程持续到所有状态的代价都算完，与 Dijkstra 算法的行为类似。这并不神秘：(10.50) 说明了状态转移图中相邻状态之间代价的差；所有差都给定、\(X_G\) 上又有初始条件，其它值就都能把这些差加起来得到。类似的想法出现在 Hamilton–Jacobi–Bellman 方程和 Pontryagin 极小值原理中（15.2 节）。</p>
+<p>现在转到概率情形。(2.18) 的概率版本对应 (10.49)<sup class="fn"><a href="#fn-218" id="fn-218-ref">4</a></sup>。为简单起见考虑 \(l(x,u,\theta)\) 不依赖 \(\theta\) 的特殊情形：</p>
+<div class="eq">$$\pi^*(x) = \operatorname*{argmin}_{u\in U(x)}\Big\{l(x,u) + \sum_{x'\in X} G^*(x')P(x'\mid x,u)\Big\}, \tag{10.51}$$</div>
+<p>其中 \(x' = f(x,u)\)。代价到目标函数 \(G^*\) 满足动态规划递推式</p>
+<div class="eq">$$G^*(x) = \min_{u\in U(x)}\Big\{l(x,u) + \sum_{x'\in X} G^*(x')P(x'\mid x,u)\Big\}. \tag{10.52}$$</div>
+<p>把动作集合限制成单个计划 \(\pi\)，就得到 (10.50) 的概率版本：</p>
+<div class="eq">$$G_\pi(x) = l(x,\pi(x)) + \sum_{x'\in X} G_\pi(x')P(x'\mid x,\pi(x)), \tag{10.53}$$</div>
+<p>\(x'\) 是下一状态。对每个状态写出 (10.53) 就能确定执行 \(\pi\) 时每个 \(x\) 的代价到目标：除 \(G_\pi\) 外的量都已知，所以 \(n\) 个状态就有 \(n\) 个线性方程和 \(n\) 个未知数。(10.50) 也是这样，只是那里的方程简单得多；概率情形下必须解一个 \(n\) 元线性方程组，可以用经典的线性代数方法，例如<b>奇异值分解 singular value decomposition（SVD）</b>。</p>
+
+<div class="box algo">
+  <div class="box-title">图 10.4　策略迭代算法 POLICY ITERATION ALGORITHM</div>
+  <div class="pseudo">
+    <span class="ln">取一个初始计划 π：在每个 x ∈ X_G 施加 u_T，其余动作任选。</span>
+    <span class="ln">用 (10.53) 计算计划 π 下每个 x ∈ X 的 G_π。</span>
+    <span class="ln">把算出的 G_π 当作 G*，用 (10.51) 算一个更好的计划 π′：</span>
+    <span class="ln">    π′(x) = argmin_{u∈U(x)} { l(x,u) + Σ_{x′∈X} G_π(x′) P(x′|x,u) }          (10.54)</span>
+    <span class="ln">若 π′ 至少给出一个更低的代价到目标值，令 π = π′ 并重复第 2、3 步；否则宣布 π 为最优计划 π*。</span>
+  </div>
+</div>
+<p>有了计算计划代价的方法，策略迭代就很直接了（图 10.4）。注意第 3 步：为一个计划 \(\pi\) 算出的 \(G_\pi\) 被用来评估其它计划，结果是「第一阶段尝试一个新动作、之后都用 \(\pi\)」时的代价。如果新动作不能降低代价，\(\pi\) 一定已经是最优的，因为这意味着 (10.54) 已经等价于平稳的动态规划方程。如果能改进 \(\pi\)，就得到一个新计划；新计划一定严格优于前一个，而计划的总数有限，所以策略迭代在有限次迭代后收敛。</p>
+<p><b>例 10.7（策略迭代的演示）</b>：\(X = \{a,b,c\}\)，\(U = \{1,2,u_T\}\)，\(X_G = \{c\}\)。对所有 \(x\in X\) 和 \(u\in U\setminus\{u_T\}\)，\(l(x,u) = 1\)（施加 \(u_T\) 没有代价）。每个动作的概率状态转移图见图 10.5（下面互动图的两个面板）。第一步取初始计划：\(\pi(a) = 1\)、\(\pi(b) = 1\)，\(\pi(c) = u_T\)（因为 \(c\in X_G\)）。用 (10.53) 计算 \(G_\pi\)，得到三个方程：</p>
+<div class="eq">$$G_\pi(a) = 1 + G_\pi(a)P(a\mid a,1) + G_\pi(b)P(b\mid a,1) + G_\pi(c)P(c\mid a,1) \tag{10.55}$$</div>
+<div class="eq">$$G_\pi(b) = 1 + G_\pi(a)P(a\mid b,1) + G_\pi(b)P(b\mid b,1) + G_\pi(c)P(c\mid b,1) \tag{10.56}$$</div>
+<div class="eq">$$G_\pi(c) = 0 + G_\pi(a)P(a\mid c,u_T) + G_\pi(b)P(b\mid c,u_T) + G_\pi(c)P(c\mid c,u_T). \tag{10.57}$$</div>
+<p>每个方程对应一个状态，使用 \(\pi\) 中相应的动作。最后一个方程按终止动作的基本规则化为 \(G_\pi(c) = 0\)。代入 \(P(x'\mid x,u)\) 和 \(G_\pi(c) = 0\) 后，另两个方程变成</p>
+<div class="eq">$$G_\pi(a) = 1 + \tfrac13 G_\pi(a) + \tfrac13 G_\pi(b) \tag{10.58}$$</div>
+<div class="eq">$$G_\pi(b) = 1 + \tfrac13 G_\pi(a) + \tfrac13 G_\pi(b). \tag{10.59}$$</div>
+<p>解得 \(G_\pi(a) = G_\pi(b) = 3\)。现在用 \(G_\pi(a) = G_\pi(b) = 3\)、\(G_\pi(c) = 0\) 对每个状态用 (10.54) 找更好的计划 \(\pi'\)。在状态 \(a\) 处求解</p>
+<div class="eq">$$\pi'(a) = \operatorname*{argmin}_{u\in U}\Big\{l(x,a) + \sum_{x'\in X} G_\pi(x')P(x'\mid x,a)\Big\}. \tag{10.60}$$</div>
+<p class="small muted">（(10.60) 照抄原书：这里的 \(l(x,a)\)、\(P(x'\mid x,a)\) 按意思应读作 \(l(a,u)\)、\(P(x'\mid a,u)\)。）</p>
+<p>最好的动作是 \(u = 2\)，代价为 5/2：</p>
+<div class="eq">$$l(x,2) + \sum_{x'\in X} G_\pi(x')P(x'\mid x,2) = 1 + 0 + (3)\tfrac12 + (0)\tfrac12 = \tfrac52. \tag{10.61}$$</div>
+<p>所以 \(\pi'(a) = 2\)<sup class="fn"><a href="#fn-1061" id="fn-1061-ref">5</a></sup>。类似地 \(\pi'(b) = 2\)，代价 7/4；\(\pi'(c) = u_T\)，这就确定了一个改进的计划。既然找到了改进的计划，用 \(\pi'\) 取代 \(\pi\)，回到第 2 步。新计划给出方程</p>
+<div class="eq">$$G_\pi(a) = 1 + \tfrac12 G_\pi(b) \tag{10.62}$$</div>
+<div class="eq">$$G_\pi(b) = 1 + \tfrac14 G_\pi(a). \tag{10.63}$$</div>
+<p>解得 \(G_\pi(a) = 12/7\)、\(G_\pi(b) = 10/7\)。下一步试图用 (10.54) 找更好的计划，但发现当前计划无法再改进，策略迭代正确地报告 \(\pi^* = \pi\) 并终止。</p>
+
+<div class="widget wide" data-widget="policy-iteration"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>按书中的初始计划 (1, 1) 交替点「求值」「改进」：第 1 轮 G = 3、3，改进表里 u = 2 给出 5/2、7/4；第 2 轮 G = 12/7、10/7，u = 1 给出 43/21，无法改进，结束（参考代码第 8 项）。</li>
+  <li>初始计划选 (2, 2)：一轮就结束。比较下方的对照：值迭代要 21 次迭代才把误差压到 10⁻⁹，策略迭代两轮就<b>精确</b>结束。</li>
+  <li>点「随机一组概率」多试几次：策略迭代几乎总在 1–3 轮内结束；注意每轮都要解一个线性方程组——状态一多，这就是它的瓶颈。</li>
+</ul></div>
+<p>策略迭代通常比值迭代需要的迭代次数少，这可能让它显得更好：求一个计划的代价时解方程组，等于一次考虑了多个阶段。但对大多数规划问题 \(X\) 很大，每次迭代都要解的大线性方程组会变得难以处理。在某些应用里状态空间够小，或者稀疏矩阵技术能在更大的状态空间上高效求解。总的来说，基于值的方法对大多数规划问题似乎更可取。</p>
+
+<h3 id="s10-2-3">10.2.3 图搜索方法 <span class="en">Graph Search Methods</span></h3>
+<p>值迭代很通用，但在很多情况下，大部分时间浪费在不更新值的状态上：要么最优代价到目标早已知道，要么目标还没「传」到那里。策略迭代似乎缓解了这个问题，但它只适用于小状态空间。这些不足促使人们考虑别的办法，比如推广 2.2 节的图搜索方法。在某些情况下 Dijkstra 算法甚至可以推广，快速得到最优解，但需要对解的结构做一个很强的假设。在非确定情形，可以发展出只求可行解、不管最优性的搜索方法。对本节的方法，只要搜索是 2.2 节意义下的<b>系统的 systematic</b>，\(X\) 不必有限。</p>
+<h4>用反向投影做后向搜索</h4>
+<p>可以从 \(X_G\) 出发，用反向投影逐步向外扩展一个计划。图 10.6 给出了非确定不确定性下求可行计划的一个完备算法。令 \(S\) 为已经算好计划的状态集合：初始 \(S = X_G\)，可能的话 \(S\) 会一直长到 \(S = X\)。计划一开始对每个 \(x\in X_G\) 定为 \(\pi(x) = u_T\)，执行过程中再逐步扩展到新状态。</p>
+<div class="box algo">
+  <div class="box-title">图 10.6　反向投影算法 BACKPROJECTION ALGORITHM（非确定不确定性下求可行计划）</div>
+  <div class="pseudo">
+    <span class="ln">初始化 S = X_G，对每个 x ∈ X_G 令 π(x) = u_T。</span>
+    <span class="ln">对每个 x ∈ X ∖ S：若存在 u ∈ U(x) 使 x ∈ SB(S, u)，则 1) 令 π(x) = u，2) 把 x 插入 S。</span>
+    <span class="ln">若第 2 步没能扩大 S 就退出——这意味着 SB(S) = S，不可能再有进展。否则回到第 2 步。</span>
+  </div>
+</div>
+<p>第 2 步检查每个还不在 \(S\) 中的状态 \(x\) 是否应该加入：要判断是否存在某个动作 \(u\)，使从 \(x\) 施加 \(u\) 后的下一状态<b>保证</b>落在 \(S\) 里（图 10.7）。若是，就令 \(\pi(x) = u\) 并把 \(x\) 加入 \(S\)。若不能再有进展，算法就必须终止；否则回到第 2 步再检查每个状态——这是必要的，因为 \(S\) 变大了，下一轮可能有新的状态落进它的强反向投影里。出于效率考虑，第 2 步中的 \(X\setminus S\) 可以安全地换成更小的集合 \(\mathrm{WB}(S)\setminus S\)，因为其它状态不可能受影响。视具体问题，这个条件可能是快速剪掉许多无望状态的好办法。例如在一个任何时刻任何方向最多走两步的网格环境里，一个简单的距离测试就能排除许多不可能加入 \(S\) 的状态。只要考虑哪些状态加入 \(S\) 的方式是系统的（2.2 节），图 10.6 的算法就有很多变体。一种是同时维护代价到目标、按最小代价逐个插入状态来扩大 \(S\)——这就是下面的非确定版 Dijkstra 算法。</p>
+
+<svg class="fig" viewBox="0 0 640 200" role="img" aria-label="图 10.7 与 10.9 的示意">
+  <defs><marker id="f107a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--warn)"/></marker></defs>
+  <g font-size="12">
+    <path d="M110,190 C120,110 170,50 300,30" fill="none" stroke="var(--ok)" stroke-width="2"/>
+    <text x="230" y="130" fill="var(--ok)">S</text>
+    <circle cx="40" cy="45" r="6" fill="var(--accent)"/><text x="40" y="30" text-anchor="middle" fill="var(--accent-text)">x</text>
+    <g stroke="var(--warn)" stroke-width="1.6" marker-end="url(#f107a)">
+      <line x1="46" y1="48" x2="188" y2="60"/><line x1="46" y1="50" x2="160" y2="96"/><line x1="44" y1="52" x2="150" y2="130"/><line x1="42" y1="53" x2="132" y2="166"/>
+    </g>
+    <g fill="var(--surface)" stroke="var(--warn)" stroke-width="1.5"><circle cx="194" cy="61" r="5"/><circle cx="165" cy="98" r="5"/><circle cx="154" cy="134" r="5"/><circle cx="135" cy="171" r="5"/></g>
+    <text x="96" y="22" fill="var(--warn)">u 下的一步前向投影</text>
+    <text x="160" y="196" text-anchor="middle" fill="var(--muted)">图 10.7：x ∈ SB(S, u)</text>
+    <!-- 10.9 -->
+    <path d="M430,190 C440,110 490,50 620,30" fill="none" stroke="var(--ok)" stroke-width="2"/>
+    <path d="M470,80 C500,20 560,10 620,50" fill="none" stroke="var(--ok)" stroke-width="1.6" stroke-dasharray="5 4"/>
+    <text x="560" y="140" fill="var(--ok)">原来的 S</text><text x="540" y="20" fill="var(--ok)">扩大后的 S</text>
+    <circle cx="360" cy="70" r="6" fill="var(--accent)"/><text x="350" y="56" text-anchor="middle" fill="var(--accent-text)">x</text>
+    <g stroke="var(--warn)" stroke-width="1.6" marker-end="url(#f107a)">
+      <line x1="366" y1="68" x2="514" y2="44"/><line x1="366" y1="72" x2="500" y2="88"/><line x1="364" y1="75" x2="470" y2="130"/><line x1="362" y1="76" x2="452" y2="166"/>
+    </g>
+    <g fill="var(--surface)" stroke="var(--warn)" stroke-width="1.5"><circle cx="520" cy="43" r="5" fill="var(--current)"/><circle cx="505" cy="89" r="5"/><circle cx="474" cy="133" r="5"/><circle cx="455" cy="170" r="5"/></g>
+    <text x="528" y="58" fill="var(--current)">x_s</text>
+    <text x="490" y="196" text-anchor="middle" fill="var(--muted)">图 10.9：x ∈ Front(x_s, S)</text>
+  </g>
+</svg>
+<p class="small muted figcap">图 10.7 / 10.9 的示意重画。左：若存在 \(u\in U(x)\) 使一步前向投影整个落在 \(S\) 里，\(x\) 就能加入 \(S\)。右：对这样的 \(x\) 计算最坏情况代价到目标——前向投影落在<b>更新后</b>的 \(S\) 里，并且其中一个状态正是刚加入的 \(x_s\)。</p>
+
+<h4>非确定 Dijkstra</h4>
+<p>图 10.8 把 Dijkstra 算法推广到非确定不确定性下的 Formulation 10.1。它也可以看成图 10.6 算法的一个变体，因为它用反向投影扩大 \(S\)。图 10.8 是 Dijkstra 算法的后向搜索版本，所以它维护最坏情况代价到目标 \(G\)，这个 \(G\) 有时会成为最优的最坏情况代价到目标 \(G^*\)。初始时 \(X_G\) 中的状态 \(G = 0\)，其余 \(G = \infty\)。</p>
+<div class="box algo">
+  <div class="box-title">图 10.8　非确定 Dijkstra NONDETERMINISTIC DIJKSTRA（非确定不确定性下求最优可行计划）</div>
+  <div class="pseudo">
+    <span class="ln">初始化 S = ∅，A = X_G；每个 x ∈ A 关联 u_T；A 中 G(x) = 0，其余状态 G(x) = ∞。</span>
+    <span class="ln">若 A 非空，取出 A 中 G 最小的 x_s 及其对应的 u；若 A 为空则退出（不可能再有进展）。</span>
+    <span class="ln">令 π*(x_s) = u 作为最优计划的一部分，把 x_s 插入 S；宣布 G*(x_s) = G(x_s)。</span>
+    <span class="ln">对前沿集合 Front(x_s, S) 中的每个 x 用 (10.64) 计算 G(x)，把 Front(x_s, S) 连同对应动作插入 A；</span>
+    <span class="ln">    已经在 A 中的状态保留较低的 G 值（原来的或新算出的）。回到第 2 步。</span>
+  </div>
+</div>
+<p>第 1 步初始化。第 2 步选出 \(A\) 中值最小的状态。和确定性问题的 Dijkstra 算法一样，可以知道这个状态的代价到目标是最小可能的，因此第 3 步宣布 \(G^*(x_s) = G(x_s)\)，并把 \(\pi^*\) 扩展到 \(x_s\)。第 4 步更新一些状态的代价并扩大活跃集 \(A\)。把 \(x_s\) 插入 \(S\) 会立刻影响哪些状态的代价？是那些 \(x_k\in X\setminus S\)：存在 \(u_k\in U(x_k)\)，其一步前向投影 \(X_{k+1}(x_k,u_k)\) 满足 1）\(x_s\in X_{k+1}(x_k,u_k)\) 且 2）\(X_{k+1}(x_k,u_k)\subseteq S\)（图 10.9）。满足这两个条件的状态集合称为<b>前沿集合 frontier set</b>，记作 \(\mathrm{Front}(x_s,S)\)。对每个 \(x\in\mathrm{Front}(x_s,S)\)，令 \(U_f(x)\subseteq U(x)\) 为前向投影满足这两个条件的所有动作。</p>
+<p>前沿集合也可以用反向投影来理解：弱反向投影 \(\mathrm{WB}(x_s)\) 给出所有可能一步到达 \(x_s\) 的状态；但代价到目标只对 \(\mathrm{SB}(S)\) 中的状态有限（这里 \(S\) 已含 \(x_s\)）；\(S\) 中的状态显然要排除，因为它们的最优代价已知。这样候选前沿状态缩小到 \((\mathrm{WB}(x_s)\cap\mathrm{SB}(S))\setminus S\)。这个集合仍然太大，因为必须是<b>同一个</b>动作 \(u\) 产生的前向投影既包含 \(x_s\) 又是 \(S\) 的子集。对所有 \(x\in\mathrm{Front}(x_s,S)\)，最坏情况代价到目标按下式计算：</p>
+<div class="eq">$$G(x) = \min_{u\in U_f(x)}\Big\{\max_{\theta\in\Theta(x,u)}\Big\{l(x,u,\theta) + G(f(x,u,\theta))\Big\}\Big\}, \tag{10.64}$$</div>
+<p>用的是受限的动作集合 \(U_f(x)\)。若 \(x\) 已经在 \(A\) 中且算过 \(G(x)\)，则保留原值与 (10.64) 中的较小者。</p>
+<h4>概率 Dijkstra</h4>
+<p>Dijkstra 算法的概率版本一般不存在；但对某些问题可以让它奏效。把图 10.8 的算法改用</p>
+<div class="eq">$$G(x) = \min_{u\in U_f(x)}\Big\{E_\theta\Big[l(x,u,\theta) + G(f(x,u,\theta))\Big]\Big\} \tag{10.65}$$</div>
+<p>代替 (10.64)。Front 的定义不变，概率问题仍然使用非确定的前向投影：转移图中概率非零的边才被当作可能的未来状态，概率为零的边从前向投影中排除，因为它们不会影响算出的代价。当存在一个计划 \(\pi\)，使得从任何 \(x_k\in X\) 出发都以概率 1 有 \(G_\pi(x_{k+1}) &lt; G_\pi(x_k)\) 时，概率版的 Dijkstra 算法可以成功应用。这个条件是什么意思？从任何 \(x_k\) 出发，所有概率非零的下一状态都必须有更低的代价值。若所有边的代价为正，这就是说多阶段前向投影里的所有路径都朝目标单调前进。确定性情形下只要 \(l(x,u)\) 为正就总是如此。如果可能出现非单调的路径，Dijkstra 算法就会失效，因为代价到目标值发生变化的区域不再局限于一条向外传播的「带」里——而那正是确定性问题中 Dijkstra 算法的特点。</p>
+
+<div class="widget wide" data-widget="nd-dijkstra"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>「反向投影算法」点「跑完」：23 遍后 S 覆盖全部 124 个非目标状态；勾选「只检查 WB(S)∖S」再跑，结果完全相同，被检查的状态从 1381 个降到 194 个（参考代码第 6 项）。鼠标停在冰面格子上：横滑使前向投影变成 3 个格子，要它们<b>全部</b>在 S 里才能加入。</li>
+  <li>切到「非确定 Dijkstra」一步步走：每弹出一个 x_s，橙色的前沿就是图 10.9 里的那些状态。跑完后 G 与最坏情况值迭代完全一致（最大 G* = 23）；Dijkstra 总共只做了约 190 次 (10.64) 求值，而值迭代要 24 遍 × 133 个状态。</li>
+  <li>勾选「对比：期望代价计划」：紫色箭头是概率模型（横滑 0.2）下的最优计划，紫框是两者选了不同动作的状态。最坏情况计划更愿意贴墙走、绕开冰面；左下角 (0, 0) 的最坏代价 23，期望代价只有约 18.3（无自然时 18）。</li>
+</ul></div>
+</section>
+
+<!-- ============================================================ 10.3 -->
+<section id="s10-3">
+<h2>10.3 无限时域问题 <span class="en">Infinite-Horizon Problems</span></h2>
+<p>在随机控制理论和人工智能研究中，迄今考虑的大多数问题都<b>不指定目标集</b>，因此也没有终止动作。任务是找一个计划，使若干阶段上的期望代价最小（或期望回报最大）。若阶段数有限，直接套用 10.2.1 节的值迭代即可：后向值迭代到第一个阶段就停。阶段数无穷时问题更具挑战性，这称为<b>无限时域问题 infinite-horizon problem</b>。</p>
+<p>10.1 节的规划问题阶段数也是无穷的，但那里预期只要目标可达，终止就会在有限次迭代内发生。没有终止条件，代价会趋于无穷。有两种替代的代价模型强迫代价变为有限：<b>折扣代价模型 discounted cost model</b> 让每阶段的代价随阶段向未来推进而缩小，总代价成为一个收敛的几何级数；<b>平均每阶段代价模型 average cost-per-stage model</b> 把总代价除以阶段数，本质上是做归一化，同样防止发散到无穷。10.2 节的部分计算方法可以改造到这两个模型上。</p>
+
+<h3 id="s10-3-1">10.3.1 问题表述</h3>
+<p>两种代价模型都是为了在阶段数无穷时迫使累积代价有限，都可以看成对 Formulation 10.1 代价泛函的小改动。下面的表述在整个 10.3 节使用：</p>
+<div class="box def formulation">
+  <div class="box-title">Formulation 10.2（无限时域问题 Infinite-Horizon Problems）</div>
+  <ol>
+    <li>非空、<b>有限</b>的状态空间 \(X\)。</li>
+    <li>对每个 \(x\in X\)，有限的动作空间 \(U(x)\)（<b>没有</b>终止动作，与 Formulation 10.1 相反）。</li>
+    <li>对每个 \(x\in X\)、\(u\in U(x)\)，有限的自然动作空间 \(\Theta(x,u)\)。</li>
+    <li>状态转移函数 \(f(x,u,\theta)\)。</li>
+    <li>一组阶段，从 \(k = 1\) 开始无限延续。</li>
+    <li>阶段可加的代价泛函 \(L(\tilde{x},\tilde{u},\tilde\theta)\)，其中 \(\tilde{x}\)、\(\tilde{u}\)、\(\tilde\theta\) 分别是无穷的状态、动作和自然历史。下面给出两种形式。</li>
+  </ol>
+</div>
+<p>与 Formulation 10.1 相比，这里没有初始状态和目标状态，所以也没有终止动作。没有目标集，这种规划看起来也许有些奇怪；反馈计划 \(\pi\) 的形式不变：对每个 \(x\in X\) 给出 \(u\in U(x)\)。一个可能的应用：工厂里的机器人在多个来源和多个目的地之间运送物料。它工作一整个长班次，对「运送请求何时到来」有一个概率模型。可以用 Formulation 10.2 定义一个使物料平均等待时间最短的问题。这个策略不应依赖于班次长度，所以阶段数无穷是合理的；如果班次太短，机器人可能只专注于一次运送，甚至来不及完成。</p>
+<h4>折扣代价</h4>
+<p>Formulation 10.2 的第 6 项必须小心定义，保证即使阶段数趋于无穷也总得到有限值。<b>折扣代价模型</b>提供了一个简单办法：让未来阶段的代价迅速减小。它基于标准的几何级数：对任意实参数 \(\alpha\in(0,1)\)，</p>
+<div class="eq">$$\lim_{K\to\infty}\Big(\sum_{k=0}^{K}\alpha^k\Big) = \frac{1}{1-\alpha}. \tag{10.66}$$</div>
+<p>最简单的情形 \(\alpha = 1/2\) 给出 \(1 + 1/2 + 1/4 + 1/8 + \cdots\)，显然收敛到 2。现在令 \(\alpha\in(0,1)\) 为<b>折扣因子 discount factor</b>，用于代价泛函的定义：</p>
+<div class="eq">$$L(\tilde{x},\tilde{u},\tilde\theta) = \lim_{K\to\infty}\Big(\sum_{k=0}^{K}\alpha^k l(x_k,u_k,\theta_k)\Big). \tag{10.67}$$</div>
+<p>记 \(l_k\) 为阶段 \(k\) 收到的代价 \(l(x_k,u_k,\theta_k)\)。为了方便，在这里第一个阶段记为 \(k = 0\)，而不是之前用的 \(k = 1\)。随着最大阶段 \(K\) 增大，未来远处的代价重要性越来越小，这很容易从图 10.10 看出。</p>
+<div class="table-wrap"><table class="data" style="max-width:420px;margin:0 auto">
+  <tr><th>阶段</th><th>\(L^*_K\)</th></tr>
+  <tr><td>\(K = 0\)</td><td>\(l_0\)</td></tr>
+  <tr><td>\(K = 1\)</td><td>\(l_0 + \alpha l_1\)</td></tr>
+  <tr><td>\(K = 2\)</td><td>\(l_0 + \alpha l_1 + \alpha^2 l_2\)</td></tr>
+  <tr><td>\(K = 3\)</td><td>\(l_0 + \alpha l_1 + \alpha^2 l_2 + \alpha^3 l_3\)</td></tr>
+  <tr><td>\(K = 4\)</td><td>\(l_0 + \alpha l_1 + \alpha^2 l_2 + \alpha^3 l_3 + \alpha^4 l_4\)</td></tr>
+</table></div>
+<p class="small muted figcap">图 10.10：代价的量级随阶段指数衰减。</p>
+<p>代价减小的速度强烈依赖于 \(\alpha\)：\(\alpha = 1/2\) 时代价下降得很快；\(\alpha = 0.999\) 时趋于零就慢得多。权衡在于：\(\alpha\) 大时考虑了更多阶段，设计出的计划通常质量更高；\(\alpha\) 小时值迭代之类的方法收敛快得多，但解的质量可能因为「<b>短视 short sightedness</b>」而变差。(10.67) 中的 \(l(x_k,u_k,\theta_k)\) 依 \(x_k\)、\(u_k\)、\(\theta_k\) 取不同的值；由于只有有限种可能，它们一定以某个正常数 \(c\) 为界<span class="small muted">（书中脚注：\(X\) 甚至可以是无穷的，只要可能的代价集合有界）</span>。因此</p>
+<div class="eq">$$\lim_{K\to\infty}\Big(\sum_{k=0}^{K}\alpha^k l(x_k,u_k,\theta_k)\Big) \le \lim_{K\to\infty}\Big(\sum_{k=0}^{K}\alpha^k c\Big) \le \frac{c}{1-\alpha}, \tag{10.68}$$</div>
+<p>这说明 \(L(\tilde{x},\tilde{u},\tilde\theta)\) 有上界；类似地可以构造下界，保证总代价总是有限的。</p>
+
+<div class="widget" data-widget="discount"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>α = 1/2：1 + 1/2 + 1/4 + … → 2，几个阶段之后权重就可以忽略（第 7 个阶段起权重低于 1%）。</li>
+  <li>α = 0.99：极限是 100，前 60 个阶段加起来还远没到；α = 0.999 时要几百个阶段权重才降到 1% 以下——这就是「α 越大考虑的未来越长，但值迭代越慢」。</li>
+  <li>切到「代价时高时低」：折扣后的累计代价依然被 (10.68) 的 c/(1−α) 压住。</li>
+</ul></div>
+
+<h4>平均每阶段代价</h4>
+<p>折扣代价的替代方案是<b>平均每阶段代价模型</b>，它把总代价除以阶段数来保持有限：</p>
+<div class="eq">$$L(\tilde{x},\tilde{u},\tilde\theta) = \lim_{K\to\infty}\Big(\frac{1}{K}\sum_{k=0}^{K-1} l(x_k,u_k,\theta_k)\Big). \tag{10.69}$$</div>
+<p>用每阶段代价的上界 \(c\)，显然即使 \(K\to\infty\)，(10.69) 也不会超过 \(c\)。这个模型有时更可取，因为代价不依赖任意的参数 \(\alpha\)。</p>
+
+<h3 id="s10-3-2">10.3.2 求解技术</h3>
+<p>10.2 节的值迭代和策略迭代对无限时域问题有直接的改造，下面介绍；但要注意，关于它们的收敛性和数值稳定性还有许多其它重要问题。还有几种更复杂的变体这里不讲，它们很重要，因为解决了很多这类问题。本节的要点是理解与 10.1、10.2 节问题之间简单的关系。</p>
+<h4>折扣代价的值迭代</h4>
+<p>后向值迭代的解自然地沿用 10.2.1 节的方法。为了记号方便，令第一个阶段为 \(k = 0\)，这样 \(\alpha^{k-1}\) 可以换成 \(\alpha^k\)。概率情形下的期望最优代价到目标是</p>
+<div class="eq">$$G^*(x) = \lim_{K\to\infty}\Big(\min_{\tilde{u}}\Big\{E_{\tilde\theta}\Big[\sum_{k=1}^{K}\alpha^k l(x_k,u_k,\theta_k)\Big]\Big\}\Big). \tag{10.70}$$</div>
+<p>期望取遍所有自然历史，每个都是自然动作的无穷序列。非确定情形对应的表达式是<sup class="fn"><a href="#fn-k0" id="fn-k0-ref">6</a></sup></p>
+<div class="eq">$$G^*(x) = \lim_{K\to\infty}\Big(\min_{\tilde{u}}\Big\{\max_{\tilde\theta}\Big\{\sum_{k=1}^{K}\alpha^k l(x_k,u_k,\theta_k)\Big\}\Big\}\Big). \tag{10.71}$$</div>
+<p>概率情形更常见，下面只讲它；非确定版本类似处理（习题 17）。和以前一样用后向值迭代，因为它们更容易表达。折扣因子带来一个小麻烦，要修正之后动态规划递推才能正常工作。困难在于阶段编号现在以 \(\alpha^k\) 的形式出现在代价函数里，2.3.1.1 节的平移不变性不再成立，必须小心对待阶段编号——而后向值迭代的最终阶段编号原本是未知且不重要的。</p>
+<p>考虑一系列折扣决策问题，最大阶段编号依次为 \(K = 0, 1, 2, \ldots\)。看图 10.10 中相邻两行：求 \(K+1\) 阶段问题和 \(K\) 阶段问题的最优代价到目标有什么区别？\(K = 4\) 那一行的后四项，可以把 \(K = 3\) 那一行的所有项乘以 \(\alpha\) 再加一个新项 \(l_0\) 得到；唯一的不同是从 \(K = 3\) 借来的每个 \(l_i\) 的下标要平移一位。一般地，\(K\) 阶段优化问题的最优代价乘以 \(\alpha\) 后，就能充当 \(K+1\) 阶段问题的最优代价：\(K+1\) 阶段问题可以通过优化「第一阶段代价 + 折扣 \(\alpha\) 后的 \(K\) 阶段最优代价」来求解。用直接的动态规划论证可以推出：设 \(K\) 固定，对 \(k\) 从 0 到 \(K\)，代价到目标可以递归地写成</p>
+<div class="eq">$$G^*_k(x_k) = \min_{u_k\in U(x_k)}\Big\{E_{\theta_k}\Big[\alpha^k l(x_k,u_k,\theta_k) + G^*_{k+1}(x_{k+1})\Big]\Big\}, \tag{10.72}$$</div>
+<p>其中 \(x_{k+1} = f(x_k,u_k,\theta_k)\)。问题是这个递推通过 \(\alpha^k\) 依赖于 \(k\)，看起来不平稳。按图 10.10 利用相邻代价值的想法，做一个记号变换：令 \(J^*_{K-k}(x_k) = \alpha^{-k}G^*_k(x_k)\)。这把阶段编号的方向反过来，避免指定最终阶段，同时用 \(\alpha^{-k}\) 抵消编号的变化。代入 (10.72)：</p>
+<div class="eq">$$\alpha^k J^*_{K-k}(x_k) = \min_{u_k\in U(x_k)}\Big\{E_{\theta_k}\Big[\alpha^k l(x_k,u_k,\theta_k) + \alpha^{k+1}J^*_{K-k-1}(x_{k+1})\Big]\Big\}. \tag{10.73}$$</div>
+<p>两边除以 \(\alpha^k\)，再令 \(i = K-k\)：</p>
+<div class="eq">$$J^*_i(x_k) = \min_{u_k\in U(x_k)}\Big\{E_{\theta_k}\Big[l(x_k,u_k,\theta_k) + \alpha J^*_{i-1}(x_{k+1})\Big]\Big\}, \tag{10.74}$$</div>
+<p>其中 \(J^*_i\) 表示 \(K = i\) 的有限时域折扣问题的期望代价。注意 (10.74) 用 \(J^*_{i-1}\) 表示 \(J^*_i\)，而 \(x_k\) 是给定的、右边用的是 \(x_{k+1}\)：下标看起来朝相反方向走，因为这只是去掉了一些下标的后向值迭代。只要 \(x_{k+1} = f(x_k,u_k,\theta_k)\)，\(x_k\)、\(x_{k+1}\) 具体用什么下标不重要（例如可以放心地代换成 \(x = x_k\)、\(x' = x_{k+1}\)、\(u = u_k\)、\(\theta = \theta_k\)）。</p>
+<p>值迭代先令所有 \(x\in X\) 的 \(J^*_0(x_0) = 0\)，然后在状态空间上反复用 (10.74) 计算后续的代价到目标函数。在 10.2.1 节「避免环」的假设下，由于时域无穷，收敛通常是渐近的；折扣逐渐让代价差缩小，直到在所需容差之内。取 \(i\to\infty\) 的极限，得到动态规划递推的平稳形式：</p>
+<div class="eq">$$J^*(x) = \min_{u\in U(x)}\Big\{E_{\theta}\Big[l(x,u,\theta) + \alpha J^*(f(x,u,\theta))\Big]\Big\}. \tag{10.75}$$</div>
+<p>若代价项不依赖自然，化简为</p>
+<div class="eq">$$J^*(x) = \min_{u\in U(x)}\Big\{l(x,u) + \alpha\sum_{x'\in X} J^*(x')P(x'\mid x,u)\Big\}. \tag{10.76}$$</div>
+<p>和 10.2.1 节一样，最优动作 \(\pi^*(x)\) 取在 \(x\) 处满足 (10.75) 或 (10.76) 的 \(u\in U(x)\)。</p>
+<h4>折扣代价的策略迭代</h4>
+<p>也可以用策略迭代求解概率折扣代价问题。回忆图 10.4：总体思路不变——每次迭代解一个线性方程组，在计划空间里搜索。第 2 步的 (10.53) 换成</p>
+<div class="eq">$$J_\pi(x) = l(x,u) + \alpha\sum_{x'\in X} J_\pi(x')P(x'\mid x,u), \tag{10.77}$$</div>
+<p>它是 (10.76) 在固定计划下的特殊形式（这里的 \(u\) 即 \(\pi(x)\)）。第 3 步的 (10.54) 换成</p>
+<div class="eq">$$\pi'(x) = \operatorname*{argmin}_{u\in U(x)}\Big\{l(x,u) + \alpha\sum_{x'\in X} J_\pi(x')P(x'\mid x,u)\Big\}. \tag{10.78}$$</div>
+<p>做了这些改动，策略迭代就和 10.2.2 节一样进行。</p>
+<h4>平均每阶段代价的解法</h4>
+<p>平均代价模型的值迭代算法可以通过简单地<b>不除以 \(K\)</b> 得到：随着阶段数趋于无穷，优化总代价的动作同样优化平均代价。这可能使代价趋向 \(\pm\infty\)，不过实际中只执行有限次迭代。10.2.1 节的后向值迭代只需很小的修改：初始时对所有 \(x_F\in X\) 令 \(G^*(x_F) = 0\)，用标准形式计算值迭代：</p>
+<div class="eq">$$G^*_k(x_k) = \min_{u_k\in U(x_k)}\Big\{\sum_{\theta\in\Theta(x_k,u_k)}\Big(l(x_k,u_k,\theta) + G^*_{k+1}(f(x_k,u_k,\theta))\Big)P(\theta\mid x_k,u_k)\Big\}. \tag{10.79}$$</div>
+<p>迭代一直进行到收敛。判断解的质量是否足够，一个合理的判据是</p>
+<div class="eq">$$\max_{x\in X}\Big\{\big|G^*_k(x)/N - G^*_{k+1}(x)/(N-1)\big|\Big\} &lt; \epsilon, \tag{10.80}$$</div>
+<p>其中 \(\epsilon\) 是误差容限，\(N\) 是已完成的值迭代次数（(10.80) 要求 \(N > 1\)）。一旦满足 (10.80) 就可以停止迭代。\(G^*(x)\) 的值不断增大可能带来数值问题：可以定期把所有值缩小一个常数因子，保证数值在浮点范围内。文献 [12] 介绍了一种叫<b>相对值迭代 relative value iteration</b> 的方法：任意选定一个状态 \(s\in X\)，把代价到目标值都表示成减去 \(s\) 处代价后的相对值。这同时压低所有值，使它们保持有界，同时仍保持算法的收敛性质。策略迭代也可以只稍作修改地沿用图 10.4。</p>
+
+<div class="widget wide" data-widget="maintenance"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>把 α 从小往大拖：α 很小时只在「损坏」时才修；α 超过约 0.21 就在「严重磨损」时修；超过约 0.73 就在「磨损」时修——眼前的维修代价被越来越长远的收益抵消（参考代码第 9 项）。左图的竖线就是这两个分界。</li>
+  <li>看「值迭代次数」（变化 &lt; 10⁻¹⁰）：α = 0.5 约 35 次，0.9 约 220 次，0.99 约 2300 次，大致与 1/(1−α) 成正比（右图斜率就是 log α）；策略迭代始终只要 2–5 轮。</li>
+  <li>勾选「平均代价」：相对值迭代给出每阶段 1.1538，最优计划与 α 接近 1 时一致；普通值迭代配合 (10.80)、ε = 10⁻³ 在 N = 48 时停止。<span class="muted">（例子与参数是补充的。）</span></li>
+</ul></div>
+</section>
+
+<!-- ============================================================ 10.4 -->
+<section id="s10-4">
+<h2>10.4 强化学习 <span class="en">Reinforcement Learning</span></h2>
+
+<h3 id="s10-4-1">10.4.1 基本思路 <span class="en">The General Philosophy</span></h3>
+<p>这一节简要介绍一个近年在人工智能界非常流行的框架的基本思想。它主要由机器学习研究者发展和使用，因此本节称为<b>强化学习 reinforcement learning</b>。这个问题一般涉及为概率无限时域问题计算最优计划；基本想法是把「学习概率分布 \(P(\theta\mid x,u)\)」和「计算最优计划」合并到同一个算法里。</p>
+<h4>术语</h4>
+<p>在详细讲方法之前，先解释一下已有的各种名称。<b>强化学习</b>：机器学习里大多数决策论模型用<b>回报 reward</b> 而不是代价来表达，任务是做决策或找计划使<b>回报泛函 reward functional</b> 最大。在这个模型下选好的动作，会以回报的形式得到正向的「强化」，所以叫 reinforcement。若改用代价和最小化，也可以叫<b>决策论学习 decision-theoretic learning</b> 或<b>基于代价的学习 cost-based learning</b>。叫「学习」，是因为估计 \(P(\theta\mid x,u)\) 或 \(P(x'\mid x,u)\) 显然是个学习问题；但要记住这里也有计算代价到目标函数（或回报到目标函数）并确定最优计划的<b>规划</b>问题，所以叫<b>强化规划 reinforcement planning</b> 也同样合理。</p>
+<p>文献 [13] 称这个一般框架为<b>神经动态规划 neuro-dynamic programming</b>，因为其表述和算法都基于动态规划，最常得到的是值迭代的某种变体；「neuro」指可用来近似计划和代价到目标值的一族函数。这个说法相当具体，因为也可以用别的函数族；而且对某些问题（例如很小的有限状态空间），代价值和计划无需近似就能表示。文献 [11] 用的名字是<b>基于模拟的方法 simulation-based methods</b>，在动态规划的语境下这也许是最准确的名字之一；于是<b>基于模拟的动态规划</b>或<b>基于模拟的规划</b>都很好地反映了这里讲的框架。「模拟」一词来自用蒙特卡罗模拟器生成样本、在规划过程中学习所需的分布。用什么名字随你，但要记住各种名字背后是同一个想法——读相关文献时这一点很有帮助。</p>
+<h4>一般框架</h4>
+<p>这个框架通常用于概率不确定性下的无限时域问题，最常用的是折扣代价模型；但我们主要用 Formulation 10.1，因为它更贴近本书的主题。到目前为止都假设在 Formulation 10.1 下做规划时所有模型分量都已知，包括 \(P(x_{k+1}\mid x_k,u_k)\)。这可以看成<b>传统</b>框架，有三个阶段：</p>
+<ul>
+  <li><b>学习阶段</b>：访问 \(X\) 中的状态、尝试动作、收集统计量来估计转移概率。这一阶段结束时，环境的模型完全已知。</li>
+  <li><b>规划阶段</b>：用值迭代或策略迭代之类的方法算出反馈计划。</li>
+  <li><b>执行阶段</b>：在一台机器上执行计划，这台机器连接的正是学习阶段所用的同一个环境。</li>
+</ul>
+<svg class="fig" viewBox="0 0 640 150" role="img" aria-label="图 10.11：强化学习的一般框架">
+  <defs><marker id="f1011a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--text-2)"/></marker></defs>
+  <rect x="30" y="20" width="200" height="110" rx="10" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="130" y="68" text-anchor="middle" font-size="13" fill="var(--accent-text)">学习 / 规划 / 执行</text>
+  <text x="130" y="88" text-anchor="middle" font-size="13" fill="var(--accent-text)">算法</text>
+  <rect x="410" y="20" width="200" height="110" rx="10" fill="var(--warn-soft)" stroke="var(--warn)"/>
+  <text x="510" y="68" text-anchor="middle" font-size="13" fill="var(--text)">蒙特卡罗模拟器</text>
+  <text x="510" y="88" text-anchor="middle" font-size="11" fill="var(--muted)">（内部知道转移概率）</text>
+  <g stroke="var(--text-2)" stroke-width="1.5" marker-end="url(#f1011a)">
+    <line x1="232" y1="42" x2="406" y2="42"/><line x1="408" y1="76" x2="234" y2="76"/><line x1="408" y1="110" x2="234" y2="110"/>
+  </g>
+  <g font-size="12" fill="var(--text-2)" text-anchor="middle">
+    <text x="320" y="36">施加动作 u_k（在 x_k 处）</text><text x="320" y="70">下一状态 x_{k+1}</text><text x="320" y="104">代价值 l(x_k, u_k)</text>
+  </g>
+</svg>
+<p class="small muted figcap">图 10.11 的重画：强化学习（或基于模拟的动态规划）的一般框架。</p>
+<p>基于模拟的框架把三个阶段合而为一：学习、规划和执行全由一台起初对状态转移甚至代价项一无所知的机器完成。理想情况下这台机器应连接一个 Markov 模型成立的物理环境；但几乎所有实现里，它连接的是图 10.11 那样的蒙特卡罗模拟器。算法根据当前状态把动作 \(u_k\) 发给模拟器，模拟器按内部的概率分布抽样算出效果。显然模拟器的设计者知道转移概率，但它们不直接交给规划算法。模拟器再把下一状态 \(x_{k+1}\) 和代价 \(l(x_k,u_k)\) 发回算法。</p>
+<p>为了简单，这里用 \(l(x_k,u_k)\)，而不允许代价依赖具体的自然动作（那会是 \(l(x_k,u_k,\theta_k)\)）。这个框架通常不需要显式刻画自然：概率 \(P(x_{k+1}\mid x_k,u_k)\) 是直接学到的，不必指定自然动作。常见的推广是把代价项从 \(l(x_k,u_k)\) 推广到 \(l(x_k,u_k,x_{k+1})\)，这里为记号方便不这么做；基本思想不变，只需对下面的方程做些小改动。</p>
+<p>模拟器的作用是模拟「现实」——机器与物理世界的交互。它取代了 1.4 节图 1.16b 中的环境。按那一节的理解，这里讲的算法在此语境下可以看成图 1.18b 那样的计划。若学习部分终止，得到的反馈计划可以编进另一台机器，如图 1.18a；这一步通常不做，因为常假设机器会在整个生命周期里持续学习。</p>
+<p>主要问题之一是<b>探索与利用 exploration vs. exploitation</b>：需要反复探索状态空间，收集足够的数据以可靠地估计模型；为了理论上的收敛，每个状态—动作对都必须被尝试无穷多次。另一方面，又应该利用关于模型的信息来高效地完成任务。这两个目标常常冲突：过于注重探索不能优化代价；过于注重利用则可能因为更好的选择还没被发现而得不到有用的解。</p>
+
+<h3 id="s10-4-2">10.4.2 用模拟评估计划 <span class="en">Evaluating a Plan via Simulation</span></h3>
+<p>模拟方法的基础是把从样本中逐步获得的信息平均起来。假设你收到一串代价 \(c_1,c_2,\ldots\)，想增量地计算它们的平均值：不告诉你样本总数，而且随时都要报告当前的平均值。令 \(m_i\) 为前 \(i\) 个样本的平均：</p>
+<div class="eq">$$m_i = \frac{1}{i}\sum_{j=1}^{i} c_j. \tag{10.81}$$</div>
+<p>要从 \(m_{i-1}\) 高效地算 \(m_i\)：把 \(m_{i-1}\) 乘以 \(i-1\) 恢复总和，加上 \(c_i\)，再除以 \(i\)：</p>
+<div class="eq">$$m_i = \frac{(i-1)m_{i-1} + c_i}{i}, \tag{10.82}$$</div>
+<p>整理成</p>
+<div class="eq">$$m_i = m_{i-1} + \frac{1}{i}(c_i - m_{i-1}). \tag{10.83}$$</div>
+<p>现在考虑为某个固定计划 \(\pi\) 估计每个 \(x\in X\) 的期望代价到目标 \(G_\pi(x)\)。如果 \(P(x'\mid x,u)\) 和代价 \(l(x,u)\) 已知，可以解</p>
+<div class="eq">$$G_\pi(x) = l(x,u) + \sum_{x'} P(x'\mid x,u)G_\pi(x') \tag{10.84}$$</div>
+<p>得到（这里 \(u = \pi(x)\)）。但没有这些信息，就只能依靠模拟器。假设从每个 \(x\in X\) 做 1000 次试验，记录并平均到达目标的代价。每次试验都是迭代过程：\(\pi\) 选动作，模拟器给出下一状态及其增量代价。一旦到达目标状态，把代价加总得到这次试验测得的代价到目标（这里假设对所有 \(x\in X_G\) 有 \(\pi(x) = u_T\)）。若 \(c_i\) 是第 \(i\) 次试验的总代价，\(i\) 次试验的平均 \(m_i\) 就是 \(G_\pi(x)\) 的估计；\(i\to\infty\) 时我们期望 \(m_i\) 收敛到 \(G_\pi(x)\)。更新公式 (10.83) 可以方便地维护不断改进的代价估计序列：令 \(\hat{G}_\pi(x)\) 为 \(G_\pi(x)\) 的当前估计，基于 (10.83) 的更新公式是</p>
+<div class="eq">$$\hat{G}_\pi(x) := \hat{G}_\pi(x) + \frac{1}{i}\Big(l(x_1,u_1) + l(x_2,u_2) + \cdots + l(x_K,u_K) - \hat{G}_\pi(x)\Big), \tag{10.85}$$</div>
+<p>其中 \(:=\) 表示赋值（就像某些编程语言里那样）。实际上一次试验就能为多个状态给出更新值。设从 \(x\) 出发的试验访问了 \(x_1 = x, x_2, \ldots, x_k, \ldots, x_K, x_F\)。对序列中每个状态 \(x_k\)，都可以记录从 \(x_k\) 到 \(x_K\) 累积的代价作为测得的代价到目标：</p>
+<div class="eq">$$c_k(x_k) = \sum_{j=k}^{K} l(x_j,u_j). \tag{10.86}$$</div>
+<p>对路径上访问的每个状态都用 (10.85) 更新，效率高得多。</p>
+<h4>时间差分 Temporal differences</h4>
+<p>与其等到每次试验结束才算 \(c_i(x_i)\)，不如在访问 \(x_i\) 并从模拟器收到 \(l(x_i,u_i)\) 之后立即更新它。这引出一个著名的代价到目标估计方法——<b>时间差分 temporal differences</b>。它与上面的方法很相似，只是稍复杂一些；之所以介绍，是因为它在强化学习文献里非常常见，而且它的推广能得到一个很好的、基于模拟更新代价到目标估计的方法。仍考虑一次试验产生的序列 \(x_1,\ldots,x_K,x_F\)，令 \(d_k\) 为<b>时间差分</b>：</p>
+<div class="eq">$$d_k = l(x_k,u_k) + \hat{G}_\pi(x_{k+1}) - \hat{G}_\pi(x_k). \tag{10.87}$$</div>
+<p>注意 \(l(x_k,u_k) + \hat{G}_\pi(x_{k+1})\) 和 \(\hat{G}_\pi(x_k)\) 都可以作为 \(G_\pi(x_k)\) 的估计；区别在于前者用模拟器给出的第一步最新代价，再用 \(\hat{G}_\pi(x_{k+1})\) 估计剩余代价。在这里和以下的式子中，每个动作都由计划选出：\(u_k = \pi(x_k)\)。令 \(v_k\) 为 \(x_k\) 到目前为止被访问的次数（\(1\le k\le K\)），包括以前的试验和本次访问。试验过程中可以使用下面的更新算法：到达 \(x_2\) 时，\(x_1\) 处的值更新为</p>
+<div class="eq">$$\hat{G}_\pi(x_1) := \hat{G}_\pi(x_1) + \frac{1}{v_1}d_1. \tag{10.88}$$</div>
+<p>到达 \(x_3\) 时，\(x_1\) 和 \(x_2\) 处的值更新为</p>
+<div class="eq">$$\hat{G}_\pi(x_1) := \hat{G}_\pi(x_1) + \frac{1}{v_1}d_2,\qquad \hat{G}_\pi(x_2) := \hat{G}_\pi(x_2) + \frac{1}{v_2}d_2. \tag{10.89}$$</div>
+<p>看看到此为止对 \(x_1\) 做了什么——时间差分部分抵消：</p>
+<div class="eq">$$\begin{aligned}\hat{G}_\pi(x_1) &:= \hat{G}_\pi(x_1) + \frac{1}{v_1}d_1 + \frac{1}{v_1}d_2 \\ &= \hat{G}_\pi(x_1) + \frac{1}{v_1}\Big(l(x_1,u_1) + \hat{G}_\pi(x_2) - \hat{G}_\pi(x_1) + l(x_2,u_2) + \hat{G}_\pi(x_3) - \hat{G}_\pi(x_2)\Big) \\ &= \hat{G}_\pi(x_1) + \frac{1}{v_1}\Big(l(x_1,u_1) + l(x_2,u_2) - \hat{G}_\pi(x_1) + \hat{G}_\pi(x_3)\Big).\end{aligned} \tag{10.90}$$</div>
+<p>到达 \(x_4\) 时做类似的更新。到达 \(x_{k+1}\) 时的更新是</p>
+<div class="eq">$$\hat{G}_\pi(x_1) := \hat{G}_\pi(x_1) + \frac{1}{v_1}d_k,\quad \hat{G}_\pi(x_2) := \hat{G}_\pi(x_2) + \frac{1}{v_2}d_k,\quad\ldots,\quad \hat{G}_\pi(x_k) := \hat{G}_\pi(x_k) + \frac{1}{v_k}d_k. \tag{10.91}$$</div>
+<p>这样一直更新到到达 \(x_F\in X_G\)。现在看对每个 \(x_k\) 实际算了什么：时间差分构成一个望远镜式的、会坍缩的和，就像 (10.90) 里两次迭代之后那样。所有迭代完成后，\(x_k\) 处的值被更新为<sup class="fn"><a href="#fn-1092" id="fn-1092-ref">7</a></sup></p>
+<div class="eq">$$\begin{aligned}\hat{G}_\pi(x_k) &:= \hat{G}_\pi(x_k) + \frac{1}{v_k}\big(d_k + d_{k+1} + \cdots + d_K\big) \\ &= \hat{G}_\pi(x_k) + \frac{1}{v_k}\Big(l(x_k,u_k) + l(x_{k+1},u_{k+1}) + \cdots + l(x_K,u_K) - \hat{G}_\pi(x_k) + \hat{G}_\pi(x_F)\Big) \\ &= \hat{G}_\pi(x_k) + \frac{1}{v_k}\Big(l(x_k,u_k) + l(x_{k+1},u_{k+1}) + \cdots + l(x_K,u_K) - \hat{G}_\pi(x_k)\Big).\end{aligned} \tag{10.92}$$</div>
+<p>最后的 \(\hat{G}_\pi(x_F)\) 被删掉了，因为假设计划在 \(x_F\) 施加终止动作，它的值为零。若序列中每个被访问的状态都互不相同，最后的表达式就等价于 (10.85)。通常并非如此，这使上面的方法与 (10.85) 略有不同，因为在时间差分方案中，计数 \(v_k\) 可能在试验过程中变化。不过这个差别可以忽略，时间差分方法算出的估计会收敛到 \(G_\pi\)。</p>
+<p>上面的时间差分方法可以推广，实践中常常收敛得更快。令 \(\lambda\in[0,1]\) 为给定参数，<b>TD(λ)</b> 时间差分方法把 (10.91) 换成</p>
+<div class="eq">$$\begin{aligned}\hat{G}_\pi(x_1) &:= \hat{G}_\pi(x_1) + \lambda^{k-1}\Big(\frac{1}{v_1}d_k\Big), \\ \hat{G}_\pi(x_2) &:= \hat{G}_\pi(x_2) + \lambda^{k-2}\Big(\frac{1}{v_2}d_k\Big), \\ &\ \ \vdots \\ \hat{G}_\pi(x_{k-1}) &:= \hat{G}_\pi(x_{k-1}) + \lambda\Big(\frac{1}{v_{k-1}}d_k\Big), \\ \hat{G}_\pi(x_k) &:= \hat{G}_\pi(x_k) + \frac{1}{v_k}d_k.\end{aligned} \tag{10.93}$$</div>
+<p>它的效果是对离 \(x_k\) 很远处收到的代价打折扣。(10.91) 的方法是 \(\lambda = 1\) 的特例，即 TD(1)。另一个有趣的特例是 <b>TD(0)</b>：</p>
+<div class="eq">$$\hat{G}_\pi(x_k) = \hat{G}_\pi(x_k) + \frac{1}{v_k}\Big(l(x_k,u_k) + \hat{G}_\pi(x_{k+1}) - \hat{G}_\pi(x_k)\Big). \tag{10.94}$$</div>
+<p>这种形式在强化学习文献里最常见（尽管那里多用于折扣代价模型）。实验证据表明较小的 \(\lambda\) 有助于提高收敛速度；对所有 \(\lambda\) 的收敛性在 [13] 中得到证明。</p>
+<p>(10.94) 为何奏效的一个直觉来源：它是<b>随机迭代算法 stochastic iterative algorithm</b>（或 <b>Robbins–Monro 算法</b>）的特例。这是一种一般的统计估计技术，用一串样本求解形如 \(h(y) = y\) 的方程组：每个样本代表用蒙特卡罗模拟对 \(h(y)\) 的一次测量。这种迭代方法的一般形式是把 \(y\) 更新为</p>
+<div class="eq">$$y := (1-\rho)y + \rho h(y), \tag{10.95}$$</div>
+<p>其中 \(\rho\in[0,1]\) 是参数，它的选择影响收敛速度。直观上 (10.95) 是在原值与最新的 \(h(y)\) 样本之间插值。这里不给出收敛性证明（见 [13]）。典型的行为是：模拟过程噪声大时，\(\rho\) 越小估计越可靠，代价是收敛变慢。收敛是渐近的，要求基于计划的状态转移图中所有（概率非零的）边都被无穷多次访问。在随机迭代框架下推广 TD(0)，可以得到求 \(\hat{G}_\pi\) 的一般方法：</p>
+<div class="eq">$$\hat{G}_\pi(x) := (1-\rho)\hat{G}_\pi(x) + \rho\Big(l(x,u) + \hat{G}_\pi(x')\Big). \tag{10.96}$$</div>
+<p>(10.94) 那样的 TD(0) 本质上由推导过程选定了 \(\rho\)（\(\rho = 1/v_k\)），而在 (10.96) 中可以用任何 \(\rho\in(0,1)\)。更新式不考虑转移概率，这看起来也许不对；其实它们在模拟过程中已经被考虑进去了：更可能发生的转移对 (10.96) 的影响更大。用分布的样本估计一个非均匀概率密度的均值时也是如此：出现频率高的值对平均的贡献大，自动获得了合适的权重。</p>
+
+<div class="widget wide" data-widget="td-eval"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>点几次「+100」：蒙特卡罗（绿）和 TD(λ)（蓝）都逐渐贴近黑色真值线；把 λ 拖到 1 再「重置」，蓝色与绿色几乎重合——这就是 (10.92) 说的「状态不重复时 TD(1) 等价于 (10.85)」。</li>
+  <li>把 λ 调到 0 再重来：用 \(1/v_k\) 步长时 TD(0) 反而慢得多（参考代码第 10 项：400 次试验后 RMS 误差约 5.9，蒙特卡罗约 0.6）。<span class="muted">（补充观察：初值 0 带来的低估被「自举」传给前面的状态，又被 1/v 平均永久留在估计里。书中「较小的 λ 往往收敛更快」是在其它设定下的实验经验，例如步长选得合适、或者是折扣问题。）</span></li>
+  <li>常数 ρ 的 TD(0)（琥珀）：ρ = 0.2 很快接近真值但一直抖动；ρ = 0.02 平稳但很慢——正是 (10.95) 之后那段「ρ 小更可靠、但更慢」的权衡。</li>
+</ul></div>
+
+<h3 id="s10-4-3">10.4.3 Q-learning：计算最优计划 <span class="en">Q-Learning: Computing an Optimal Plan</span></h3>
+<p>这一节从「评估一个计划」转到「在基于模拟的框架里计算最优计划」。最重要的想法是计算 <b>Q 因子 Q-factors</b> \(Q^*(x,u)\)：它是最优代价到目标 \(G^*\) 的推广，记录了每个状态 \(x\in X\) 与动作 \(u\in U(x)\) 组合的最优代价。\(Q^*(x,u)\) 的含义是：从 \(x\) 出发、施加 \(u\)、然后从得到的下一状态 \(x' = f(x,u,\theta)\) 起按最优计划行动所得的期望代价。若 \(u\) 恰好是最优计划会选的动作 \(\pi^*(x)\)，则 \(Q^*(x,u) = G^*(x)\)。所以 Q 值可以看成「第一阶段任意选一个动作、之后都最优决策」的代价。</p>
+<h4>值迭代</h4>
+<p>基于模拟的值迭代可以从 Q 因子构造出来。用它们而不用 \(G^*\) 的原因是：动态规划中可以避免对 \(U(x)\) 的最小化，从而能逐样本地估计最优值并最终得到最优计划。最优代价到目标可以由 Q 因子得到：</p>
+<div class="eq">$$G^*(x) = \min_{u\in U(x)}\Big\{Q^*(x,u)\Big\}. \tag{10.97}$$</div>
+<p>这使 (10.46) 的动态规划递推可以写成</p>
+<div class="eq">$$Q^*(x,u) = l(x,u) + \sum_{x'\in X} P(x'\mid x,u)\min_{u'\in U(x')}\Big\{Q^*(x',u')\Big\}. \tag{10.98}$$</div>
+<p>把 (10.97) 用到 (10.98) 的右边，也可以用 \(G^*\) 表示：</p>
+<div class="eq">$$Q^*(x,u) = l(x,u) + \sum_{x'\in X} P(x'\mid x,u)G^*(x'). \tag{10.99}$$</div>
+<p>若 \(P(x'\mid x,u)\) 和 \(l(x,u)\) 已知，(10.98) 就是另一种更占存储的值迭代。收敛后用 (10.97) 得到 \(G^*\) 的值，最优计划是</p>
+<div class="eq">$$\pi^*(x) = \operatorname*{argmin}_{u\in U(x)}\Big\{Q^*(x,u)\Big\}. \tag{10.100}$$</div>
+<p>由于代价和转移概率未知，需要基于模拟的方法。再次用随机迭代算法的想法：回忆 (10.96) 用单个样本和收敛速度参数 \(\rho\) 估计计划的代价；同样的想法可以导出基于模拟的值迭代：</p>
+<div class="eq">$$\hat{Q}^*(x,u) := (1-\rho)\hat{Q}^*(x,u) + \rho\Big(l(x,u) + \min_{u'\in U(x')}\Big\{\hat{Q}^*(x',u')\Big\}\Big), \tag{10.101}$$</div>
+<p>其中 \(x'\) 是下一状态，\(l(x,u)\) 是在 \(x\) 施加 \(u\) 时从模拟器得到的代价。初始时所有 Q 因子设为零。用模拟生成到达目标的样本轨迹，对每个阶段得到的状态和代价应用 (10.101)。同样，更新式没有显式提到转移概率，看起来也许不对，但它们已经通过模拟自动考虑进去了。大多数文献把 Q-learning 用于折扣代价模型，得到 (10.101) 的一个小变体：</p>
+<div class="eq">$$\hat{Q}^*(x,u) := (1-\rho)\hat{Q}^*(x,u) + \rho\Big(l(x,u) + \alpha\min_{u'\in U(x')}\Big\{\hat{Q}^*(x',u')\Big\}\Big), \tag{10.102}$$</div>
+<p>折扣因子 \(\alpha\) 出现是因为这个更新式由 (10.76) 推出。</p>
+<h4>策略迭代</h4>
+<p>也可以用 Q 因子推导出基于模拟的策略迭代。回忆 10.2.2 节需要的两种方法：1）评估给定计划 \(\pi\)；2）选择更好的动作来改进计划。以前的计划评估要解线性方程组；现在任何计划 \(\pi\) 都可以用 10.4.2 节的方法评估，根本不需要知道 \(P(x'\mid x,u)\)。一旦从每个 \(x\in X\) 都可靠地算出 \(\hat{G}_\pi\)，就可以继续模拟，对每个 \(x\in X\)、\(u\in U\) 计算 \(Q_\pi(x,u)\)——定义 (10.99) 受限于 \(\pi\) 的版本：</p>
+<div class="eq">$$Q_\pi(x,u) = l(x,u) + \sum_{x'\in X} P(x'\mid x,u)G_\pi(x'). \tag{10.103}$$</div>
+<p>转移概率无需已知，Q 因子通过模拟和平均算出。计划可以这样改进：</p>
+<div class="eq">$$\pi'(x) = \operatorname*{argmin}_{u\in U(x)}\Big\{Q_\pi(x,u)\Big\}, \tag{10.104}$$</div>
+<p>它基于 (10.97)<sup class="fn"><a href="#fn-10104" id="fn-10104-ref">8</a></sup>。</p>
+
+<div class="widget wide" data-widget="q-learning"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>点几次「+1000」：min Q̂ 的热图逐渐逼近值迭代得到的 G*，蓝色贪心箭头和真正的 π* 越来越一致（琥珀框变少）。ρ = 0.2 时 5000 条轨迹后最大误差约 0.27（参考代码第 11 项）。</li>
+  <li>勾选「ρ = 1/n」重来：收敛慢得多（5000 条后误差约 3）——和上面 TD(0) 的现象同一个原因。</li>
+  <li>把 ε 设成 0（纯贪心）也能学：Q̂ 初值 0 对正代价问题是「乐观」的，没试过的动作看起来总是最好，于是自然会被尝试。把鼠标移到格子上对比 Q̂(x, u) 与 Q*(x, u)，看看哪些很少被尝试的动作估计得最差。<span class="muted">（ε-贪心探索与这个网格都是补充的。）</span></li>
+</ul></div>
+</section>
+
+<!-- ============================================================ 10.5 -->
+<section id="s10-5">
+<h2>10.5 序贯博弈论 <span class="en">Sequential Game Theory</span></h2>
+<p>到目前为止，本章的序贯决策过程只涉及与自然的博弈。这一节引入其它决策者，把 9.3、9.4 节的单阶段博弈及其均衡概念推广到一系列博弈上。10.5.1 节介绍用博弈树表示的序贯零和博弈，它有助于直观理解；10.5.2 节用状态空间表示讨论序贯零和博弈；10.5.3 节简要介绍其它博弈的推广，包括非零和博弈和有自然参与的博弈。本节的表述称为<b>序贯博弈论 sequential game theory</b>，另一个常见名字是<b>动态博弈论 dynamic game theory</b>。如果阶段是连续的（13.5 节简要讨论），就得到<b>微分博弈论 differential game theory</b>。</p>
+
+<h3 id="s10-5-1">10.5.1 博弈树 <span class="en">Game Trees</span></h3>
+<p>多数文献用<b>博弈树 game tree</b> 表述序贯博弈；与本章表示方式更一致的状态空间表示在 10.5.2 节介绍。树表示通常称为博弈的<b>扩展形式 extensive form</b>（与之相对的<b>标准形式 normal form</b> 是第 9 章用的代价矩阵）。树表示有助于直观理解博弈论中的许多问题，也许最有助于直观理解<b>信息状态</b>；博弈树的这方面推迟到 11.7 节正式引入信息空间之后。这里只讲描述起来简单、不必深入信息空间的情形。</p>
+<p>在介绍序贯博弈之前，先考虑用树表示单阶段博弈。回忆例 9.14：一个 \(3\times3\) 的零和矩阵博弈。它可以表示成图 10.12 那样的博弈树（下面互动图的「图 10.12」预设）：根部 P₁ 有三个选择；下一层 P₂ 也有三个选择；双方的选择决定了九个叶子中的一个，到达叶子时得到写在它下面的代价。代价矩阵 (9.53) 的元素横排在叶子上。每个非叶顶点称为<b>决策顶点 decision vertex</b>：某个玩家必须在那里选一个动作。图 10.12 的博弈有两种可能的解释：</p>
+<ol>
+  <li>P₂ 在做决定之前<b>知道</b> P₁ 施加了哪个动作。这不对应 9.3 节的零和博弈表述，因为 P₂ 看起来和自然一样强大；这时它与例 9.14 的博弈不等价。</li>
+  <li>P₂ <b>不知道</b> P₁ 的动作。这等价于假设 P₁ 和 P₂ 同时决策，与 Formulation 9.7 一致；这棵树也可以画成 P₂ 先行。</li>
+</ol>
+<p>现在设想 P₁ 和 P₂ 进行一<b>系列</b>博弈：把博弈树推广到更多层，就定义了 9.3 节零和博弈的序贯版本，即下面的<b>序贯博弈 sequential game</b>：</p>
+<div class="box def formulation">
+  <div class="box-title">Formulation 10.3（树形式的零和序贯博弈 Zero-Sum Sequential Game in Tree Form）</div>
+  <ol>
+    <li>两个玩家 P₁、P₂ 轮流进行一个博弈。以前的一个阶段现在被拉伸成两个<b>子阶段 substages</b>，每个玩家各自行动。通常假设总是 P₁ 先行，然后 P₂，再 P₁，如此交替直到博弈结束。这个模型反映了国际象棋、扑克等许多流行游戏的规则。令 \(\mathcal{K} = \{1,\ldots,K\}\) 为 P₁ 和 P₂ 都行动一次的阶段集合。</li>
+    <li>每个玩家行动时，从一个非空有限的动作集合中选择；可用的集合可以依赖于决策顶点。</li>
+    <li>博弈结束时，根据双方所选的动作序列为 P₁ 产生一个代价；这个代价被解释为 P₂ 的回报。</li>
+    <li>必须规定每个玩家做决策时拥有的信息量。这通常通过说明动作历史中哪些部分已知来表达。例如 P₁ 刚行动完，P₂ 知道它的选择吗？它知道 P₁ 在之前某个阶段选了什么吗？</li>
+  </ol>
+</div>
+<p>图 10.13 是两个阶段（\(K = 2\)，\(\mathcal{K} = \{1,2\}\)）的一个具体例子。每个顶点对应一个玩家需要决策的时刻，从顶点发出的每条边代表一个动作。根是博弈的开始，通常意味着 P₁ 选一个动作；叶子是博弈的结束，即得到代价的时刻，代价通常写在叶子下面。最后要规定每个玩家在决策前可用的信息：自己或其他玩家之前施加的动作中哪些是已知的？图 10.13 有两个玩家、两个阶段，因此有四层决策顶点。玩家的动作集合是 \(U = V = \{L,R\}\)（左、右）。因为总是两个动作，所以是二叉树。有 16 种可能的结果，对应每个玩家四种可能的两阶段计划的所有两两组合。</p>
+<p>对单阶段博弈，为了得到鞍点，定义了确定性和随机化两种策略；9.3.3 节说过，要保证鞍点存在需要随机化策略。对序贯博弈，它们分别推广为<b>确定性计划</b>和<b>随机化计划</b>。10.1.3 节把（确定性）计划定义为从状态空间到动作空间的映射，这个定义可以用于每个玩家；但必须先确定博弈树的「状态」是什么——这取决于每个玩家行动时可用的信息。表示博弈树中信息的一般框架在 11.7 节讲；这里讨论三种简单的信息模型。在每种情形下，每个玩家都知道自己在之前阶段施加的动作，区别在于对其他玩家所施加动作的了解，它们定义了计划中用于决策的「状态」：</p>
+<ul>
+  <li><b>交替行动 alternating play</b>：玩家轮流行动，所有玩家都知道之前施加的全部动作——这是下棋时的情形。定义计划时，令 \(N_1\)、\(N_2\) 分别为 P₁、P₂ 必须做决策的所有顶点（图 10.13 中 \(N_1\) 是深色顶点，\(N_2\) 是白色顶点）。令 \(U(n_1)\)、\(V(n_2)\) 为 P₁、P₂ 的动作空间，它们依赖于顶点。P₁ 的<b>（确定性）计划</b>是定义在 \(N_1\) 上的函数 \(\pi_1\)，对每个 \(n_1\in N_1\) 给出动作 \(u\in U(n_1)\)；P₂ 的确定性计划是 \(N_2\) 上的函数 \(\pi_2\)，对每个 \(n_2\in N_2\) 给出 \(v\in V(n_2)\)。随机化情形下，令 \(W(n_1)\)、\(Z(n_2)\) 分别为 \(U(n_1)\)、\(V(n_2)\) 上所有概率分布的集合；P₁ 的<b>随机化计划</b>对每个 \(n_1\in N_1\) 给出某个 \(w\in W(n_1)\)，P₂ 的随机化计划把 \(N_2\) 映射到 \(Z(n_2)\)。</li>
+  <li><b>逐阶段 stage-by-stage</b>：每个玩家知道对方在之前所有阶段施加的动作，但不知道对方在<b>当前</b>阶段选了什么。这实际上意味着每个阶段双方同时行动。这时 P₁ 的确定性或随机化计划的定义同交替行动；但 P₂ 的计划要定义在 \(N_1\) 而不是 \(N_2\) 上，因为它做决定时所拥有的信息与 P₁ 完全相同；P₂ 的动作空间也必须相应地依赖于 \(N_1\) 的元素，否则 P₂ 不知道有哪些动作可用，因此定义为 \(V(n_1)\)。下文称它为「阶段式」。</li>
+  <li><b>开环 open loop</b>：每个玩家都不知道对方之前的动作，只知道到目前为止施加了几个动作，即博弈进行到第几阶段。计划定义为 \(\mathcal{K}\) 上的函数，因为不知道具体在哪个顶点。注意确定性情形下开环计划就是一串动作（像 2.3 节那样），随机化情形下是一串概率分布；动作空间同样必须与信息相符，即 \(U(k)\) 和 \(V(k)\)，\(k\in\mathcal{K}\)。</li>
+</ul>
+<p>对图 10.12 那样的单阶段博弈，阶段式和开环两种模型是等价的。</p>
+<h4>确定安全计划</h4>
+<p>9.3.2 节的<b>安全策略</b>可以自然地推广到序贯博弈，得到<b>安全计划 security plan</b>：每个玩家把对方当作非确定不确定性下的自然，做最坏情况分析。安全计划及其代价可以通过把代价从叶子向上传播到根来计算。图 10.13 中 P₁ 安全计划的计算见图 10.14：先确定 P₂ 在倒数第二层所有顶点会选的动作；由于 P₂ 想让代价最大，这些顶点上记录的代价是其孩子代价的最大值。再上一层确定 P₁ 会选的动作，每个顶点记录其孩子中的最小代价。再上一层考虑 P₂，如此直到根。此时 P₁ 能保证的最低代价就知道了，这就是序贯博弈的<b>上值 upper value</b> \(\overline{L}^*\)。安全计划由「对每个 \(n_1\in N_1\) 选出代价最低的孩子顶点的动作」定义。如果 P₂ 对 P₁ 的安全计划做理性的回应，就会走图 10.14d 中粗线所示的路径：P₁ 的安全计划执行出的动作序列是 P₁ 的 \((L,L)\)、P₂ 的 \((R,L)\)，上值 \(\overline{L}^* = 1\)。</p>
+<p>P₂ 的安全计划可以类似地计算，但必须交换决策的次序。除非在树中把玩家的次序交换，否则这不容易看出来。如果 P₂ 先行，得到图 10.15 那样的树：叶子上的代价顺序不同，但对 P₁、P₂ 选择的同一动作序列，博弈结束时得到的代价与图 10.14 相同。博弈的<b>下值 lower value</b> 为 \(\underline{L}^* = 1\)。安全计划由「对每个 \(n_2\in N_2\) 选择使其孩子代价最大的动作」定义。如果 P₁ 对 P₂ 的安全计划理性回应，执行的动作是 P₁ 的 \((L,L)\)、P₂ 的 \((R,L)\)——与执行 P₁ 安全计划时得到的相同，尽管由于玩家次序交换，它们在两棵树里看起来不同。不过在许多情况下会得到不同的动作序列。</p>
+<p>和单阶段博弈一样，\(\underline{L}^* = \overline{L}^*\) 意味着博弈有确定性鞍点，序贯博弈的<b>值 value</b> 为 \(L^* = \underline{L}^* = \overline{L}^*\)。这个博弈有唯一的确定性鞍点，即使双方各自做最坏情况分析，也会得到可预测的、相同的选择。</p>
+<p>如果认识到树的某些部分不必探索（因为它们不可能带来更好的代价），计算安全策略的代价可以大幅降低。这个想法在 AI 文献中称为 <b>alpha-beta 剪枝 alpha-beta pruning</b>（参考文献与简史见 [40]，第 186–187 页）。假设为了确定 P₁ 的安全策略而按深度优先顺序搜索树。在 P₁ 的某个决策顶点，假设已确定施加动作 \(u\) 能保证代价 \(c\)，但还有其它动作的可保证代价未知。考虑为其中一个剩余动作 \(u'\) 确定可保证的代价：这需要计算 P₂ 会怎样最大化代价来回应 \(u'\)。一旦 P₂ 至少有一个选项的代价 \(c'\) 大于 \(c\)，P₂ 的其它孩子就不必探索了。为什么？因为如果 P₂ 能以导致比 P₁ 通过选 \(u\) 已能保证的代价更高的方式回应，P₁ 就绝不会选 \(u'\)。图 10.16 给出了一个简单的例子。这种情况可以发生在树的任何一层；一个动作不必考虑时，整棵子树都被剪掉。在其它情形下也可以剪掉 P₁ 的孩子，因为 P₂ 不会做出让 P₁ 把代价降到 P₂ 已能为自己保证的值以下的选择。</p>
+
+<div class="widget wide" data-widget="game-tree"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>「图 10.13」+「上值」一步步点：P₂ 那层得到 4, 0, 1, 3, 3, 2, 4, 3，P₁ 那层 0, 1, 2, 3，再往上 1, 3，根 1；粗线就是图 10.14d 的路径 (L, L) / (R, L)（参考代码第 12 项）。</li>
+  <li>切到「下值：P2 先行」：叶子被重排成 4 0 2 0 2 1 3 2 1 3 0 2 4 3 1 2（图 10.15），下值也是 1——确定性鞍点。改几个叶子（例如把第一个 4 改成 −3）看鞍点消失。</li>
+  <li>「alpha-beta」：图 10.13 只看 16 个叶子中的 9 个；「像图 10.16」预设先保证 c = 1，下一个 P₂ 顶点的第一个孩子就是 2 ≥ 1，剩下的不用看。图 10.12 按这个顺序一个也剪不掉——剪枝效果强烈依赖于孩子的顺序。</li>
+</ul></div>
+
+<h4>计算鞍点</h4>
+<p>P₁ 的安全计划是交替行动模型下博弈的合法解：P₂ 只需在每个阶段对 P₁ 的计划选最优回应即可。在阶段式模型下，「解」的概念是鞍点，它在上值和下值相等时出现。上面的过程可以用来确定值和相应的计划；但如果值不相等呢？这时应为玩家设计<b>随机化安全计划</b>。和单阶段博弈一样，得到<b>随机化上值</b> \(\overline{\mathcal{L}}^*\) 和<b>随机化下值</b> \(\underline{\mathcal{L}}^*\)。在随机化计划的空间里，鞍点总是存在，这意味着博弈总有<b>随机化值</b> \(\mathcal{L}^* = \underline{\mathcal{L}}^* = \overline{\mathcal{L}}^*\)。这个鞍点可以用与刚才计算安全计划类似的方式自底向上地算出。</p>
+<p>回到图 10.13 的例子。如前所述，这个博弈实际上有确定性鞍点，但它仍可以很好地演示方法，因为任何确定性计划都可以看成随机化计划的特例（全部概率质量放在一个动作上）。考虑图 10.13 最下面只用最后两层决策顶点得到的四棵子树：每种情况下 P₁ 和 P₂ 都要同时行动来结束序贯博弈，每棵子树都可以看成一个矩阵博弈，因为两人行动后立即得到代价。这引出了描绘图 10.13 博弈的另一种方式（图 10.17）：最下面两层决策顶点被矩阵博弈取代。现在为每个矩阵博弈计算随机化值，放在相应的叶子顶点处（图 10.18）。例子中只剩两层决策顶点，可以表示为博弈</p>
+<div class="eq">$$\begin{array}{c|cc} & V & \\ \hline U & 0 & 1 \\ & 2 & 3 \end{array} \tag{10.105}$$</div>
+<p>它的值是 1，出现在 P₁ 施加 \(L\)、P₂ 施加 \(R\) 时。于是原序贯博弈的解通过求解矩阵博弈得到，作为求安全计划方法的替代。新方法的好处是：如果某个矩阵没有确定性鞍点，可以改为计算它的随机化值；如果执行时到达相应的决策顶点，玩家必须采用随机化策略。</p>
+<h4>把树转换成单阶段博弈</h4>
+<p>到目前为止，已经为交替行动和阶段式模型确定了解；剩下开环模型。这时玩家之间直到博弈结束、得到代价之前都没有信息交换。因此可以设想，进行这样一个序贯博弈的玩家，等价地在进行一个大的单阶段博弈。回忆开环模型下的计划是 \(\mathcal{K}\) 上的函数。令 \(\Pi_1\)、\(\Pi_2\) 分别为 P₁、P₂ 可能的计划集合。对图 10.13 的博弈，\(\Pi_i\) 是每个玩家的四个计划，按以下顺序指定：\((L,L)\)、\((L,R)\)、\((R,L)\)、\((R,R)\)。它们可以排成一个 \(4\times4\) 的矩阵博弈：</p>
+<div class="eq">$$\begin{array}{c|cccc} & & \Pi_2 & & \\ \hline \Pi_1 & 4 & 2 & 1 & 0 \\ & 0 & 0 & 3 & 2 \\ & 2 & 3 & 4 & 1 \\ & 1 & 2 & 3 & 2 \end{array} \tag{10.106}$$</div>
+<p>这个矩阵博弈没有确定性鞍点。遗憾的是，必须解一个四维线性规划问题才能求出随机化值和均衡。这与另两种信息模型得到的解有很大不同。矩阵博弈形式也可以为阶段式模型推导出来，但计划的空间更大：图 10.13 的例子中，每个玩家有 5 个决策顶点，在每个顶点可以施加两种不同的动作，因此 \(i = 1\) 和 \(i = 2\) 时都有 \(|\Pi_i| = 2^5 = 32\)，这是一个 \(32\times32\) 的矩阵博弈！它应该有我们已经得到的同一个鞍点解。树表示的优点是把这个庞大的博弈分解成了许多很小的矩阵博弈；逐阶段地处理问题，计算上得到了巨大的节省。这种威力源于在基于树的计算方法中隐式地使用了动态规划原理——把序贯博弈分解成小的矩阵博弈。与以前动态规划方法的联系在下一节会更清楚，它考虑定义在状态空间上的序贯博弈。</p>
+
+<div class="widget wide" data-widget="info-models"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>「阶段式」：四个 2×2 矩阵的值是 0、1、2、3（都有确定性鞍点，绿色格子），填进去得到 (10.105)，值 1：P₁ 选 L、P₂ 选 R。这正是图 10.14c 里那四个数（图 10.18 的说明）。</li>
+  <li>「开环」：(10.106) 的确定性上 / 下值是 3 / 1，没有鞍点；随机化值是 <b>2</b>——比另两种模型下的 1 更高，P₁ 的一组最优随机化策略是 w = (1/2, 1/2, 0, 0)（参考代码第 12 项；最优策略不一定唯一，页面用浮点单纯形求解，显示的可能是另一组）。</li>
+  <li>换成「图 10.23（习题 18）」：先自己用阶段式模型算一遍随机化值，再点开核对——有一个矩阵没有确定性鞍点，必须随机化。</li>
+</ul></div>
+
+<h3 id="s10-5-2">10.5.2 状态空间上的序贯博弈 <span class="en">Sequential Games on State Spaces</span></h3>
+<p>上一节一个明显的问题是顶点数随阶段数指数增长。不过在一些博弈中，可能有多个动作序列导致同一个状态——国际象棋、跳棋、井字棋等许多流行游戏都是这样。这时方便的做法是定义一个刻画所有不同博弈局面的状态空间，玩家的动作改变状态；如果不同的动作序列导致同一个状态，就不需要不同的顶点。通过声明表示同一状态的顶点等价，博弈树就变成了<b>博弈图 game graph</b>。博弈图在许多方面类似于 10.1 节讨论的、与自然的序贯博弈中的转移图；有对立玩家时也可以用同样的想法。</p>
+<p>我们将把博弈树收缩成博弈图，得到一个在状态空间上进行的序贯博弈；还允许更一般的情形——代价出现在任何转移边上，而不只是原博弈树的叶子上。这里只推广博弈树中的阶段式模型，其它信息模型的推广在 11.7 节。下面的表述中，P₂ 可以看作 Formulation 10.1 里自然的替代者；新表述仍是 Formulation 9.7（单阶段零和博弈）的推广。为了概念简单，所有空间都假设有限。</p>
+<div class="box def formulation">
+  <div class="box-title">Formulation 10.4（状态空间上的零和序贯博弈 Sequential Zero-Sum Game on a State Space）</div>
+  <ol>
+    <li>两个玩家 P₁ 和 P₂。</li>
+    <li>有限非空的状态空间 \(X\)。</li>
+    <li>对每个 \(x\in X\)，P₁ 有限非空的动作空间 \(U(x)\)。</li>
+    <li>对每个 \(x\in X\)，P₂ 有限非空的动作空间 \(V(x)\)。为了推广 10.5.1 节的交替行动模型，也可以定义 \(V(x,u)\)，让 P₂ 可用的动作集依赖于 P₁ 的动作 \(u\in U\)。</li>
+    <li>状态转移函数 \(f\)：对每个 \(x\in X\)、\(u\in U(x)\)、\(v\in V(x)\) 给出 \(f(x,u,v)\)。</li>
+    <li>\(K\) 个阶段的集合 \(\mathcal{K}\)，每个记为 \(k\)，从 \(k = 1\) 开始到 \(k = K\) 结束；令 \(F = K+1\)，它是最后一个动作施加之后的最终阶段。</li>
+    <li>初始状态 \(x_I\in X\)。有些问题不指定它，这时要对所有初始状态求解。</li>
+    <li>阶段可加的代价泛函 \(L\)。令 \(\tilde{v}_K\) 为到阶段 \(K\) 为止 P₂ 的动作历史，代价泛函可以作用于状态和动作历史的任何组合：
+      <div class="eq">$$L(\tilde{x}_F,\tilde{u}_K,\tilde{v}_K) = \sum_{k=1}^{K} l(x_k,u_k,v_k) + l_F(x_F). \tag{10.107}$$</div></li>
+  </ol>
+</div>
+<p>假设两个玩家总是知道当前状态。注意表述中没有终止动作：每个玩家行动 \(K\) 次之后博弈结束；也没有直接的目标集表述。终止动作和目标集都可以毫无困难地加进来，但这里不考虑。动作集也可以很容易地推广为依赖阶段的 \(U(x,k)\) 和 \(V(x,k)\)；本节的方法都能顺利改造，为了记号简单这里不这么做。</p>
+<h4>为每个玩家定义计划</h4>
+<p>现在每个玩家都要有自己的计划。和 10.1 节一样，计划最好定义为从状态到动作的映射，因为不一定清楚另一个决策者会采取什么动作。10.1 节的另一个决策者是自然，这里是理性的对手。令 \(\pi_1\)、\(\pi_2\) 分别为 P₁、P₂ 的计划。由于 Formulation 10.4 中阶段数固定，形如 \(\pi_1 : X\times\mathcal{K}\to U\) 和 \(\pi_2 : X\times\mathcal{K}\to V\) 的依赖阶段的计划是合适的（回忆 10.1.3 节）。每个计划都给出一个动作 \(\pi_1(x,k)\in U(x)\) 和 \(\pi_2(x,k)\in V(x)\)。</p>
+<p>再看 Formulation 10.4 的不同解概念。对 P₁，<b>确定性计划</b>是函数 \(\pi_1 : X\times\mathcal{K}\to U\)，对每个状态 \(x\in X\) 和阶段 \(k\in\mathcal{K}\) 给出动作 \(u = \pi(x)\in U(x)\)；对 P₂ 则是 \(\pi_2 : X\times\mathcal{K}\to V\)，给出 \(v = \pi(x)\in V(x)\)。再定义随机化计划：令 \(W(x)\)、\(Z(x)\) 分别为 \(U(x)\)、\(V(x)\) 上所有概率分布的集合。P₁ 的<b>随机化计划</b>对每个 \(x\in X\)、\(k\in\mathcal{K}\) 给出某个 \(w\in W(x)\)；同样 P₂ 的随机化计划对每个 \(x\in X\)、\(k\in\mathcal{K}\) 给出某个 \(z\in Z(x)\)。</p>
+<h4>序贯博弈中的鞍点</h4>
+<p>再次为每个玩家定义安全策略来得到鞍点。每个玩家把对方当作自然；如果得到同样的最坏情况值，结果就是博弈的鞍点；若值不同，就需要随机化计划来弥合上值与下值之间的差距。上值和下值现在依赖于初始状态 \(x_1\in X\)——10.5.1 节没有这样的东西，因为博弈树的根是唯一可能的起点。若从 \(x_1\) 施加动作序列 \(\tilde{u}_K\) 和 \(\tilde{v}_K\)，反复用状态转移函数 \(f\) 就能推出状态历史 \(\tilde{x}_F\)。从 \(x_1\) 出发的<b>上值</b>定义为</p>
+<div class="eq">$$\overline{L}^*(x_1) = \min_{u_1}\max_{v_1}\min_{u_2}\max_{v_2}\cdots\min_{u_K}\max_{v_K}\Big\{L(\tilde{x}_F,\tilde{u}_K,\tilde{v}_K)\Big\}, \tag{10.108}$$</div>
+<p>若把 P₂ 换成自然，它与 (10.33) 相同；(10.108) 也把 (9.44) 推广到多阶段。从 \(x_1\) 出发的<b>下值</b>推广了 (9.46)：</p>
+<div class="eq">$$\underline{L}^*(x_1) = \max_{v_1}\min_{u_1}\max_{v_2}\min_{u_2}\cdots\max_{v_K}\min_{u_K}\Big\{L(\tilde{x}_F,\tilde{u}_K,\tilde{v}_K)\Big\}. \tag{10.109}$$</div>
+<p>若 \(\overline{L}^*(x_1) = \underline{L}^*(x_1)\)<sup class="fn"><a href="#fn-x2" id="fn-x2-ref">9</a></sup>，则从 \(x_1\) 出发存在确定性鞍点。这意味着在每个阶段内部 max 和 min 的次序都可以交换。</p>
+<h4>值迭代</h4>
+<p>把用于 (10.33) 的推导改用于 (10.108)，就得到值迭代方法，即动态规划递推</p>
+<div class="eq">$$\overline{L}^*_k(x_k) = \min_{u_k\in U(x_k)}\Big\{\max_{v_k\in V(x_k)}\Big\{l(x_k,u_k,v_k) + \overline{L}^*_{k+1}(x_{k+1})\Big\}\Big\}, \tag{10.110}$$</div>
+<p>它类似于 (10.39)，可以用来迭代地计算 P₁ 的<b>安全计划</b>。P₂ 的安全计划可以用</p>
+<div class="eq">$$\underline{L}^*_k(x_k) = \max_{v_k\in V(x_k)}\Big\{\min_{u_k\in U(x_k)}\Big\{l(x_k,u_k,v_k) + \underline{L}^*_{k+1}(x_{k+1})\Big\}\Big\} \tag{10.111}$$</div>
+<p>计算，这是由 (10.109) 推出的动态规划方程。从最终阶段 \(F\) 开始，上值和下值直接由代价函数确定：</p>
+<div class="eq">$$\overline{L}^*_F(x_F) = \underline{L}^*_F(x_F) = l_F(x_F). \tag{10.112}$$</div>
+<p>现在计算 \(\overline{L}^*_K\) 和 \(\underline{L}^*_K\)：从每个状态 \(x_K\) 计算 (10.110) 和 (10.111)，判断是否 \(\overline{L}^*_K(x_K) = \underline{L}^*_K(x_K)\)。若是，则 \(L^*_K(x_K) = \overline{L}^*_K(x_K) = \underline{L}^*_K(x_K)\) 就是阶段 \(K\) 从 \(x_K\) 出发的博弈的<b>值</b>。若发现某个 \(x_K\in X\) 的上值和下值不相等，从 \(x_K\) 出发就没有确定性鞍点；而且这还会妨碍更早阶段从其它状态出发的确定性鞍点存在——它们会在后面的值迭代中遇到。允许随机化计划可以避免这些问题，但优化会复杂一些，因为要反复求解线性规划。</p>
+<p>暂且假设对所有 \(x_K\in X\) 都有 \(\overline{L}^*_K(x_K) = \underline{L}^*_K(x_K)\)。值迭代照常从 \(k = K\) 进行到 \(k = 1\)。再假设每个阶段对所有 \(x_k\in X\) 都有 \(\overline{L}^*_k(x_k) = \underline{L}^*_k(x_k)\)；注意 (10.110) 和 (10.111) 中可以用 \(L^*_{k+1}\) 代替 \(\overline{L}^*_{k+1}\) 和 \(\underline{L}^*_{k+1}\)，因为假设上值和下值重合。若不重合，方法就失效，需要随机化计划来得到随机化鞍点。从每个 \(x_1\in X\) 算出结果后，P₁ 的安全计划 \(\pi_1^*\) 定义为：对每个 \(k\in\mathcal{K}\) 和 \(x_k\in X\)，取满足 (10.110) 中最小值的任意动作 \(u\)；P₂ 的安全计划 \(\pi_2^*\) 类似地取满足 (10.111) 中最大值的任意动作 \(v\)。</p>
+<p>现在假设从一个或多个初始状态出发不存在确定性鞍点。为避免遗憾，必须设计随机化安全计划。它们直接推广自 9.3.3 节的随机化安全策略。用向量 \(w\)、\(z\) 表示 \(U(x)\)、\(V(x)\) 上的概率分布，概率向量分别从对应于 \(U(x)\)、\(V(x)\) 上所有概率分布的集合 \(W(x)\)、\(Z(x)\) 中选取。为了记号方便，设 \(U(x) = \{1,\ldots,m(x)\}\)、\(V(x) = \{1,\ldots,n(x)\}\)，\(m(x)\)、\(n(x)\) 是正整数。回忆定义单阶段博弈随机化上值和下值的 (9.61)、(9.62)，这里推广为<b>序贯</b>博弈的随机化上值和下值。它们的定义类似于 (10.108) 和 (10.109)，只是：1）交替的 min 和 max 取遍动作空间上的概率分布；2）使用期望代价。动态规划原理可以用于<b>随机化上值</b>，得到</p>
+<div class="eq">$$\overline{\mathcal{L}}^*_k(x_k) = \min_{w\in W(x_k)}\Big\{\max_{z\in Z(x_k)}\Big\{\sum_{i=1}^{m(x_k)}\sum_{j=1}^{n(x_k)}\Big(l(x_k,i,j) + \overline{\mathcal{L}}^*_{k+1}(x_{k+1})\Big)w_i z_j\Big\}\Big\}, \tag{10.113}$$</div>
+<p>其中 \(x_{k+1} = f(x_k,i,j)\)。<b>随机化下值</b>类似地为</p>
+<div class="eq">$$\underline{\mathcal{L}}^*_k(x_k) = \max_{z\in Z(x_k)}\Big\{\min_{w\in W(x_k)}\Big\{\sum_{i=1}^{m(x_k)}\sum_{j=1}^{n(x_k)}\Big(l(x_k,i,j) + \underline{\mathcal{L}}^*_{k+1}(x_{k+1})\Big)w_i z_j\Big\}\Big\}. \tag{10.114}$$</div>
+<p>在许多博弈中，代价项可能只依赖于状态：对所有 \(x\)、\(u\)、\(v\)，\(l(x,u,v) = l(x)\)。这时 (10.113) 和 (10.114) 化简为</p>
+<div class="eq">$$\overline{\mathcal{L}}^*_k(x_k) = \min_{w\in W(x_k)}\Big\{\max_{z\in Z(x_k)}\Big\{l(x_k) + \sum_{i=1}^{m(x_k)}\sum_{j=1}^{n(x_k)}\overline{\mathcal{L}}^*_{k+1}(x_{k+1})w_i z_j\Big\}\Big\} \tag{10.115}$$</div>
+<div class="eq">$$\underline{\mathcal{L}}^*_k(x_k) = \max_{z\in Z(x_k)}\Big\{\min_{w\in W(x_k)}\Big\{l(x_k) + \sum_{i=1}^{m(x_k)}\sum_{j=1}^{n(x_k)}\underline{\mathcal{L}}^*_{k+1}(x_{k+1})w_i z_j\Big\}\Big\}, \tag{10.116}$$</div>
+<p>这与 (10.46) 中的化简类似（那里假设 \(\theta_k\) 不出现在代价项里）。这些求和本质上是把 (9.57) 推广到多阶段；如果需要，甚至可以像 9.3.3 节那样写成矩阵乘法。在上面的方程上做值迭代就能得到序贯博弈的随机化值。由于上值和下值总是相同，不需要检查两者是否不一致。实践中最好在每次计算 (10.113) 和 (10.114)（或它们的简化形式）时先检查从 \(x_k\) 出发是否存在确定性鞍点；不存在时，必须求解 9.3.3 节表述的线性规划问题来确定每个玩家的值和最佳随机化计划。若从当前状态和阶段出发存在确定性鞍点，就可以避免求解线性规划。</p>
+
+<div class="widget wide" data-widget="corridor-chase"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>K = 1，点对角线上的格子（两人在同一格）：3×3 矩阵是「猜对 P₂ 的动作就抓到」，确定性上 / 下值 1 / 0，随机化值 2/3，三个动作各 1/3（参考代码第 14 项）。</li>
+  <li>点 (1, 0)：逃跑者被逼在墙角，实际上只剩两种有效选择，变成 2×2 的「猜硬币」，随机化值 1/2。</li>
+  <li>把 K 调大：上值处处等于 K（P₂ 先看到 P₁ 的动作，总能躲开），下值在很多状态都很小，随机化值介于两者之间——阶段式模型下必须用 (10.113) 和线性规划。<span class="muted">（这个博弈是补充的例子。）</span></li>
+</ul></div>
+
+<h3 id="s10-5-3">10.5.3 其它序贯博弈</h3>
+<p>到目前为止 10.5 节的大多数想法都能自然地推广到其它序贯博弈问题。本小节简要提及其中一些可能的推广。</p>
+<h4>序贯博弈中的 Nash 均衡</h4>
+<p>Formulation 10.3 和 10.4 可以推广到序贯非零和博弈。对博弈树，在每个叶子上写一个<b>代价向量 cost vector</b>，每个玩家一个分量。在阶段式模型下，可以用 10.5.1 节介绍的自底向上技术计算确定性和随机化的 Nash 均衡，得到的是<b>一个</b> Nash 均衡。要表示<b>所有</b> Nash 均衡就困难得多：照例把博弈树分解成许多矩阵博弈，但每种情况下都必须找出所有 Nash 均衡并记录它们对应的代价；不再是沿树向上传播单个代价，而是要传播一个代价向量集合（连同每个代价向量相关的动作）直到根。和单阶段博弈一样，可以排除不可容许的 Nash 均衡，因此在计算中遇到的每个矩阵博弈里，只有可容许的 Nash 均衡及其代价需要向上传播。</p>
+<p>Formulation 10.4 可以通过为 P₁、P₂ 分别引入代价函数 \(L_1\)、\(L_2\) 来推广。值迭代方法可以像博弈树方法那样推广：对每个状态和阶段的组合，都要维护多个值向量及其对应的动作，它们对应可容许的 Nash 均衡。Nash 均衡的不唯一性是序贯博弈中最大的困难——序贯博弈中通常比单阶段博弈多得多的均衡。因此这个概念在设计规划方法时不太有用；它可能更适合例如对复杂经济系统可能结果的建模。关于这个主题的详尽论述见 [4]。</p>
+<h4>引入自然</h4>
+<p>自然这个玩家可以很容易地引入博弈。例如把自然引入零和博弈，就有三个玩家：P₁、P₂ 和自然。图 10.19 是一个有自然参与的单阶段零和博弈的博弈树：假设三个玩家同时行动，符合阶段式模型；也可能有许多其它信息模型。假设用概率不确定性对自然建模，已知自然以概率 1/3 选左支、以概率 2/3 选右支。根据自然选的分支，P₁ 和 P₂ 似乎要玩一个特定的 \(2\times2\) 矩阵博弈。以概率 1/3，代价矩阵是</p>
+<div class="eq">$$\begin{array}{c|cc} & V & \\ \hline U & 3 & -2 \\ & -6 & 3 \end{array} \tag{10.117}$$</div>
+<p>以概率 2/3 是</p>
+<div class="eq">$$\begin{array}{c|cc} & V & \\ \hline U & 3 & -1 \\ & 6 & 0 \end{array} \tag{10.118}$$</div>
+<p>遗憾的是，P₁ 和 P₂ 不知道自己实际在玩哪个矩阵博弈。如果博弈在许多独立试验中进行，遗憾可以在期望意义下消除。令 \(A_1\)、\(A_2\) 分别表示 (10.117) 和 (10.118)，定义新的代价矩阵 \(A = (1/3)A_1 + (2/3)A_2\)（标量乘矩阵即每个元素乘以它）。得到的矩阵是<sup class="fn"><a href="#fn-10119" id="fn-10119-ref">10</a></sup></p>
+<div class="eq">$$\begin{array}{c|cc} & V & \\ \hline U & 3 & -4/3 \\ & 2 & 1 \end{array} \tag{10.119}$$</div>
+<p>这个矩阵博弈有确定性鞍点：P₁ 选 \(R\)（第 2 行）、P₂ 选 \(L\)（第 1 列），代价为 2。这意味着如果在许多独立试验上平均，它们可以用确定性策略得到期望代价 2。如果这个矩阵没有确定性鞍点，就需要随机化策略。有趣的是，这个例子不需要随机化，尽管 P₁ 和 P₂ 各自都在同时对抗自然和一个聪明的对手。</p>
+<p>还可能有若干其它变体。如果用非确定方式对自然建模，可以构造一个最坏情况遗憾的矩阵，来判断是否可能消除遗憾。也可以考虑图 10.19 那种博弈的序贯版本：每个阶段有三个子阶段，自然、P₁、P₂ 都行动。10.5.1 节的自底向上方法可以把树分解成许多单阶段博弈，它们的代价可以像以前一样向上传播到根，得到均衡解。Formulation 10.4 也可以很容易地推广到在状态空间上的博弈中引入自然：对每个 \(x\)，定义一个自然动作集合 \(\Theta(x)\)，状态转移方程定义为</p>
+<div class="eq">$$x_{k+1} = f(x_k,u_k,v_k,\theta_k), \tag{10.120}$$</div>
+<p>这意味着下一状态除了依赖当前状态外，还依赖三个玩家的动作。把自然的影响适当地考虑进动态规划方程，就可以把值迭代推广到求解这类问题：例如概率情形下，每次迭代都需要对自然求期望。这样得到的序贯博弈常称为 <b>Markov 博弈 Markov game</b>。</p>
+
+<div class="widget" data-widget="nature-game"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>p = 1/3：右边的 A 第一行第二列是 (1/3)(−2) + (2/3)(−1) = −4/3（原书 (10.119) 印成了 0），鞍点在 P₁ 选 R、P₂ 选 L，值 2——结论不受影响（参考代码第 13 项）。</li>
+  <li>把 p 调到 1/2：A = [[3, −3/2], [0, 3/2]] 没有确定性鞍点，随机化值 3/4；p = 2/3 时随机化值 4/13。</li>
+  <li>把 p 拖到 0 和 1 两端：就退化成单个矩阵 A₂ 或 A₁，各自有没有鞍点？</li>
+</ul></div>
+
+<h4>引入更多玩家</h4>
+<p>引入更多玩家除了使记号复杂外没有大困难。例如设 \(n\) 个玩家 P₁、P₂、…、Pₙ 轮流进行博弈。考虑用博弈树表示：一个阶段现在被拉伸成 \(n\) 个子阶段，每个玩家各自行动。设总是 P₁ 先行，然后 P₂，如此直到 Pₙ；Pₙ 行动之后开始下一个阶段，P₁ 再行动。这种循环的玩家轮替一直持续到博弈结束。同样可能有许多不同的信息模型：例如在阶段式模型下，每个玩家不知道其他 \(n-1\) 个玩家在当前阶段选的动作。自底向上的计算方法可以用来计算 Nash 均衡，但又要面对不唯一性的问题。可以通过为每个玩家 Pᵢ 和状态 \(x\in X\) 引入动作集 \(U^i(x)\) 来做出推广 Formulation 10.4 的状态空间表述。令 \(u^i_k\) 表示 Pᵢ 在阶段 \(k\) 选的动作，状态转移变成</p>
+<div class="eq">$$x_{k+1} = f(x_k,u^1_k,u^2_k,\ldots,u^n_k). \tag{10.121}$$</div>
+<p>每个 Pᵢ 还有一个代价函数 \(L_i\)。改造成维护多个均衡和代价向量的值迭代可以用来计算 Nash 均衡。</p>
+</section>
+
+<!-- ============================================================ 10.6 -->
+<section id="s10-6">
+<h2>10.6 连续状态空间 <span class="en">Continuous State Spaces</span></h2>
+<p>本章涵盖的几乎所有概念都能推广到连续状态空间，这使它们至少在理论上能用于配置空间。于是涉及不确定性或不合作机器人的运动规划问题，可以用本章的概念建模；这样的问题也继承了第 8 章的反馈概念。本节讨论包含自然带来的不确定性的反馈运动规划问题。在特定情形下，也许能推广 8.4 和 8.5 节的一些方法；解反馈计划必须保证尽管有自然的努力也能到达目标。在第 8 章的方法中，最容易推广的是 8.5.2 节介绍的带插值的值迭代，因此它是本节的重点。连续状态空间中的博弈见 13.5 节。</p>
+
+<h3 id="s10-6-1">10.6.1 扩展值迭代方法</h3>
+<p>讲法与 8.5.2 节相同：从离散问题开始，把各个组成部分变成连续的。从 Formulation 10.1 出发，令 \(X\) 是 \(\mathbb{R}^n\) 的有界开子集，假设 \(U(x)\) 和 \(\Theta(x,u)\) 是有限的。利用 8.5.2 节的插值概念，可以直接用 10.2.1 节的值迭代方法计算 \(X\) 上的代价到目标值。非确定情形下的递推是 (10.39)，其中 \(G^*_{k+1}\) 表示在有限样本集 \(S\subset X\) 上，在 \(R(S)\) 的其它点上用插值求值（回忆 8.5.2 节，\(R(S)\) 是 \(S\) 的插值区域）。概率情形下仍可用 (10.45) 或 (10.46)，但 \(G^*_{k+1}\) 用插值求值。</p>
+<p>若 \(U(x)\) 是连续的，可以像 8.5.2 节建议的那样对它采样，来求每个递推中的最小值。现在设 \(\Theta(x,u)\) 是连续的。非确定情形下，可以对 \(\Theta(x,u)\) 采样来求 (10.39) 中的最大值，或者直接在 \(\Theta(x,u)\) 上用一般的优化技术。概率情形下，期望必须在连续的概率空间上求：概率密度函数 \(p(\theta\mid x,u)\) 刻画自然的动作，由此可以推出概率状态转移密度函数 \(p(x_{k+1}\mid x_k,u_k)\)。用这些密度，(10.45) 和 (10.46) 的连续版本分别变成</p>
+<div class="eq">$$G^*_k(x_k) = \min_{u_k\in U(x_k)}\Big\{\int_{\Theta(x_k,u_k)}\Big(l(x_k,u_k,\theta_k) + G^*_{k+1}(f(x_k,u_k,\theta_k))\Big)p(\theta_k\mid x_k,u_k)\,d\theta_k\Big\} \tag{10.122}$$</div>
+<div class="eq">$$G^*_k(x_k) = \min_{u_k\in U(x_k)}\Big\{l(x_k,u_k) + \int_X G^*_{k+1}(x_{k+1})\,p(x_{k+1}\mid x_k,u_k)\,dx_{k+1}\Big\}. \tag{10.123}$$</div>
+<p>可以用采样来求积分。一种直接的方法是用离散分布近似 \(p(\theta\mid x,u)\)：例如在一维中，把 \(\Theta(x,u)\) 划分成若干区间，每个区间宣布为一个离散的自然动作，与之关联的概率就是 \(p(\theta\mid x,u)\) 在该区间上的积分。</p>
+<p>8.5.2 节最后描述了连续空间的类 Dijkstra 算法。它们主要用反向投影 (8.66) 推出：某些样本因为离活跃集太远而不能改变它们的值。同样的原理可以用于现在的设定，但必须改用弱反向投影 (10.20)：用弱反向投影，可以在去掉所有不在活跃集中的样本的同时照常做值迭代。不过对许多问题，活跃集可能很快变得难以管理，因为弱反向投影的传播往往比原来的反向投影快得多。10.2.3 节类 Dijkstra 算法的连续状态推广也可以做出来；但这需要一个附加条件：每次迭代都必须能够不顾自然地把下一状态强迫落在 \(R(D)\) 中，从而扩大 \(D\)。</p>
+
+<h3 id="s10-6-2">10.6.2 与自然对抗的运动规划</h3>
+<p>回忆 8.5.2 节：带插值的值迭代可以用于以离散时间近似的运动规划问题。自然甚至也可以引入离散时间近似。例如 (8.62) 可以换成</p>
+<div class="eq">$$x(t+\Delta t) = x(t) + \Delta t\,(u + \theta), \tag{10.124}$$</div>
+<p>其中 \(\theta\) 从有界集合 \(\Theta(x,u)\) 中选取。用 (10.124) 可以像上面那样做值迭代。图 10.20 是这个模型下用概率不确定性的一个二维运动规划问题的例子：自然是概率的（在一个角度区间上均匀分布），可以干扰运动方向；这个问题中实际上允许与障碍接触<sup class="fn"><a href="#fn-fig1020" id="fn-fig1020-ref">11</a></sup>。有趣的是，从固定初始状态执行计划时，每次得到的轨迹都不同；但多次执行的平均代价接近期望最优值。</p>
+
+<div class="widget wide" data-widget="continuous-nature"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>默认 σ = 40°：等高线绕着楔形障碍一层层排开（像图 10.20b），向量场在楔子尖端附近急转（图 10.20c）。点「模拟 30 次执行」：轨迹每次都不一样，但都在楔子之间之字形前进到 X_G（图 10.20d），平均时间接近 G*(x_I)。</li>
+  <li>σ 设成 0 重新计算：没有自然，30 条轨迹完全重合。</li>
+  <li>σ 调到 80° 以上重新计算：自然几乎能把方向扭转到垂直，代价明显变大，计划开始远离尖角、宁可多绕一点。<span class="muted">（几何、16 个方向、5 个自然样本、「撞上障碍就原地不动」都是本页补充的具体选择。）</span></li>
+</ul></div>
+
+<p>可以构造有趣的混合系统例子：自然只能干扰<b>模式</b>。回忆 7.3 节的 Formulation 7.3，加入自然后得到下面的表述：</p>
+<div class="box def formulation">
+  <div class="box-title">Formulation 10.5（与自然对抗的混合系统运动规划 Hybrid System Motion Planning with Nature）</div>
+  <ol>
+    <li>沿用 Formulation 7.3 的全部定义，状态转移函数 \(f_m\) 和 \(f\) 除外。状态表示为 \(x = (q,m)\)。</li>
+    <li>对每个 \(x\in X\)、\(u\in U(x)\)，有限的<b>自然动作空间</b> \(\Theta(x,u)\)。</li>
+    <li><b>模式转移函数</b> \(f_m\)：对每个 \(x\in X\)、\(u\in U(x)\)、\(\theta\in\Theta(x,u)\) 给出模式 \(f_m(x,u,\theta)\)。</li>
+    <li>由 \(f_m\) 推出的<b>状态转移函数</b> \(f\)：改变模式、保持位形不变，即 \(f((q,m),u,\theta) = (q,f_m(q,m,\theta))\)（与 Formulation 7.3 唯一的区别是加入了 \(\theta\)）。</li>
+    <li>无界的<b>时间区间</b> \(T = [0,\infty)\)。</li>
+    <li>连续时间的代价泛函
+      <div class="eq">$$L(\tilde{x}_{t_F},\tilde{u}_{t_F}) = \int_0^{t_F} l(x(t),u(t))\,dt + l_F(x(t_F)). \tag{10.125}$$</div></li>
+  </ol>
+</div>
+<p>这类混合问题的值迭代照样进行。插值只需在配置空间上做；沿着模式「轴」不需要插值，因为模式集合本来就是有限的，得到的计算时间随模式数线性增长。图 10.21 和 10.22 是取自 [33] 的一个点机器人的二维运动规划例子：环境里有一扇门，被建模成一个平稳的 Markov 过程。配置空间用 \(40\times40\) 的网格采样，有两个模式——门开或门关，所以配置空间有两层，每个模式一层。机器人想最小化到达目标的期望时间。每层的导航函数不能独立计算，因为每一层都考虑了模式的转移概率：例如门几乎总是开着时，它的计划就与门几乎总是关着时不同；如果门几乎总是开着，即使它现在是关的，机器人也应该朝门走，因为它很可能很快就开了。这个例子可以有许多变体：可以加入更多模式，也可以有别的解释，比如危险区域与避难所（模式可以想象成「下雨了，机器人必须跑去避雨」），或者运送物品的请求。</p>
+
+<div class="widget wide" data-widget="door-hybrid"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>默认 P(开→关) = P(关→开) = 0.1：比较左右两张图 x_I 处的箭头——门开着时直奔门口；门关着时也许还是朝门走，也许绕右边的长路，取决于概率。下方文字会告诉你此刻的选择。</li>
+  <li>把 P(关→开) 调到 0.4 左右（门关了也很快会开）：门关着时，墙上方大部分区域的箭头也指向门（只有紧挨右侧通道的一小片改走右边）——这就是书中说的「门几乎总开着时，即使现在关着也该朝门走」。</li>
+  <li>把 P(关→开) 调到很小：门关着的那一层改走右边的通道；门开着的那一层靠门附近的区域则依然冲向门口。点「模拟 12 次执行」看门随机开关时的轨迹。<span class="muted">（房间形状、8 邻接移动、「先移动再换模式」是补充的简化。）</span></li>
+</ul></div>
+</section>
+
+<!-- ============================================================ 末尾 -->
+<section id="further">
+<h2>延伸阅读</h2>
+<p>本章考虑的是单阶段决策问题的序贯版本，所以第 9 章末尾推荐的读物在这里也适用。10.1 节的概率表述是随机控制理论的基本问题 [11, 27]，这个框架在人工智能里也很流行 [6, 17, 25, 40]。关于随机控制的一部早期、有影响的著作见 [14]，其中发展了与自然的序贯博弈的概念。前向投影和反向投影在控制理论中不那么常见，它们的灵感来自 [18, 20, 34]。非确定的表述是去掉表述中的概率得到的；最坏情况分析在控制理论中也大量出现 [2, 3, 19]。[21] 论证了在机器人学中使用随机化策略的理由。</p>
+<p>10.2 节基于经典的动态规划工作，但重点放在<b>随机最短路问题 stochastic shortest-path problem</b> 上；在这一语境下进一步阅读值迭代和策略迭代见 [11]。10.2.3 节基于推广 Dijkstra 算法。连续问题近似带来的收敛问题见 [9, 29, 35]；与自然的博弈的复杂性结果见 [36, 37]。10.3 节的灵感来自 [11] 中的讲法。关于 10.4 节的强化学习，进一步阅读见 [1, 5, 13, 45]。10.5 节基于 [4] 中的材料，但着重统一前面各节的概念；[4] 还包含连续空间乃至连续时间上的序贯博弈表述——连续时间情形称为<b>微分博弈 differential games</b>，在 13.5 节介绍。动态规划原理可以很好地推广到博弈论中，并且还推广到 Pareto 最优 [16]。10.6 节的主要目的是通过考虑连续状态空间回到运动规划。把随机最优控制与运动规划结合起来的工作很少；所讲的材料主要基于 [31, 32, 33, 41, 42]。（文献编号与原书 ch10.pdf 末尾的参考文献一致。）</p>
+</section>
+
+<section id="cheatsheet">
+<h2>本章速查表</h2>
+<div class="table-wrap">
+<table class="data">
+  <thead><tr><th style="width:9em">概念</th><th>要点</th></tr></thead>
+  <tbody>
+    <tr><td>Formulation 10.1</td><td>\(x_{k+1} = f(x_k,u_k,\theta_k)\)，\(\theta_k\in\Theta(x_k,u_k)\)；有 \(u_T\)、\(X_G\)；代价 (10.8)；可行问题用 (10.9)。概率版即 MDP。</td></tr>
+    <tr><td>Markov 假设</td><td>(10.3)：\(P(\theta_k\mid\tilde{x}_k,\tilde{u}_k) = P(\theta_k\mid x_k,u_k)\)。当前状态总是已知。</td></tr>
+    <tr><td>前向投影</td><td>非确定：(10.12) 集合递推；概率：(10.13) 边缘化，\(v' = M_{u_{k-1}}\cdots M_{u_1}v\)（列随机矩阵）。按计划：(10.28)(10.29)，\(M_\pi\)。</td></tr>
+    <tr><td>反向投影</td><td>WB：∃θ 能进；SB：∀θ 都进；\(\mathrm{SB}\subseteq\mathrm{WB}\)；WB(S,u) 是逐点 WB 的并，SB(S,u) 不是。</td></tr>
+    <tr><td>反馈计划</td><td>\(\pi : X\to U\)（或依赖阶段 \(X\times\mathcal{K}\to U\)）；\(\mathcal{G}_\pi\) 只剩自然在决策；一个 \(\pi^*\) 对所有初始状态最优。</td></tr>
+    <tr><td>计划的代价</td><td>最坏 (10.31)、期望 (10.32)；有轨迹（概率非零）不能终止就是 ∞。可能可达 vs 保证可达（图 10.2）。</td></tr>
+    <tr><td>值迭代</td><td>非确定 (10.39)：\(\min_u\max_\theta\)；概率 (10.45)(10.46)：\(\min_u E_\theta\)。概率时常给 \(l_F\) 大的有限值。执行时用 (10.48)(10.49) 恢复动作。</td></tr>
+    <tr><td>收敛</td><td>非确定：只在保证可达的状态上收敛。概率三种情况：有限步 / 不收敛 / 渐近（环上概率在 (0,1)）。例 10.6：\(G = 7\)。</td></tr>
+    <tr><td>策略迭代</td><td>图 10.4：求值 (10.53)（解 \(n\) 元线性方程组）+ 改进 (10.54)；有限轮收敛；例 10.7：\(\pi^* = (2,2)\)，\(G = 12/7, 10/7\)。</td></tr>
+    <tr><td>图搜索</td><td>反向投影算法（图 10.6）用 SB 扩大 S，可只查 WB(S)∖S；非确定 Dijkstra（图 10.8）用 Front 与 (10.64)；概率 Dijkstra (10.65) 只在「以概率 1 单调前进」时可用。</td></tr>
+    <tr><td>无限时域</td><td>Formulation 10.2（无 \(u_T\)、无目标）；折扣 (10.67) 有界 \(c/(1-\alpha)\)；平均代价 (10.69)。</td></tr>
+    <tr><td>折扣的解法</td><td>\(J^*_{K-k} = \alpha^{-k}G^*_k\) ⇒ (10.74)、平稳形式 (10.75)(10.76)；策略迭代 (10.77)(10.78)；平均代价 (10.79)、判据 (10.80)、相对值迭代。</td></tr>
+    <tr><td>强化学习</td><td>学习 + 规划 + 执行合一，只有模拟器（图 10.11）；探索与利用。</td></tr>
+    <tr><td>计划评估</td><td>增量平均 (10.83)；蒙特卡罗 (10.85)(10.86)；时间差分 (10.87)；TD(λ) (10.93)、TD(0) (10.94)；Robbins–Monro (10.95)；常数 ρ (10.96)。</td></tr>
+    <tr><td>Q-learning</td><td>\(G^* = \min_u Q^*\) (10.97)；(10.98)(10.99)；更新 (10.101)，折扣版 (10.102)；策略迭代 (10.103)(10.104)。</td></tr>
+    <tr><td>博弈树</td><td>扩展形式；三种信息模型：交替 / 阶段式 / 开环；安全计划自底向上；上值 = 下值 ⇔ 确定性鞍点；alpha-beta 剪枝。</td></tr>
+    <tr><td>信息模型的影响</td><td>阶段式：分解成小矩阵博弈 (10.105)，矩阵形式是 32×32；开环：单阶段 4×4 (10.106)，图 10.13 的随机化值 2（另两种是 1）。</td></tr>
+    <tr><td>状态空间上的博弈</td><td>Formulation 10.4；上 / 下值 (10.108)(10.109)；值迭代 (10.110)(10.111)；随机化 (10.113)–(10.116)，每步可能要解 LP。</td></tr>
+    <tr><td>其它博弈</td><td>Nash 均衡（不唯一是最大困难）；引入自然：期望矩阵 \(A = \sum_i p_i A_i\)，(10.120) Markov 博弈；\(n\) 个玩家 (10.121)。</td></tr>
+    <tr><td>连续空间</td><td>插值值迭代 + (10.122)(10.123)；离散化自然；类 Dijkstra 要用弱反向投影；(10.124)；Formulation 10.5（自然只改模式），插值只在 \(\mathcal{C}\) 上做。</td></tr>
+  </tbody>
+</table>
+</div>
+</section>
+
+<section id="pitfalls">
+<h2>常见陷阱</h2>
+<ol>
+  <li><b>用动作序列当计划</b>：有自然时未来状态不可预测，必须用 \(\pi : X\to U\)；只看动作序列的前向投影会「冲过头」（例 10.1，数轴前向投影图）。</li>
+  <li><b>把 SB(S, u) 当成 SB(x, u) 的并</b>：强反向投影要求整个前向投影落在 S 里，逐点求再并会漏掉（习题 1，例 10.5）。</li>
+  <li><b>概率问题用 \(l_F = \infty\)</b>：任何有限阶段问题都有正概率没到达，值迭代全是 ∞；给一个大的有限值。</li>
+  <li><b>把「可能可达」当「保证可达」</b>：最坏情况下只要 \(\mathcal{G}_\pi\) 有一个不经过目标的环，代价就是 ∞，而期望代价可能很小。</li>
+  <li><b>等值迭代「完全不变」再停</b>：概率情形常常只是渐近收敛（例 10.6），要用阈值 \(\epsilon\)。</li>
+  <li><b>转移矩阵的方向</b>：(10.16) 的 \(M_u\) 是<b>列</b>随机的，\(v' = M_u v\) 里 \(v\) 是列向量；很多书用行随机矩阵和行向量。</li>
+  <li><b>折扣时混用阶段编号</b>：书中折扣部分令第一阶段 \(k = 0\)，与 Formulation 10.1 的 \(k = 1\) 不同；(10.70)(10.71) 的求和下标还与此不一致（脚注 6）。</li>
+  <li><b>对概率问题直接套 Dijkstra</b>：只有存在以概率 1 单调前进的计划时才行，否则代价变化的区域不是一条传播带。</li>
+  <li><b>TD / Q-learning 的步长</b>：用 \(1/v\) 递减步长、初值又差得远时，自举方法可能非常慢；常数 \(\rho\) 更快但有噪声（(10.95) 后的讨论）。</li>
+  <li><b>忽略信息模型</b>：同一棵博弈树，交替行动、阶段式、开环给出不同的值（图 10.13：1、1、2）。</li>
+  <li><b>把 P₂ 的安全计划画在 P₁ 先行的树上算</b>：求下值要交换次序，叶子也随之重排（图 10.15）。</li>
+</ol>
+</section>
+
+<section id="exercises">
+<h2>习题导引</h2>
+<p class="small muted">只给思路，不给完整解答。标「互动」的可以先在本页对应的图里做实验。</p>
+<ol>
+  <li><b>SB(S, u) 不是 SB(x, u) 的并</b>：例 10.5 就是反例：\(S = X_G\)、\(u = 2\)，逐点都是 ∅，合起来是 {−2}。（互动：「弱反向投影与强反向投影」。）</li>
+  <li><b>SB(S) ⊆ WB(S)</b>：\(\Theta(x',u)\) 非空，所以「∀θ 都进 S」蕴含「∃θ 进 S」；对 \(u\) 取存在量词保持包含关系。</li>
+  <li><b>多阶段反向投影</b>：像 (10.12) 那样递归：\(\mathrm{SB}_2(S) = \mathrm{SB}(\mathrm{SB}(S))\)……想想弱的版本对应「存在一条自然动作序列」，强的对应反向投影算法里 S 的逐遍增长。</li>
+  <li><b>无限阶段的前向投影</b>：用 (10.28) 递归，注意 \(X_G\) 里 \(u_T\) 让状态不再变化；关注前向投影的并 \(\bigcup_k X_k(x_1,\pi)\) 是否有限。</li>
+  <li><b>用 0/1 矩阵算非确定前向投影</b>：把 (10.16) 的概率换成「是否可能」，矩阵乘法换成布尔半环（OR / AND）；每步 \(O(n^2)\) 时间、\(O(n^2)\) 空间（每个动作一个矩阵），稀疏时可以按边数计。</li>
+  <li><b>「可能达到」版本的图 10.6</b>：把 SB 换成 WB——它得到的是「可能可达」的状态集合，计划只保证存在一条好运的自然序列。</li>
+  <li>–8. <b>前向值迭代</b>：对照 2.3.1.1 节的前向值迭代，把 \(f^{-1}\) 换成反向投影；概率情形要小心「代价到达」的定义需要初始分布。</li>
+  <li><b>从 \(\mathcal{G}_\pi\) 直接算概率前向投影</b>：在带概率的边上做 (10.29) 的传播即可，也就是稀疏地乘 \(M_\pi\)。（互动：「计划、G_π 与代价」的前向投影。）</li>
+  <li><b>处理「可能但非保证可达」的状态</b>：先用图 10.6（或它的弱版本）分出保证可达集合，只在它上面判断收敛；其余状态的值标为 ∞。（互动：值迭代实验室的「侧滑 + 最坏情况」。）</li>
+  <li>–12. <b>依赖阶段的 \(f\) 与 \(l\)</b>：递推里把 \(f(x_k,u_k,\theta_k)\) 换成 \(f(x_k,u_k,\theta_k,k)\)、\(l\) 同理；此时不能再期望平稳解，计划也要依赖阶段。</li>
+  <li><b>代价依赖自然的策略迭代</b>：(10.53) 里的 \(l(x,\pi(x))\) 换成 \(\sum_\theta l(x,\pi(x),\theta)P(\theta\mid x,\pi(x))\)，(10.54) 同理。</li>
+  <li><b>非确定版策略迭代</b>：求值步变成在 \(\mathcal{G}_\pi\) 上求最长路（有环就是 ∞，见本页「计划、G_π 与代价」的做法）；改进步用 (10.48) 的 max。</li>
+  <li><b>在 Formulation 2.3 上用策略迭代</b>：可以；求值退化成 (10.50) 那样沿计划回溯的加法（像 Dijkstra 一样一圈圈求出），改进步就是在图上做局部改进。</li>
+  <li><b>折扣 ≡ 随机最短路</b>（提示：[11] 第 378 页）：加一个吸收的终止状态，每步以概率 \(1-\alpha\) 跳过去、以 \(\alpha\) 按原转移走；期望总代价正好等于折扣代价。</li>
+  <li><b>非确定折扣值迭代</b>：把 (10.74) 的期望换成 \(\max_\theta\)，得到 \(J^*_i(x) = \min_u\max_\theta\{l + \alpha J^*_{i-1}\}\)，它计算 (10.71)。</li>
+  <li><b>图 10.23 的随机化值</b>：照 (10.105) 的做法：先解四个 2×2 矩阵（有一个没有确定性鞍点），再解顶层 2×2。（互动：「三种信息模型」里选图 10.23，自己算完再看。）</li>
+  <li><b>状态空间上的 alpha-beta</b>：从固定初始状态做深度优先，维护 α、β；在博弈图上要小心同一状态被多次访问（可以缓存值，但缓存要连同当时的 α、β 窗口）。</li>
+  <li><b>推导 (10.110)(10.111)</b>：照搬 (10.33)–(10.39) 的推导，把 \(\max_\theta\) 换成 \(\max_v\)；下值则从 (10.109) 开始，min 与 max 对调。</li>
+  <li>–22. <b>Formulation 2.4（STRIPS 式）加不确定性</b>：每个算子给出一组可能的效果（非确定）或带概率的效果（概率）；对应到状态空间就是 \(\Theta(x,u)\)。</li>
+  <li>–27. <b>实现题</b>：23 → 「图 10.3：循环让值迭代只能渐近收敛」与值迭代实验室；24 → 「反向投影算法与非确定 Dijkstra」；25 → 在冰面世界里检查 \(G_\pi(x_{k+1}) &lt; G_\pi(x_k)\)；26 → 「Q-learning」里改 ρ；27 → 「博弈树」与「三种信息模型」。</li>
+</ol>
+</section>
+
+<section id="notes">
+<h2>脚注</h2>
+<div class="box small">
+  <p id="fn-1010" style="margin:0 0 6px"><sup>1</sup> 原书写「The probabilistic forward projection in (10.10) can be adapted to use π」，但 (10.10) 是<b>非确定</b>的前向投影；按 (10.29) 的形式，被改造的应是概率前向投影 (10.13)。<a href="#fn-1010-ref">↩</a></p>
+  <p id="fn-lf" style="margin:0 0 6px"><sup>2</sup> 原书 (10.38) 和 (10.44) 里最内层写的是 \(l(x_F)\)，按 (10.37)(10.43) 应为 \(l_F(x_F)\)；本页按 \(l_F\) 写。<a href="#fn-lf-ref">↩</a></p>
+  <p id="fn-20it" style="margin:0 0 6px"><sup>3</sup> 补充：这句话不能拿图 10.3 本身去对。对这个例子做初值为 0 的值迭代，第 \(n\) 次迭代的变化量恰好是「\(n\) 步内还没到达」的概率 \((1/2)^{\lceil (n-3)/4\rceil}\)：第 20 次迭代约为 0.0625，到第 121 次迭代才小于 \(10^{-9}\)（参考代码第 7 项）。书中「20 次迭代后约十亿分之一」应理解为一般情形下的量级说法。<a href="#fn-20it-ref">↩</a></p>
+  <p id="fn-218" style="margin:0 0 6px"><sup>4</sup> 原书写「The probabilistic analog of (2.18) is (10.49)」。但 (2.18) 是平稳的动态规划方程 \(G^*(x) = \min_u\{l(x,u) + G^*(f(x,u))\}\)，(2.19) 才是求动作的 argmin；(10.49) 是 argmin 形式，对应 (2.19)，(2.18) 的概率版本是 (10.52)。属引用笔误，不影响内容。<a href="#fn-218-ref">↩</a></p>
+  <p id="fn-1061" style="margin:0 0 6px"><sup>5</sup> 原书 (10.61) 写作 \(1 + 0 + (3)\tfrac12 + (0)\tfrac14 = \tfrac52\)：最后一项乘的是 \(P(c\mid a,2)\)，按图 10.5 它是 \(1/2\) 而不是 \(1/4\)（\(1/4\) 是 \(P(a\mid b,2)\)）。因为 \(G_\pi(c) = 0\)，结果 5/2 不受影响；本页已改为 \(\tfrac12\)。<a href="#fn-1061-ref">↩</a></p>
+  <p id="fn-k0" style="margin:0 0 6px"><sup>6</sup> 原书在 (10.70)(10.71) 之前刚说「令第一个阶段为 \(k = 0\)」，(10.67) 的求和也从 \(k = 0\) 开始，但 (10.70)(10.71) 的求和印成了从 \(k = 1\) 开始。按上下文应从 \(k = 0\) 开始（否则第一阶段的代价被漏掉）。本页照抄原式，在此指出。<a href="#fn-k0-ref">↩</a></p>
+  <p id="fn-1092" style="margin:0 0 6px"><sup>7</sup> 原书 (10.92) 第一行写成 \(\frac{1}{v_k}d_k + \frac{1}{v_{k+1}}d_{k+1} + \cdots + \frac{1}{v_K}d_K + \frac{1}{v_F}d_F\)，第二、三行的代价和写成从 \(l(x_1,u_1)\) 开始。按 (10.91)，\(x_k\) 收到的每次更新系数都是 \(1/v_k\)（第二行也正是把 \(1/v_k\) 提了出来），所以第一行的系数都应是 \(1/v_k\)；望远镜求和 \(d_k + \cdots + d_K\) 得到的代价和应从 \(l(x_k,u_k)\) 开始（\(k = 1\) 时才与原书相同）；\(d_F\) 项本来就是 0。本页已按此改写。<a href="#fn-1092-ref">↩</a></p>
+  <p id="fn-10104" style="margin:0 0 6px"><sup>8</sup> 原书 (10.104) 写的是 \(\operatorname{argmin}_u\{Q^*(x,u)\}\)。这里是策略迭代的改进步，手里只有用 (10.103) 算出的 \(Q_\pi\)（\(Q^*\) 正是要求的未知量），所以应为 \(Q_\pi(x,u)\)；本页按 \(Q_\pi\) 写。<a href="#fn-10104-ref">↩</a></p>
+  <p id="fn-x2" style="margin:0 0 6px"><sup>9</sup> 原书写「If \(\overline{L}^*(x_1) = \underline{L}^*(x_2)\)」，下值的参数应为 \(x_1\)。<a href="#fn-x2-ref">↩</a></p>
+  <p id="fn-10119" style="margin:0 0 6px"><sup>10</sup> 原书 (10.119) 第一行第二列印成 0，但 \((1/3)(-2) + (2/3)(-1) = -4/3\)；随后又说「P₁ 选 \(L\)（第 2 行）、P₂ 选 \(R\)（第 1 列）」，按 (10.117) 的排法第 2 行是 \(R\)、第 1 列是 \(L\)。改正后行最大值为 3、2，列最小值为 2、−4/3，鞍点仍在（第 2 行，第 1 列），值仍为 2，结论不变（参考代码第 13 项）。<a href="#fn-10119-ref">↩</a></p>
+  <p id="fn-fig1020" style="margin:0"><sup>11</sup> 原书图 10.20 的第二幅小图标成了「(a) Optimal navigation function」，按图注应为 (b)。另有两处小问题不单独标注：图 10.10 图注把 decrease 印成了 decease；(10.77)(10.84) 中的 \(u\) 应理解为 \(\pi(x)\)。<a href="#fn-fig1020-ref">↩</a></p>
+</div>
+</section>
+
+<nav class="pager">
+  <a href="../index.html"><span class="dir">← 回到首页</span>全书路线图与进度</a>
+  <a class="next" href="../index.html"><span class="dir">回到首页 →</span>全书路线图与进度</a>
+</nav>
+
+<footer class="page-foot">
+  内容依据 Steven M. LaValle《Planning Algorithms》（Cambridge University Press, 2006）Part III 第 10 章整理与讲解，原书可在 <a href="https://lavalle.pl/planning/ch10.pdf" target="_blank" rel="noopener">lavalle.pl/planning/ch10.pdf</a> 免费阅读。互动图为学习辅助，标「补充」的内容不是书中原文；数值例子由 <a href="code/ch10_sequential_decision.py">part3/code/ch10_sequential_decision.py</a> 核对。
+</footer>
+
+</main>
+</div>
+</body>
+</html>
