@@ -354,7 +354,7 @@
         const a = f(p1, p2, p5), c = f(p3, p2, p5), d = f(p4, p5, p2), e = f(p6, p5, p2);
         const x1 = a !== c, x2 = d !== e, val = x1 || x2;
         const seg = !this.blocked();
-        this.out.innerHTML = `<table class="data" style="font-size:13px"><tr><td>\\(f_l(p_1,p_2,p_5)\\)</td><td>${b(a)}</td><td>\\(f_l(p_4,p_5,p_2)\\)</td><td>${b(d)}</td></tr><tr><td>\\(f_l(p_3,p_2,p_5)\\)</td><td>${b(c)}</td><td>\\(f_l(p_6,p_5,p_2)\\)</td><td>${b(e)}</td></tr><tr><td>异或 ⊕</td><td>${b(x1)}</td><td>异或 ⊕</td><td>${b(x2)}</td></tr></table>`
+        this.out.innerHTML = `<div class="table-wrap" style="margin:0"><table class="data" style="font-size:13px"><tr><td>\\(f_l(p_1,p_2,p_5)\\)</td><td>${b(a)}</td><td>\\(f_l(p_4,p_5,p_2)\\)</td><td>${b(d)}</td></tr><tr><td>\\(f_l(p_3,p_2,p_5)\\)</td><td>${b(c)}</td><td>\\(f_l(p_6,p_5,p_2)\\)</td><td>${b(e)}</td></tr><tr><td>异或 ⊕</td><td>${b(x1)}</td><td>异或 ⊕</td><td>${b(x2)}</td></tr></table></div>`
           + `<p>(6.1) = ${b(x1)} ∨ ${b(x2)} = ${b(val)}，所以 (p2, p5) ${val ? "<b>不是</b>双切线：直线在" + (x1 ? " p2 " : "") + (x1 && x2 ? "和" : "") + (x2 ? " p5 " : "") + "处刺进了障碍。" : "<b>是</b>双切线。"}</p>`
           + `<p class="muted">异或为 TRUE ⇔ 该顶点的两个邻点分在直线 p2p5 的两侧 ⇔ 直线在这里刺进障碍。${seg ? "" : '<span class="no">注意：线段 p2p5 穿过了三角形——(6.1) 假设它不碰撞，所以此时结论不可信。</span>'}</p>`;
       }

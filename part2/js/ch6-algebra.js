@@ -27,7 +27,7 @@
       this.syncUI(); this.render();
     }
     sync() { this.sx.set(this.x); this.sy.set(this.y); }
-    syncUI() { this.sx.classList.toggle("hidden", this.mode !== "610"); this.sz.classList.toggle("hidden", this.mode !== "612"); this.sz.nextSibling && this.sz.nextSibling.classList.toggle("hidden", this.mode !== "612"); }
+    syncUI() { this.sx.classList.toggle("hidden", this.mode !== "610"); this.sy.classList.toggle("hidden", this.mode === "610"); this.sz.classList.toggle("hidden", this.mode !== "612"); this.sz.nextSibling && this.sz.nextSibling.classList.toggle("hidden", this.mode !== "612"); }
     k() { return this.mode === "612" ? 1 - this.z : 1; }   // 原子是 k x² − y < 0
     render() {
       const k = this.k(), b = (v) => (v ? '<span class="yes">TRUE</span>' : '<span class="no">FALSE</span>');
@@ -107,13 +107,19 @@
     draw(st, col) {
       st.ctx.fillStyle = col.surface; st.ctx.fillRect(0, 0, st.W, st.H);
       const cols = { "1,1,1,1": "surface3", "-1,1,1,1": "accent", "-1,-1,1,1": "warn", "-1,1,-1,1": "alive2", "-1,1,1,-1": "ok" };
-      const ctx = st.ctx, [x0, x1, y0, y1] = st.view, N = 160, dx = (x1 - x0) / N, dy = (y1 - y0) / N;
+      // 逐像素着色（先画到离屏图上再放大，避免小方块叠出网纹）
+      const ctx = st.ctx, [x0, x1, y0, y1] = st.view, N = 220, dx = (x1 - x0) / N, dy = (y1 - y0) / N;
+      const off = document.createElement("canvas"); off.width = N; off.height = N;
+      const octx = off.getContext("2d"), img = octx.createImageData(N, N), sf = C.rgb(col.surface);
       for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
         const x = x0 + (i + 0.5) * dx, y = y0 + (j + 0.5) * dy;
         const v = this.curves.map((c) => sgn(ellVal(c, x, y)));
         const c = cols[v.join(",")]; if (!c) continue;
-        ctx.fillStyle = C.alpha(col[c], c === "surface3" ? 1 : 0.28); ctx.fillRect(st.X(x0 + i * dx), st.Y(y0 + (j + 1) * dy), dx * st.scale + 0.7, dy * st.scale + 0.7);
+        const rgb = C.rgb(col[c]), a = c === "surface3" ? 1 : 0.3, o = ((N - 1 - j) * N + i) * 4;
+        img.data[o] = sf[0] * (1 - a) + rgb[0] * a; img.data[o + 1] = sf[1] * (1 - a) + rgb[1] * a; img.data[o + 2] = sf[2] * (1 - a) + rgb[2] * a; img.data[o + 3] = 255;
       }
+      octx.putImageData(img, 0, 0);
+      ctx.drawImage(off, st.X(x0), st.Y(y1), (x1 - x0) * st.scale, (y1 - y0) * st.scale);
       for (const c of this.curves) { ctx.beginPath(); ctx.ellipse(st.X(c.cx), st.Y(c.cy), c.a * st.scale, c.b * st.scale, 0, 0, TAU); ctx.strokeStyle = col.text; ctx.lineWidth = 1.6; ctx.stroke(); }
       if (this.hover) st.dot(this.hover, 5, col.bad, col.surface, 1.5);
     }
@@ -171,7 +177,7 @@
       st.ctx.fillStyle = col.surface; st.ctx.fillRect(0, 0, st.W, st.H);
       const [x0, x1, y0, y1] = st.view;
       st.line(P(x0, 0), P(x1, 0), col.text2, 1.4);
-      for (let x = -1; x <= 4; x++) { st.line(P(x, -0.05), P(x, 0.05), col.text2, 1); }
+      for (let x = -1; x <= 4; x++) { st.line(P(x, -0.05), P(x, 0.05), col.text2, 1); st.text(String(x), P(x, 0), col.muted, { dy: 11, dx: x ? 0 : 7, size: 10.5 }); }
       const plot = (f, c) => { const pts = []; for (let i = 0; i <= 200; i++) { const x = x0 + ((x1 - x0) * i) / 200; pts.push(P(x, f(x))); } st.path(pts.filter((p) => p.y > y0 - 1 && p.y < y1 + 1), c, 2); };
       plot((x) => this.f1(x), col.accent); plot((x) => this.f2(x), col.goal);
       // 实数轴下方画分解
@@ -337,7 +343,7 @@
       this.st = new C.Stage({ aspect: 0.8, maxW: 440, view: [-3, 3, -2.1, 2.7], onDraw: (ctx, st, col) => this.draw3(st, col),
         onDown: (p) => ({ p0: p, az: this.az, el: this.el }),
         onMove: (p, d) => { this.az = d.az + (p.x - d.p0.x) * 0.9; this.el = Math.max(0.05, Math.min(1.45, d.el - (p.y - d.p0.y) * 0.5)); this.st.draw(); }, cursor: () => "move" });
-      this.st2 = new C.Stage({ aspect: 0.8, maxW: 380, view: [-3, 3, -2.4, 2.4], onDraw: (ctx, st, col) => this.draw2(st, col) });
+      this.st2 = new C.Stage({ aspect: 1, maxW: 360, view: [-3, 3, -3.25, 2.95], onDraw: (ctx, st, col) => this.draw2(st, col) });
       this.selM = C.seg([["sphere", "例 6.7：球面 S²"], ["torus", "例 6.8：环面"]], this.mode, (k) => { this.mode = k; this.syncUI(); this.render(); });
       this.selG = C.seg([[1, "g = x₁"], [2, "g = (x₁, x₂)"]], 2, (k) => { this.gDim = +k; this.render(); });
       this.sLat = C.slider("点的纬度", -1.57, 1.57, 0.01, this.lat, (v) => { this.lat = v; this.render(); }, (v) => ((v * 180) / Math.PI).toFixed(0) + "°");
@@ -348,7 +354,7 @@
       this.out = h("div", { class: "small" });
       body.append(h("div", { class: "controls" }, this.selM, this.selG), h("div", { class: "controls" }, this.sLat, this.sLon, this.sR1, this.sR2),
         h("div", { class: "controls" }, ...this.cbs),
-        h("div", { class: "split", style: "grid-template-columns:minmax(0,1fr) minmax(0,1fr)" }, this.st.wrap, this.st2.wrap), this.out,
+        h("div", { class: "split2" }, this.st.wrap, this.st2.wrap), this.out,
         C.legend([[C.cv("alive2"), "轮廓线"], [C.cv("bad"), "临界点"], [C.cv("warn"), "切片曲线"], [C.cv("accent"), "球面上的探针点"]]));
       this.syncUI(); this.render();
     }
@@ -357,7 +363,7 @@
       [this.selG, this.sLat, this.sLon].forEach((e) => e.classList.toggle("hidden", !sp));
       [this.sR1, this.sR2, ...this.cbs].forEach((e) => e.classList.toggle("hidden", sp));
       this.st.setView(sp ? [-1.5, 1.5, -1.2, 1.5] : [-3.1, 3.1, -2.2, 2.8]);
-      this.st2.setView(sp ? [-1.3, 1.3, -1.05, 1.05] : [-3.1, 3.1, -2.45, 2.45]);
+      this.st2.setView(sp ? [-1.3, 1.3, -1.2, 1.1] : [-3.0, 3.0, -3.25, 2.95]);
     }
     proj(x, y, z) { const c = Math.cos(this.az), s = Math.sin(this.az), X = c * x - s * y, D = s * x + c * y; return P(X, z * Math.cos(this.el) + D * Math.sin(this.el) * 0.55); }
     render() {
@@ -427,7 +433,7 @@
         for (const s of [-1, 1]) st.dot(P(s, 0), 6, col.bad, col.surface, 1.5);
         const p = [Math.cos(this.lat) * Math.cos(this.lon), Math.cos(this.lat) * Math.sin(this.lon)];
         st.dot(P(p[0], p[1]), 5, col.accent, col.surface, 1.5);
-        st.text("投影到 x₁x₂ 平面", P(0, -1.0), col.text2, { size: 11 });
+        st.text("投影到 x₁x₂ 平面", P(0, -1.12), col.text2, { size: 11 });
         return;
       }
       // 例 6.8：投影到 x1x2 平面（图 6.37、6.39）
@@ -438,7 +444,7 @@
         for (const y of [-w, w]) st.dot(P(c, y), 4, col.warn);
       }
       if (this.show.crit) for (const x of [this.r1 + this.r2, this.r1 - this.r2, -(this.r1 - this.r2), -(this.r1 + this.r2)]) st.dot(P(x, 0), 5.5, col.bad, col.surface, 1.5);
-      st.text("投影到 x₁x₂ 平面（俯视）", P(0, -2.3), col.text2, { size: 11 });
+      st.text("投影到 x₁x₂ 平面（俯视）", P(0, -3.1), col.text2, { size: 11 });
     }
   }
 

@@ -30,6 +30,7 @@ Planning Algorithm/
 | 3 | 几何表示与变换 Geometric Representations and Transformations | [part2/ch3-geometric-representations.html](part2/ch3-geometric-representations.html) |
 | 4 | 配置空间 The Configuration Space | [part2/ch4-configuration-space.html](part2/ch4-configuration-space.html) |
 | 5 | 基于采样的运动规划 Sampling-Based Motion Planning | [part2/ch5-sampling-based-planning.html](part2/ch5-sampling-based-planning.html) |
+| 6 | 组合运动规划 Combinatorial Motion Planning | [part2/ch6-combinatorial-motion-planning.html](part2/ch6-combinatorial-motion-planning.html) |
 | 8 | 反馈运动规划 Feedback Motion Planning | [part2/ch8-feedback-motion-planning.html](part2/ch8-feedback-motion-planning.html) |
 | 9 | 基本决策论 Basic Decision Theory | [part3/ch9-basic-decision-theory.html](part3/ch9-basic-decision-theory.html) |
 

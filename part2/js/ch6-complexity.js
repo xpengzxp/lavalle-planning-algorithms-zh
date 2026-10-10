@@ -22,10 +22,9 @@
     }
     lg(n) { const m = this.m, d = this.d; return { cad: Math.pow(2, n) * Math.log10(m * d), canny: n * Math.log10(m) + n * n * Math.log10(d) }; }
     render() {
-      let cross = null; for (let n = 1; n <= 12; n++) { const v = this.lg(n); if (v.cad > v.canny) { cross = n; break; } }
       const v6 = this.lg(6), v10 = this.lg(10);
-      this.out.innerHTML = `纵轴是 log₁₀(运行时间)。n = 6 时两者约为 10^${v6.cad.toFixed(0)} 与 10^${v6.canny.toFixed(0)}；n = 10 时约为 10^${v10.cad.toFixed(0)} 与 10^${v10.canny.toFixed(0)}。${cross ? `从 n = ${cross} 起双重指数的那条线就再也追不上了。` : ""}`
-        + ` <span class="muted">真实的界里还有未知常数（(md)^{O(1)^n}、m^n (lg m) d^{O(n⁴)}…），所以交点位置没有意义；有意义的是：一条线随 n 是「指数的指数」，另一条只是「指数」。两者对 m、d 都只是多项式。</span>`;
+      this.out.innerHTML = `纵轴是 log₁₀(运行时间)。n = 6 时两者约为 10<sup>${v6.cad.toFixed(0)}</sup> 与 10<sup>${v6.canny.toFixed(0)}</sup>；n = 10 时约为 10<sup>${v10.cad.toFixed(0)}</sup> 与 10<sup>${v10.canny.toFixed(0)}</sup>——差距随 n 迅速拉大。`
+        + ` <span class="muted">真实的界里还有看不见的常数（(md)<sup>O(1)ⁿ</sup>、mⁿ(lg m)d<sup>O(n⁴)</sup>……），所以两条线的具体高度没有意义；有意义的是形状：一条随 n 是「指数的指数」，另一条只是「指数」。两者对 m、d 都只是多项式。</span>`;
       this.st.draw();
     }
     draw(st, col) {

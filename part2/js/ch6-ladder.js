@@ -28,7 +28,7 @@
       const lu = Math.hypot(u.x, u.y), lw = Math.hypot(w.x, w.y), d = P(u.x / lu + w.x / lw, u.y / lu + w.y / lw), ld = Math.hypot(d.x, d.y) || 1;
       v.reflex = !free(P(v.p.x + (1e-6 * d.x) / ld, v.p.y + (1e-6 * d.y) / ld));
     });
-    return Object.assign({ polys, edges, verts, free }, def);
+    return Object.assign({}, def, { polys, edges, verts, free });
   }
   const LSCENES = {
     fig622: {
@@ -91,6 +91,10 @@
   }
   function repr(R) { return R === "all" ? "()" : R === "none" ? "∅" : "(" + R.map((iv) => `[${iv.f0}, ${iv.f1}]`).join(", ") + ")"; }
   function classify(oldR, newR) {
+    if (oldR === newR) return null;
+    if (newR === "all") return "最后一段碰撞（黑带）消失：自由区间首尾相接成整个圆，记作 ()";
+    if (oldR === "all") return "出现了碰撞：整圆的自由朝向被切出一段黑带";
+    if (newR === "none" || oldR === "none") return newR === "none" ? "原点进入了 C_obs：任何朝向都碰撞（∅）" : "原点离开了 C_obs";
     const keys = (R) => (Array.isArray(R) ? R.map((iv) => iv.f0 + "|" + iv.f1) : R === "all" ? ["()"] : []);
     const A = keys(oldR), B = keys(newR);
     if (A.join() === B.join() || (A.length === B.length && A.every((k) => B.includes(k)))) return null;
@@ -249,14 +253,21 @@
       const Sc = this.Sc;
       st.ctx.fillStyle = col.surface; st.ctx.fillRect(0, 0, st.W, st.H);
       if (this.regions) {
+        // 先画到一张与格点同分辨率的离屏图上，再整体放大（避免相邻小格叠出网纹）
         const { nx, ny, lab, colr, view } = this.regions, ctx = st.ctx;
-        const cw = (view[1] - view[0]) / nx, ch = (view[3] - view[2]) / ny;
+        const off = document.createElement("canvas"); off.width = nx; off.height = ny;
+        const octx = off.getContext("2d"), img = octx.createImageData(nx, ny);
+        const sf = C.rgb(col.surface);
         for (let k = 0; k < nx * ny; k++) {
           if (lab[k] < 0) continue;
-          const i = k % nx, j = (k - i) / nx;
-          ctx.fillStyle = C.alpha(col[C.PALETTE[colr[lab[k]] % C.PALETTE.length]], 0.28);
-          ctx.fillRect(st.X(view[0] + i * cw), st.Y(view[2] + (j + 1) * ch), cw * st.scale + 0.7, ch * st.scale + 0.7);
+          const i = k % nx, j = (k - i) / nx, o = ((ny - 1 - j) * nx + i) * 4;
+          const c = C.rgb(col[C.PALETTE[colr[lab[k]] % C.PALETTE.length]]), a = 0.3;
+          img.data[o] = sf[0] * (1 - a) + c[0] * a; img.data[o + 1] = sf[1] * (1 - a) + c[1] * a; img.data[o + 2] = sf[2] * (1 - a) + c[2] * a; img.data[o + 3] = 255;
         }
+        octx.putImageData(img, 0, 0);
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(off, st.X(view[0]), st.Y(view[3]), (view[1] - view[0]) * st.scale, (view[3] - view[2]) * st.scale);
+        ctx.imageSmoothingEnabled = true;
       }
       for (const Q of Sc.polys) st.poly(Q, C.alpha(col.wall, 0.78), col.wall, 1.2);
       if (this.showCrit) {
@@ -264,7 +275,15 @@
         for (const k of ["a", "b", "c", "d", "e"]) for (const run of this.crit[k]) st.path(run, k === "e" ? col.alive2 : C.alpha(col.alive2, 0.8), k === "e" ? 2 : 1.4, dash[k]);
       }
       // 特征名（只标书中图里出现的那几个）
-      for (const e of Sc.edges) if (Sc.labels.includes(e.name)) { const m = C.lerp(e.a, e.b, 0.5); st.text(e.name, m, col.text2, { dy: e.name === "e3" || e.name === "e1" ? 11 : -10, size: 12, weight: 600 }); }
+      for (const e of Sc.edges) if (Sc.labels.includes(e.name)) {
+        // 名字放在自由空间一侧；边很长时取它在视野里的那一段的中点
+        const [vx0, vx1] = st.view, a = e.a.x < e.b.x ? e.a : e.b, b = e.a.x < e.b.x ? e.b : e.a;
+        const t0 = Math.max(0, (vx0 - a.x) / (b.x - a.x || 1)), t1 = Math.min(1, (vx1 - a.x) / (b.x - a.x || 1));
+        const m = C.lerp(a, b, (t0 + t1) / 2), dx = b.x - a.x, dy = b.y - a.y, Ln = Math.hypot(dx, dy);
+        let nx = -dy / Ln, ny = dx / Ln; if (!Sc.free(P(m.x + nx * 1e-3, m.y + ny * 1e-3))) { nx = -nx; ny = -ny; }
+        const off = 12 / st.scale;
+        st.text(e.name, P(m.x + nx * off, m.y + ny * off), col.text2, { size: 12, weight: 650 });
+      }
       for (const v of Sc.verts) if (Sc.labels.includes(v.name)) { st.dot(v.p, 3.5, col.wall); st.text(v.name, v.p, col.text2, { dx: 12, dy: -8, size: 12, weight: 600 }); }
       // 半径 L 的圆与机器人
       const ctx = st.ctx; ctx.beginPath(); ctx.arc(st.X(this.p.x), st.Y(this.p.y), this.L * st.scale, 0, TAU); ctx.strokeStyle = C.alpha(col.text, 0.35); ctx.setLineDash([4, 4]); ctx.lineWidth = 1; ctx.stroke(); ctx.setLineDash([]);
@@ -338,12 +357,12 @@
       st.poly([P(0, 0), P(-1.6, 0.35), P(-1.6, -0.12)], C.alpha(col.wall, 0.7), col.wall, 1);
       st.text("e", P(0.9, -d), col.text2, { dy: 12, weight: 650 }); st.text("v", P(0, 0), col.text2, { dx: 10, dy: 12, weight: 650 });
       const segs = (f) => C.contour(f, box, 200, 150);
-      if (this.showBook) for (const [a, b] of segs((x, y) => (x * x - y * y) * (y + d) ** 2 - y * y * L * L)) st.line(a, b, C.alpha(col.bad, 0.85), 1.6, [4, 3]);
-      for (const [a, b] of segs((x, y) => (x * x + y * y) * (y + d) ** 2 - y * y * L * L)) st.line(a, b, col.alive2, 2.4);
-      // 原点走过的环（只画 v 上方那支）
+      // 原点走过的环（只画 v 上方那支）：先画成宽而淡的底色，再在上面画方程的曲线，看它们是否重合
       const loop = []; const m = this.maxS();
       for (let k = 0; k <= 200; k++) { const s = -m + (2 * m * k) / 200, r = Math.hypot(s, d); loop.push(P(s * (1 - L / r), -d * (1 - L / r))); }
-      st.path(loop, C.alpha(col.warn, 0.7), 4);
+      st.path(loop, C.alpha(col.warn, 0.45), 8);
+      if (this.showBook) for (const [a, b] of segs((x, y) => (x * x - y * y) * (y + d) ** 2 - y * y * L * L)) st.line(a, b, C.alpha(col.bad, 0.85), 1.6, [4, 3]);
+      for (const [a, b] of segs((x, y) => (x * x + y * y) * (y + d) ** 2 - y * y * L * L)) st.line(a, b, col.alive2, 2.2);
       const q = P(this.s, -d);
       st.line(this.pp, q, col.bad, 4);
       st.dot(this.pp, 6, col.text, col.surface, 2); st.dot(q, 4, col.surface, col.bad, 2); st.dot(P(0, 0), 4, col.wall);

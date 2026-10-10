@@ -26,7 +26,7 @@
       desc: "引入拓扑概念，并用它们来表述配置空间——运动规划中出现的状态空间。", key: "4.1、4.2、4.3.1 是理解后面大部分内容的关键；整个 4.3 是第 6 章组合方法的背景。", pre: [3] },
     { n: 5, part: "II", title: "基于采样的运动规划", en: "Sampling-Based Motion Planning", href: "part2/ch5-sampling-based-planning.html",
       desc: "近年来主导文献的运动规划算法；只要理解「配置空间是连续状态空间」即可读懂大部分。第 14 章会在微分约束下重访。", key: "", pre: [4, 2] },
-    { n: 6, part: "II", title: "组合运动规划", en: "Combinatorial Motion Planning",
+    { n: 6, part: "II", title: "组合运动规划", en: "Combinatorial Motion Planning", href: "part2/ch6-combinatorial-motion-planning.html",
       desc: "也叫精确算法：构造离散表示而不丢失信息，是完备的（有解必找到，否则报告失败）。", key: "", pre: [4] },
     { n: 7, part: "II", title: "基本运动规划的扩展", en: "Extensions of Basic Motion Planning",
       desc: "第 5、6 章方法的许多扩展问题与算法。", key: "7.4（闭链）需要 4.4。", pre: [5, 6] },

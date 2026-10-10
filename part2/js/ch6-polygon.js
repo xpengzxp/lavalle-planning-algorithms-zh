@@ -11,14 +11,16 @@
   // ===============================================================
   class RoadmapProps {
     constructor(root) {
+      // 轻微剪切 x ← x + 0.021 y：让竖直边不再竖直，满足一般位置（用 6.2.2 节的算法判定真实答案时需要）
+      const sh = ([x, y]) => [x + 0.021 * y, y];
       this.S = new C.Scene([
         [[0, 0], [1.4, 0], [1.4, 1], [0, 1]],
         [[0.4, 0.3], [1.0, 0.3], [1.0, 0.72], [0.4, 0.72]],
         [[0.05, 0.25], [0.05, 0.2], [0.2, 0.2], [0.2, 0.05], [0.25, 0.05], [0.25, 0.25]],
         [[1.15, 0.78], [1.3, 0.78], [1.3, 0.9], [1.15, 0.9]],
-      ]);
+      ].map((Q) => Q.map(sh)));
       const N = { TL: [0.2, 0.86], TM: [0.7, 0.86], TR: [1.07, 0.86], RM: [1.2, 0.5], BR: [1.2, 0.15], BM: [0.7, 0.15], BL: [0.33, 0.13], LM: [0.2, 0.5], G1: [0.025, 0.32], G2: [0.025, 0.17], PK: [0.1, 0.1] };
-      this.N = Object.fromEntries(Object.entries(N).map(([k, v]) => [k, P(v[0], v[1])]));
+      this.N = Object.fromEntries(Object.entries(N).map(([k, v]) => [k, P(...sh(v))]));
       const ring = [["TL", "TM"], ["TM", "TR"], ["TR", "RM"], ["RM", "BR"], ["BR", "BM"], ["BM", "BL"], ["BL", "LM"], ["LM", "TL"]];
       const spur = [["LM", "G1"], ["G1", "G2"], ["G2", "PK"]];
       this.modes = {
@@ -27,7 +29,7 @@
         unreach: { name: "伸不进角落（不满足可达性）", E: ring },
       };
       this.mode = "good";
-      this.qI = P(0.1, 0.1); this.qG = P(1.33, 0.95);
+      this.qI = P(0.102, 0.1); this.qG = P(1.307, 0.35);
       const body = C.frame(root, "路线图的两个条件", "拖动 qI、qG；先连到路线图，再在图上搜索");
       this.st = new C.Stage({ aspect: 0.66, maxW: 560, onDraw: (ctx, st, col) => this.draw(st, col),
         onDown: (p) => (this.st.near(p, this.qI, 12) ? "qI" : this.st.near(p, this.qG, 12) ? "qG" : null),
@@ -434,7 +436,7 @@
       const isl = S.polys.filter((Q, pi) => dep[pi] === 2).map((Q) => Q.length);
       const triWant = nMain + 2 * nObs - 2 + isl.reduce((c, m) => c + m - 2, 0), diagWant = nMain + 3 * nObs - 3 + isl.reduce((c, m) => c + m - 3, 0);
       const extra = this.kind === "triangulation"
-        ? `三角剖分：主区域有 n = ${nMain} 个顶点、h = ${nObs} 个障碍${isl.length ? `，另有 ${isl.length} 个被障碍包住的自由「孤岛」` : ""}。三角形数恒为 n + 2h − 2${isl.length ? "（孤岛另算 m − 2）" : ""} = ${triWant}，对角线数 n + 3h − 3${isl.length ? "（孤岛 m − 3）" : ""} = ${diagWant}，与加对角线的顺序无关；随机顺序更容易出现细长三角形。`
+        ? `三角剖分：主区域有 n = ${nMain} 个顶点、h = ${nObs} 个障碍${isl.length ? `，另有 ${isl.length} 个被障碍包住的自由「孤岛」` : ""}。三角形数恒为 n + 2h − 2${isl.length ? "（孤岛另算 m − 2）" : ""} = ${triWant}，对角线数 n + 3h − 3${isl.length ? "（孤岛 m − 3）" : ""} = ${diagWant}，与加对角线的顺序无关；顺序只影响三角形的形状。`
         : this.kind === "cylindrical"
           ? "柱形分解：每个事件处的竖线一路穿过所有面。单元更多，但每个竖条里自下而上是 C_obs、C_free 交替的「一摞」单元——这是推广到任意维的关键（6.4.2 节）。"
           : "垂直分解：每个顶点只向上、向下延伸到最近的边。2-单元都是梯形或三角形（凸），所以单元内的样本点之间可以直接连直线。";

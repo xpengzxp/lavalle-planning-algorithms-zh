@@ -176,7 +176,7 @@
       this.sx = C.slider("扫描平面 x", 0.02, 0.98, 0.001, this.x, (v) => { this.x = v; this.update(); }, (v) => v.toFixed(3));
       this.out = h("p", { class: "small" });
       body.append(h("div", { class: "controls" }, this.sx, C.button("◀ 上一个事件", () => this.jump(-1), "small"), C.button("下一个事件 ▶", () => this.jump(1), "small")),
-        h("div", { class: "split", style: "grid-template-columns:minmax(0,1fr) minmax(0,1fr)" }, this.st.wrap, this.st2.wrap), this.out,
+        h("div", { class: "split2" }, this.st.wrap, this.st2.wrap), this.out,
         C.legend([[C.cva("warn", 0.4), "扫描平面"], [C.cva("wall", 0.7), "平面切到的障碍截面"], [C.cva("accent", 0.3), "截面里的 2-单元（= 3-单元的切片）"], [C.cv("accent"), "截面里的竖直线段"]]));
       this.update();
     }
