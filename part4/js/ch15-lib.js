@@ -206,7 +206,7 @@
       for (const m of this.o.marks) {
         if (m.x !== undefined) st.line({ x: m.x, y: c }, { x: m.x, y: d }, m.color || col.muted, 1, m.dash || [4, 3]);
         if (m.y !== undefined) st.line({ x: a, y: m.y }, { x: b, y: m.y }, m.color || col.muted, 1, m.dash || [4, 3]);
-        if (m.label) st.text(m.label, { x: m.x !== undefined ? m.x : b, y: m.y !== undefined ? m.y : d }, m.color || col.muted, { size: 10.5, dy: m.y !== undefined ? -8 : 8, dx: m.x !== undefined ? 4 : -4, align: m.x !== undefined ? "left" : "right" });
+        if (m.label) st.text(m.label, { x: m.x !== undefined ? m.x : b, y: m.y !== undefined ? m.y : c }, m.color || col.muted, { size: 10.5, dy: -8, dx: m.x !== undefined ? 4 : -4, align: m.x !== undefined ? "left" : "right" });
       }
       ctx.save(); ctx.beginPath(); ctx.rect(st.X(a), st.Y(d), (b - a) * st.sx, (d - c) * st.sy); ctx.clip();
       for (const s of this.o.series) {

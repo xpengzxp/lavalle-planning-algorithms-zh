@@ -126,12 +126,12 @@
     <li><b>15.4 非完整系统理论</b>：约束到底是不是可以「积分掉」（完全可积）？可达集长什么样？工具是分布、Lie 括号、Frobenius 定理与 Chow–Rashevskii 定理。</li>
     <li><b>15.5 非完整系统的转向方法</b>：对更难的非完整系统做和 15.3 一样的事：解 BVP（不一定最优，有时也不精确到达），用作采样规划里的强力 LPM。</li>
   </ul>
-  <p style="margin:.6em 0 0">前置知识：第 13 章的模型（简单车 (13.15)、差速驱动 (13.16)(13.17)、线性系统 (13.37)、非完整积分器 (13.43)），第 14 章的可达集（14.2.1）、离散时间模型（14.2.2）与 LPM；第 8 章的向量场、积分曲线与导航函数；2.3 节的值迭代。只想先抓主干的话：15.1.1、15.1.3（STLC）、15.2.1、15.3.1–15.3.2、15.4.2 的 Lie 括号与 15.4.3 的 Chow–Rashevskii 定理。</p>
+  <p style="margin:.6em 0 0">前置知识：<a href="ch13-differential-models.html">第 13 章</a>的模型（简单车 (13.15)、差速驱动 (13.16)(13.17)、线性系统 (13.37)、非完整积分器 (13.43)），<a href="ch14-sampling-based-planning-under-differential-constraints.html">第 14 章</a>的可达集（14.2.1）、离散时间模型（14.2.2）与 LPM；第 8 章的向量场、积分曲线与导航函数；2.3 节的值迭代。只想先抓主干的话：15.1.1、15.1.3（STLC）、15.2.1、15.3.1–15.3.2、15.4.2 的 Lie 括号与 15.4.3 的 Chow–Rashevskii 定理。</p>
 </div>
 
 <div class="box small">
-  <div class="box-title">本页的颜色约定（Part IV 的第一个约定）</div>
-  <p style="margin:0">蓝 = 初始状态 \(x_I\)／前进／第一个向量场；粉 = 目标 \(x_G\)；绿 = 最优（或求出的）轨迹；橙 = 倒车段／第二个向量场；紫 = Lie 括号方向／伴随变量 \(\lambda\)；红 = 违反（\(\dot\phi > 0\)、出界、到不了）；深灰 = 障碍；蓝色由浅到深 = 代价到目标 \(G^*\) 由小到大。参考代码 <a href="code/ch15_system_theory.py"><code>part4/code/ch15_system_theory.py</code></a> 核对页面上出现的所有数值，以及脚注里列出的原书笔误。</p>
+  <div class="box-title">本页的颜色</div>
+  <p style="margin:0">沿用<a href="ch13-differential-models.html">第 13 章</a>定下的 Part IV 约定：深灰 = 障碍，粉 = 目标 \(x_G\)，红 = 违反约束 / 不稳定（\(\dot\phi > 0\)、出界、到不了），橙 = 动作；并像<a href="ch14-sampling-based-planning-under-differential-constraints.html">第 14 章</a>一样用绿 = 求出的（最优）轨迹，热图里蓝色由浅到深 = 代价到目标 \(G^*\) 由小到大。本章特有的：蓝 = 初始状态 \(x_I\)、前进段、第一个向量场；橙 = 倒车段、第二个向量场（它们都是在选「动作」）；紫 = Lie 括号方向与伴随变量 \(\lambda\)（本章没有「自然」，借用这个颜色）。参考代码 <a href="code/ch15_system_theory.py"><code>part4/code/ch15_system_theory.py</code></a> 核对页面上出现的所有数值，以及脚注里列出的原书笔误。</p>
 </div>
 </section>
 
@@ -150,7 +150,7 @@
 <div class="box def">
   <div class="box-title">定义：Lyapunov 稳定 Lyapunov stable（图 15.1）</div>
   <p>平衡点 \(x_G\) 是 Lyapunov 稳定的，如果对 \(x_G\) 的任意开邻域<span class="fn">（开邻域 open neighborhood 指包含该点的开集）</span> \(O_1\)，都存在 \(x_G\) 的另一个开邻域 \(O_2\)，使得 \(x_I\in O_2\) 蕴含对所有 \(t>0\) 有 \(x(t)\in O_1\)。</p>
-  <p style="margin-bottom:0">在 \(X=\mathbb{R}^n\) 上有用欧氏度量的等价写法：对任意 \(\epsilon>0\)，存在 \(\delta>0\)，使得 \(\|x_I - x_G\|<\delta\) 蕴含 \(\|x(t)-x_G\|<\epsilon\)。也就是说，无论把 \(x_G\) 周围的球取得多小，只要从一个可能更小的半径 \(\delta\) 的球里出发，以后的状态都被困在半径 \(\epsilon\) 的球里。若同一个 \(\delta\) 能对所有 \(\epsilon\) 和 \(x\) 都适用，称为<b>一致 uniform</b> Lyapunov 稳定。</p>
+  <p style="margin-bottom:0">在 \(X=\mathbb{R}^n\) 上有用欧氏度量的等价写法：对任意 \(\epsilon>0\)，存在 \(\delta>0\)，使得 \(\|x_I - x_G\|&lt;\delta\) 蕴含 \(\|x(t)-x_G\|&lt;\epsilon\)。也就是说，无论把 \(x_G\) 周围的球取得多小，只要从一个可能更小的半径 \(\delta\) 的球里出发，以后的状态都被困在半径 \(\epsilon\) 的球里。若同一个 \(\delta\) 能对所有 \(\epsilon\) 和 \(x\) 都适用，称为<b>一致 uniform</b> Lyapunov 稳定。</p>
 </div>
 
 <h4>渐近稳定与指数稳定</h4>
@@ -159,7 +159,7 @@
   <li>它是 \(f\) 的 Lyapunov 稳定平衡点；</li>
   <li>存在 \(x_G\) 的开邻域 \(O\)，使得对任意 \(x_I\in O\)，\(t\to\infty\) 时 \(x(t)\) 收敛到 \(x_G\)（收敛用 \(X\) 上的度量 \(\rho\) 来衡量）。</li>
 </ol>
-<p>对 \(X=\mathbb{R}^n\)，第二条可以写成：存在 \(\delta>0\)，使 \(\|x_I-x_G\|<\delta\) 的任意 \(x_I\) 出发的 \(x(t)\) 都收敛到 \(x_G\)。要两条可能有点奇怪——第一条限制了积分曲线「晃动的余地」，这是第二条管不住的（下面的互动图里有一个只满足第二条的例子）。渐近稳定还没说收敛有多快。若存在 \(m>0\)、\(\alpha>0\) 使</p>
+<p>对 \(X=\mathbb{R}^n\)，第二条可以写成：存在 \(\delta>0\)，使 \(\|x_I-x_G\|&lt;\delta\) 的任意 \(x_I\) 出发的 \(x(t)\) 都收敛到 \(x_G\)。要两条可能有点奇怪——第一条限制了积分曲线「晃动的余地」，这是第二条管不住的（下面的互动图里有一个只满足第二条的例子）。渐近稳定还没说收敛有多快。若存在 \(m>0\)、\(\alpha>0\) 使</p>
 <div class="eq">$$\|x(t)-x_G\| \le m\,e^{-\alpha t}\,\|x_I - x_G\|, \tag{15.2}$$</div>
 <p>则称 \(x_G\) <b>指数稳定 exponentially stable</b>，这给出了收敛速度。</p>
 
@@ -188,7 +188,7 @@
 
 <h3 id="s15-1-2">15.1.2 Lyapunov 函数 <span class="en">Lyapunov Functions</span></h3>
 <p>给定速度场 \(\dot x = f(x)\) 和平衡点 \(x_G\)，怎么判断它属于哪种稳定？最强有力的方法之一是构造 <b>Lyapunov 函数</b>。先说几种别的办法。</p>
-<p><b>线性情形</b>：若 \(f(x) = Ax\)（\(A\) 是常数 \(n\times n\) 矩阵，\(X=\mathbb{R}^n\)），关于原点 \(x_G=0\) 的稳定性问题由 \(A\) 的特征值回答：\(x=0\) 渐近稳定，当且仅当 \(A\) 的所有特征值实部为负。标量情形 \(\dot x = ax\)：解是 \(x(t) = x(0)e^{at}\)，只有 \(a<0\) 时才收敛到 0。这很容易推广到对角矩阵（每个对角元就是特征值）；一般矩阵里，实特征值或复特征值决定稳定性（复特征值带来振荡）。Lyapunov 稳定也有相应条件：若 \(A\) 的所有特征值实部非正，并且实部为零的特征值是特征多项式的互异根，则 \(\dot x = Ax\) 的每个平衡状态都是 Lyapunov 稳定的<a class="fn" id="fn-lin-ref" href="#fn-lin">[补充]</a>。</p>
+<p><b>线性情形</b>：若 \(f(x) = Ax\)（\(A\) 是常数 \(n\times n\) 矩阵，\(X=\mathbb{R}^n\)），关于原点 \(x_G=0\) 的稳定性问题由 \(A\) 的特征值回答：\(x=0\) 渐近稳定，当且仅当 \(A\) 的所有特征值实部为负。标量情形 \(\dot x = ax\)：解是 \(x(t) = x(0)e^{at}\)，只有 \(a&lt;0\) 时才收敛到 0。这很容易推广到对角矩阵（每个对角元就是特征值）；一般矩阵里，实特征值或复特征值决定稳定性（复特征值带来振荡）。Lyapunov 稳定也有相应条件：若 \(A\) 的所有特征值实部非正，并且实部为零的特征值是特征多项式的互异根，则 \(\dot x = Ax\) 的每个平衡状态都是 Lyapunov 稳定的<a class="fn" id="fn-lin-ref" href="#fn-lin">[补充]</a>。</p>
 
 <div class="widget wide" data-widget="linear-eig"></div>
 <div class="box intuition"><div class="box-title">试一试</div><ul>
@@ -388,7 +388,7 @@
 <div class="eq">$$H(x,u,\lambda) = 1 + \lambda_1x_2 + \lambda_2u. \tag{15.38}$$</div>
 <p>由 (15.28)，最优动作轨迹是</p>
 <div class="eq">$$u^*(t) = \operatorname*{argmin}_{u\in[-1,1]}\big\{\,1 + \lambda_1(t)x_2(t) + \lambda_2(t)u(t)\,\big\}. \tag{15.39}$$</div>
-<p>若 \(\lambda_2(t)<0\)，则 \(u^*(t) = 1\)；若 \(\lambda_2(t)>0\)，则 \(u^*(t) = -1\)。所以只要 \(\lambda_2(t)\neq0\)，动作可以写成 \(u^*(t) = -\mathrm{sgn}(\lambda_2(t))\)。这两种情形就是 14.6.3 节 bang-bang 控制里的两个「bang」，也是 14.4.1 节规划算法用的极值动作。边界情形 \(\lambda_2(t) = 0\) 时，\([-1,1]\) 中任何动作都可以。</p>
+<p>若 \(\lambda_2(t)&lt;0\)，则 \(u^*(t) = 1\)；若 \(\lambda_2(t)>0\)，则 \(u^*(t) = -1\)。所以只要 \(\lambda_2(t)\neq0\)，动作可以写成 \(u^*(t) = -\mathrm{sgn}(\lambda_2(t))\)。这两种情形就是 14.6.3 节 bang-bang 控制里的两个「bang」，也是 14.4.1 节规划算法用的极值动作。边界情形 \(\lambda_2(t) = 0\) 时，\([-1,1]\) 中任何动作都可以。</p>
 <p>剩下的任务是确定伴随变量怎样随时间变化。由 (15.36) 得伴随转移方程 \(\dot\lambda_1 = 0\)、\(\dot\lambda_2 = -\lambda_1\)。解是 \(\lambda_1(t) = c_1\)、\(\lambda_2(t) = c_2 - c_1t\)，常数 \(c_1, c_2\) 可以在 \(t=0\) 由 (15.38)、(15.39) 定出。最优动作只依赖 \(\lambda_2(t)\) 的符号；它的解是一条直线，<b>最多变号一次</b>。因此按 \(x_I\) 与 \(x_G\) 的不同，解有四种：</p>
 <ol>
   <li>一直全力加速，\(u^*(t) = 1\)；</li>
@@ -560,7 +560,7 @@
 <h3 id="s15-4-1">15.4.1 控制仿射系统 <span class="en">Control-Affine Systems</span></h3>
 <p>非完整系统理论只针对一类特殊的非线性系统。这一节的技巧用到线性代数的思想：主要概念用光滑流形 \(X\) 上<b>向量场的线性组合</b>来表述。因此只讨论 13.2.3 节简要介绍过的<b>控制仿射系统 control-affine systems</b>。对这类系统，\(\dot x = f(x,u)\) 的形式是</p>
 <div class="eq">$$\dot x = h_0(x) + \sum_{i=1}^{m} h_i(x)u_i, \tag{15.52}$$</div>
-<p>每个 \(h_i\) 都是 \(X\) 上的向量场。向量场用 \(X\) 的坐标邻域表示，通常 \(m<n\)（\(n\) 是 \(X\) 的维数）。若无特别说明，假设 \(U = \mathbb{R}^m\)；有时 \(U\) 会受限。每个动作变量 \(u_i\in\mathbb{R}\) 可以看作一个系数，决定把多少 \(h_i(x)\) 混入结果 \(\dot x\)。<b>漂移项 drift term</b> \(h_0(x)\) 总在那里，常常很碍事，所以主要关注<b>无漂移 driftless</b> 的情形：对所有 \(x\in X\) 有 \(h_0(x) = 0\)，于是</p>
+<p>每个 \(h_i\) 都是 \(X\) 上的向量场。向量场用 \(X\) 的坐标邻域表示，通常 \(m&lt;n\)（\(n\) 是 \(X\) 的维数）。若无特别说明，假设 \(U = \mathbb{R}^m\)；有时 \(U\) 会受限。每个动作变量 \(u_i\in\mathbb{R}\) 可以看作一个系数，决定把多少 \(h_i(x)\) 混入结果 \(\dot x\)。<b>漂移项 drift term</b> \(h_0(x)\) 总在那里，常常很碍事，所以主要关注<b>无漂移 driftless</b> 的情形：对所有 \(x\in X\) 有 \(h_0(x) = 0\)，于是</p>
 <div class="eq">$$\dot x = \sum_{i=1}^{m} h_i(x)u_i. \tag{15.53}$$</div>
 <p>本节大部分时候用无漂移情形。集合 \(h_1,\ldots,h_m\) 称为<b>系统向量场 system vector fields</b>。关键的一点是 \(U\) 至少要包含一个含 \(\mathbb{R}^m\) 原点的开集；若原点不在 \(U\) 中，系统就不再是无漂移的。（书中脚注：其实只要 \(U\) 的凸包包含一个含原点的开集，就可以用快速切换来模拟无漂移系统。）</p>
 <p>控制仿射系统出现在许多机械系统里。C-space 上的速度约束往往是 Pfaffian 形式 (13.5)；13.1.1 节说明了在这种约束下可以推出位形转移方程 (13.6)，在 \(q\) 固定时它是线性的——这正是 \(X = \mathcal C\) 时的无漂移形式 (15.53)。13.1.2 节的大部分模型都能写成这种形式。位形上的 Pfaffian 约束常叫<b>运动学约束 kinematic constraints</b>，因为它来自接触物体的运动学，比如轮子滚动。更一般的、相空间 \(X\) 上的 (15.52) 来自<b>动力学约束 dynamic constraints</b>，它们由力学表述里的 Euler–Lagrange 方程 (13.118) 或 Hamilton 方程 (13.198) 得到；这些约束体现守恒律，漂移项通常来自动量。</p>
@@ -690,7 +690,7 @@
 <p>这个结果可以用 (15.81) 验证<a class="fn" id="fn-1585-ref" href="#fn-1585">[注 5]</a>。</p>
 
 <h4>Frobenius 定理</h4>
-<p>要判断系统是完全可积（完整）还是非完整（不可积），Lie 括号是唯一需要的工具。设给定 (15.53) 形式的系统。用 \(m\) 个系统向量场 \(h_1,\ldots,h_m\)，可以构造 \(\binom m2\) 个形如 \([h_i,h_j]\)（\(i<j\)）的 Lie 括号。分布 \(\triangle\) 称为<b>对合的 involutive</b>，如果对每个这样的括号，都存在 \(m\) 个系数 \(c_k\in\mathbb{R}\) 使</p>
+<p>要判断系统是完全可积（完整）还是非完整（不可积），Lie 括号是唯一需要的工具。设给定 (15.53) 形式的系统。用 \(m\) 个系统向量场 \(h_1,\ldots,h_m\)，可以构造 \(\binom m2\) 个形如 \([h_i,h_j]\)（\(i&lt;j\)）的 Lie 括号。分布 \(\triangle\) 称为<b>对合的 involutive</b>，如果对每个这样的括号，都存在 \(m\) 个系数 \(c_k\in\mathbb{R}\) 使</p>
 <div class="eq">$$[h_i,h_j] = \sum_{k=1}^{m}c_kh_k. \tag{15.86}$$</div>
 <p>换句话说，每个 Lie 括号都可以写成系统向量场的线性组合，因此它本来就属于 \(\triangle\)：Lie 括号逃不出 \(\triangle\)，产生不了新的运动方向。<span class="muted">（补充：一般情况下系数 \(c_k\) 可以依赖于 \(x\)，即 \([h_i,h_j](x)\in\triangle(x)\) 对每个 \(x\) 成立；下面例 15.13 里的组合系数就随 \(x\) 变化。）</span>不需要考虑全部 \(n^2\) 个可能的括号，因为可以证明 \([h_i,h_j] = -[h_j,h_i]\)，从而 \([h_i,h_i] = 0\)；所以只看 \(\binom m2\) 对不会改变对合的定义。若系统光滑且分布非奇异，<b>Frobenius 定理</b>直接刻画了可积性：</p>
 <div class="box def"><div class="box-title">Frobenius 定理</div><p style="margin:0">系统完全可积，当且仅当它是对合的。</p></div>
@@ -766,8 +766,8 @@
 <p>所以阶就是 Lie 括号运算的嵌套深度（加一），例如 \(d([h_1,h_2]) = 2\)、\(d([h_1,[h_2,h_3]]) = 3\)。除了标准的广度优先搜索，还应该自动剪枝，用反对称和 Jacobi 恒等式消除冗余。<b>P. Hall 基</b>是一个 Lie 乘积序列 \(\mathcal{PH} = (\phi_1,\phi_2,\ldots)\)，满足：</p>
 <ol>
   <li>系统向量场 \(h_i\) 是 \(\mathcal{PH}\) 的前 \(m\) 个元素。</li>
-  <li>若 \(d(\phi_i) < d(\phi_j)\)，则 \(i<j\)。</li>
-  <li>\([\phi_i,\phi_j]\in\mathcal{PH}\)，当且仅当：a) \(\phi_i,\phi_j\in\mathcal{PH}\) 且 \(i<j\)；b) \(\phi_j = h_i\) 对某个 \(i\) 成立，或者 \(\phi_j = [\phi_l,\phi_r]\)，其中 \(\phi_l,\phi_r\in\mathcal{PH}\) 且 \(l\le i\)。</li>
+  <li>若 \(d(\phi_i) &lt; d(\phi_j)\)，则 \(i&lt;j\)。</li>
+  <li>\([\phi_i,\phi_j]\in\mathcal{PH}\)，当且仅当：a) \(\phi_i,\phi_j\in\mathcal{PH}\) 且 \(i&lt;j\)；b) \(\phi_j = h_i\) 对某个 \(i\) 成立，或者 \(\phi_j = [\phi_l,\phi_r]\)，其中 \(\phi_l,\phi_r\in\mathcal{PH}\) 且 \(l\le i\)。</li>
 </ol>
 <p>许多代数书证明了这个过程得到 Lie 代数 \(\mathcal L(\triangle)\) 的一组基；计算这组基的各种算法在 Duleba 的文献里有评估。</p>
 <p><b>例 15.18（深度不超过三的 P. Hall 基）</b>：P. Hall 基把 Lie 乘积排成下面的序列（到深度 \(d = 3\)）：</p>
@@ -787,7 +787,7 @@
 <h4>无漂移系统的能控性</h4>
 <p>无漂移控制仿射系统 (15.53) 的能控性可以用 <b>Lie 代数秩条件 Lie algebra rank condition（LARC）</b>刻画。回忆 15.1.3 节 STLC 的定义，假设 \(U = \mathbb{R}^m\)，或者 \(U\) 至少包含一个含 \(\mathbb{R}^m\) 原点的开集。<b>Chow–Rashevskii 定理</b>指出：</p>
 <div class="box def"><div class="box-title">Chow–Rashevskii 定理</div><p style="margin:0">无漂移控制仿射系统 (15.53) 在点 \(x\in X\) 处小时间局部能控（STLC），当且仅当 \(\dim(\mathcal L_x(\triangle)) = n\)，即 \(X\) 的维数。</p></div>
-<p>若条件对每个 \(x\in X\) 都成立，整个系统就是 STLC 的。可积性也可以用 \(\dim(\mathcal L(\triangle))\) 来表达。照常假设 \(m<n\)，有三种情形：</p>
+<p>若条件对每个 \(x\in X\) 都成立，整个系统就是 STLC 的。可积性也可以用 \(\dim(\mathcal L(\triangle))\) 来表达。照常假设 \(m&lt;n\)，有三种情形：</p>
 <div class="table-wrap"><table class="data" style="max-width:560px">
   <tr><td class="c">1.</td><td>\(\dim(\mathcal L(\triangle)) = m\)</td><td>系统完全可积；</td><td rowspan="3" class="c muted" style="vertical-align:middle">(15.110)</td></tr>
   <tr><td class="c">2.</td><td>\(m &lt; \dim(\mathcal L(\triangle)) &lt; n\)</td><td>系统非完整，但不是 STLC；</td></tr>
@@ -943,7 +943,7 @@
 <div class="eq">$$x_3(t) = \int_0^1\big(x_1u_2 - x_2u_1\big)\,dt = \frac1\lambda\big(u_1^2(0) + u_2^2(0)\big) = a. \tag{15.153}$$</div>
 <p>代价是</p>
 <div class="eq">$$\int_0^1\big(u_1^2(t) + u_2^2(t)\big)\,dt = u_1^2(0) + u_2^2(0) = \lambda a. \tag{15.154}$$</div>
-<p>因此 \(a>0\) 时最小代价在 \(k = 1\) 时取到，此时 \(\lambda = 2\pi\)、\(\|u(0)\| = \sqrt{2\pi a}\)（\(a<0\) 时取 \(k = -1\)）<a class="fn" id="fn-k-ref" href="#fn-k">[注 12]</a>。这确定了 \(u(0)\) 的大小，但方向可以任选。转向问题可以分两个阶段解决：</p>
+<p>因此 \(a>0\) 时最小代价在 \(k = 1\) 时取到，此时 \(\lambda = 2\pi\)、\(\|u(0)\| = \sqrt{2\pi a}\)（\(a&lt;0\) 时取 \(k = -1\)）<a class="fn" id="fn-k-ref" href="#fn-k">[注 12]</a>。这确定了 \(u(0)\) 的大小，但方向可以任选。转向问题可以分两个阶段解决：</p>
 <ol>
   <li>施加任意动作轨迹把 \(x_1\)、\(x_2\) 转向各自的目标值，不管 \(x_3\)。</li>
   <li>施加刚才得到的解，把 \(x_3\) 转向目标，同时 \(x_1\)、\(x_2\) 回到第一阶段得到的值。</li>
@@ -959,9 +959,9 @@
 
 <h4>一阶能控系统 First-order controllable systems</h4>
 <p>为非完整积分器发展的方法可以推广到形如</p>
-<div class="eq">$$\dot x_i = u_i\ \ (i = 1,\ldots,m),\qquad \dot x_{ij} = x_iu_j - x_ju_i\ \ (i<j,\ 1\le j\le m) \tag{15.155}$$</div>
+<div class="eq">$$\dot x_i = u_i\ \ (i = 1,\ldots,m),\qquad \dot x_{ij} = x_iu_j - x_ju_i\ \ (i&lt;j,\ 1\le j\le m) \tag{15.155}$$</div>
 <p>和</p>
-<div class="eq">$$\dot x_i = u_i\ \ (i = 1,\ldots,m),\qquad \dot x_{ij} = x_iu_j\ \ (i<j,\ 1\le j\le m) \tag{15.156}$$</div>
+<div class="eq">$$\dot x_i = u_i\ \ (i = 1,\ldots,m),\qquad \dot x_{ij} = x_iu_j\ \ (i&lt;j,\ 1\le j\le m) \tag{15.156}$$</div>
 <p>的系统。Brockett 证明了，对这类<b>一阶能控系统 first-order controllable systems</b>，最优动作轨迹由给 \(m\) 个动作变量各施加一组频率成整数比的正弦之和得到。若 \(m\) 是偶数，每个变量的轨迹是 \(m/2\) 个频率为 \(2\pi, 2\cdot2\pi,\ldots,(m/2)\cdot2\pi\) 的正弦之和；若 \(m\) 是奇数，则有 \((m-1)/2\) 个正弦，频率序列不变。设 \(m\) 为偶数（奇数情形类似），每个动作选为</p>
 <div class="eq">$$u_i = \sum_{k=1}^{m/2} a_{ik}\sin2\pi kt + b_{ik}\cos2\pi kt. \tag{15.157}$$</div>
 <p>其它状态变量按下式演化<a class="fn" id="fn-15158-ref" href="#fn-15158">[注 13]</a>：</p>
@@ -972,7 +972,7 @@
   <li>给动作变量施加频率成整数比的正弦，选择每个 \(u_i(0)\)（即各个系数）使 \(x_{ij}\) 到达目标值。这一阶段不管 \(x_i\)，因为它们会回到第一阶段得到的值。</li>
 </ol>
 <p>这个方法已被进一步推广到<b>二阶能控系统 second-order controllable systems</b>：</p>
-<div class="eq">$$\dot x_i = u_i\ \ (i = 1,\ldots,m),\qquad \dot x_{ij} = x_iu_j\ \ (i<j,\ 1\le j\le m),\qquad \dot x_{ijk} = x_{ij}u_k\ \ ((i,j,k)\in J), \tag{15.159}$$</div>
+<div class="eq">$$\dot x_i = u_i\ \ (i = 1,\ldots,m),\qquad \dot x_{ij} = x_iu_j\ \ (i&lt;j,\ 1\le j\le m),\qquad \dot x_{ijk} = x_{ij}u_k\ \ ((i,j,k)\in J), \tag{15.159}$$</div>
 <p>其中 \(J\) 是由互不相同的 \(i,j,k\in\{1,\ldots,m\}\) 组成的所有不同三元组，再去掉由于 Lie 括号的 Jacobi 恒等式而多余的排列。对这个问题，可以用类似一阶能控情形的思想发展三阶段转向方法：第一阶段确定 \(x_i\)，第二阶段处理 \(x_{ij}\)，第三阶段解决 \(x_{ijk}\)。</p>
 
 <h4>链式系统 Chained-form systems</h4>
@@ -1135,8 +1135,8 @@
 </section>
 
 <nav class="pager">
-  <a href="../index.html"><span class="dir">← 回到首页</span>全书路线图与进度（第 14 章见首页）</a>
-  <a class="next" href="../index.html"><span class="dir">全书最后一章 →</span>回到学习主页</a>
+  <a href="ch14-sampling-based-planning-under-differential-constraints.html"><span class="dir">← 上一章</span>第 14 章 微分约束下的采样规划</a>
+  <a class="next" href="../index.html"><span class="dir">全书最后一章 · 回到首页 →</span>全书路线图与进度</a>
 </nav>
 
 <footer class="page-foot">

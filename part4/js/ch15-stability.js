@@ -38,14 +38,14 @@
       const body = C.frame(root, "Lyapunov 稳定、渐近稳定、指数稳定", "点画布放初始点 x_I；拖动 ε 看能否找到 δ");
       this.st = new C.Stage({ view: [-2.2, 2.2, -2.2, 2.2], maxW: 470, onDraw: (ctx, st, col) => this.draw(ctx, st, col),
         onDown: (p) => { this.launch(p); return null; }, cursor: () => "crosshair" });
-      this.plot = new C.Plot({ aspect: 0.55, maxW: 380, xlim: [0, 30], ylim: [-4, 0.5], xlab: "t", ylab: "log₁₀‖x−x_G‖" });
+      this.plot = new C.Plot({ aspect: 0.55, maxW: 380, xlim: [0, 30], ylim: [-4, 0.5], xlab: "t", ylab: "lg d" });
       this.sel = C.select(Object.entries(STAB).map(([k, v]) => [k, v.name]), this.key, (k) => { this.key = k; this.trajs = []; this.last = null; this.update(); });
       this.sEps = C.slider("ε =", 0.15, 1.5, 0.05, this.eps, (v) => { this.eps = v; this.update(); }, (v) => v.toFixed(2));
       this.stats = [C.stat("最大的 δ（数值）"), C.stat("O₂ 的判断"), C.stat("最近一条：t=30 时距离")];
       this.note = h("p", { class: "small" });
       body.append(h("div", { class: "controls" }, this.sel, this.sEps, C.button("清除轨迹", () => { this.trajs = []; this.last = null; this.update(); })),
         h("div", { class: "split" }, this.st.wrap, h("div", null, h("div", { class: "stats" }, this.stats), this.plot.wrap,
-          h("p", { class: "small muted" }, "右图是最近一条积分曲线到 x_G 的距离（对数坐标）。指数稳定 ⇔ 曲线被一条斜率为负的直线 log m − αt/ln10 压在下面。"))),
+          h("p", { class: "small muted" }, "右图是最近一条积分曲线到 x_G 的距离 d 的常用对数 lg d。指数稳定 ⇔ 曲线被一条斜率为负的直线 log m − αt/ln10 压在下面。"))),
         this.note, C.legend([[C.cv("bad"), "O₁ = ε 球"], [C.cv("ok"), "O₂ = δ 球（数值找到的最大者）"], [C.cv("accent"), "积分曲线"], [C.cv("goal"), "x_G"]]));
       this.update();
     }
