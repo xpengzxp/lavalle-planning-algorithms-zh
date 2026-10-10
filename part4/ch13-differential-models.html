@@ -1,0 +1,1259 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>微分模型 · 第 13 章</title>
+<meta name="description" content="LaValle《Planning Algorithms》第 13 章的中文互动教程：C-space 上的速度约束（隐式 / 参数、Pfaffian）、简单车 / Dubins / Reeds–Shepp、差速驱动、拖车、滚球与可积性；相空间、线性 / 非线性 / 控制仿射系统、加积分器；Newton–Euler 力学、刚体转动与轮胎侧滑；Lagrange 与 Hamilton 力学；自然干扰与追逃微分对策。">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<link rel="stylesheet" href="../assets/style.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+<script src="../assets/common.js"></script>
+<script defer src="js/ch13-lib.js"></script>
+<script defer src="js/ch13-velocity.js"></script>
+<script defer src="js/ch13-wheeled.js"></script>
+<script defer src="js/ch13-phase.js"></script>
+<script defer src="js/ch13-mechanics.js"></script>
+<script defer src="js/ch13-lagrange.js"></script>
+<script defer src="js/ch13-games.js"></script>
+<style>
+  .ch13-stage { width: 100%; }
+  .ch13-stage canvas { margin: 0 auto; border-radius: 6px; }
+  .box.intuition ul { margin: 0; padding-left: 1.2em; }
+  .fig { max-width: 560px; margin: 0 auto; display: block; }
+  .fn { font-size: .8em; }
+  .widget:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .colors-key { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13.5px; }
+  .colors-key span { display: inline-flex; align-items: center; gap: 6px; }
+  .colors-key i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <a class="brand" href="../index.html">Planning Algorithms 学习站</a>
+  <span class="crumbs"><a href="../index.html">首页</a> › Part IV › 第 13 章 微分模型</span>
+  <button class="icon-btn" id="theme-toggle" type="button" aria-label="切换深浅色">☾</button>
+</header>
+
+<div class="layout">
+<nav class="toc" aria-label="目录">
+  <p class="toc-title">本章目录</p>
+  <ol>
+    <li><a href="#overview">本章导读</a></li>
+    <li><a href="#s13-1">13.1 C-space 上的速度约束</a>
+      <ol>
+        <li><a href="#s13-1-1">隐式与参数表示</a></li>
+        <li><a href="#s13-1-2">轮式系统的运动学</a></li>
+        <li><a href="#s13-1-3">其它速度约束</a></li>
+      </ol>
+    </li>
+    <li><a href="#s13-2">13.2 动力系统的相空间表示</a>
+      <ol>
+        <li><a href="#s13-2-1">升维降阶</a></li>
+        <li><a href="#s13-2-2">线性系统</a></li>
+        <li><a href="#s13-2-3">非线性系统</a></li>
+        <li><a href="#s13-2-4">加积分器扩展模型</a></li>
+      </ol>
+    </li>
+    <li><a href="#s13-3">13.3 Newton–Euler 力学基础</a>
+      <ol>
+        <li><a href="#s13-3-1">牛顿模型</a></li>
+        <li><a href="#s13-3-2">质点的运动</a></li>
+        <li><a href="#s13-3-3">刚体的运动</a></li>
+      </ol>
+    </li>
+    <li><a href="#s13-4">13.4 进阶力学概念</a>
+      <ol>
+        <li><a href="#s13-4-1">Lagrange 力学</a></li>
+        <li><a href="#s13-4-2">一般的 Lagrange 表达式</a></li>
+        <li><a href="#s13-4-3">Euler–Lagrange 方程的扩展</a></li>
+        <li><a href="#s13-4-4">Hamilton 力学</a></li>
+      </ol>
+    </li>
+    <li><a href="#s13-5">13.5 多个决策者</a>
+      <ol>
+        <li><a href="#s13-5-1">微分决策</a></li>
+        <li><a href="#s13-5-2">微分对策</a></li>
+      </ol>
+    </li>
+    <li><a href="#further">延伸阅读</a></li>
+    <li><a href="#cheatsheet">本章速查表</a></li>
+    <li><a href="#pitfalls">常见陷阱</a></li>
+    <li><a href="#exercises">习题导引</a></li>
+    <li><a href="#notes">脚注</a></li>
+  </ol>
+</nav>
+
+<main class="content">
+
+<p class="kicker">Part IV · 第 13 章</p>
+<h1>微分模型 <span class="en">Differential Models</span></h1>
+<p class="lede">第 2 章的离散规划靠状态转移方程 \(x_{k+1} = f(x_k, u_k)\) 推进。这一章给出它的<b>连续时间版本</b>：在光滑流形 \(X\) 上，<b>状态转移方程 state transition equation</b> 写成 \(\dot x = f(x,u)\)。它在控制论里也叫<b>系统 system</b>（control system 的简称）。连续时间里不存在「下一个状态」，\(f(x,u)\) 给出的是<b>速度</b>；满足微分约束的未来状态要靠对速度<b>积分</b>得到——这要用到 8.3 节的切空间与向量场。</p>
+
+<section id="overview">
+<h2 style="border-top:0;margin-top:1em">本章导读</h2>
+
+<p>本章没有障碍物。它是一本「模型目录」：列出大量可以直接拿去给第 14 章的规划算法用的微分模型。障碍物要到第 14 章才回来。</p>
+
+<div class="box">
+  <div class="box-title">本章地图与读法</div>
+  <ul style="margin:0">
+    <li><b>13.1 速度约束</b>：\(X = \mathcal{C}\)，只约束速度，得到一阶微分方程。最常见的来源是轮子必须沿着它指的方向滚（汽车不能横着走）。</li>
+    <li><b>13.2 相空间</b>：要表达动力学，就得约束加速度。引入<b>相空间 phase space</b> 后，任何带动力学的问题都能写成「更大状态空间上的速度约束」——把高阶导数降成一阶，代价是维数翻倍。</li>
+    <li><b>13.3 Newton–Euler 力学</b>：质点、刚体，最后给出自由漂浮刚体的完整动力学；还有带轮胎侧滑的车。</li>
+    <li><b>13.4 进阶力学</b>：Lagrange 与 Hamilton 力学，以及机械臂这类运动链的动力学。</li>
+    <li><b>13.5 多个决策者</b>：带自然干扰的微分模型与微分对策（追逃）。</li>
+  </ul>
+  <p style="margin:.6em 0 0">前置知识：第 4 章的 C-space（<a href="../part2/ch4-configuration-space.html">教程</a>），以及第 8 章 8.3 节的光滑流形、切空间、向量场与积分曲线（<a href="../part2/ch8-feedback-motion-planning.html">教程</a>）。13.5 节用到第 10、12 章的自然与对策概念。书中说：如果你只想<b>使用</b>这些模型，可以跳过 13.3、13.4 的推导——它们最后都化成 \(\dot x = f(x,u)\) 的形式，直接可用。</p>
+</div>
+
+<div class="box">
+  <div class="box-title">Part IV 的颜色约定（第 14、15 章沿用）</div>
+  <div class="colors-key">
+    <span><i style="background:var(--accent)"></i>蓝 = 系统本体与它实际走过的轨迹（车身、相点、机械臂）</span>
+    <span><i style="background:var(--ok)"></i>绿 = 允许的速度集合 \(U(q)\)、可达集、积分曲线族</span>
+    <span><i style="background:var(--bad)"></i>红 = 被禁止的速度、违反约束、能量凭空变化 / 不稳定</span>
+    <span><i style="background:var(--warn)"></i>橙 = 动作 \(u\)：转向、推力、力矩</span>
+    <span><i style="background:var(--c-alive2)"></i>紫 = 自然或第二个决策者（干扰、逃跑者）</span>
+    <span><i style="background:var(--c-wall)"></i>深灰 = 障碍（第 14 章起）　<i style="background:var(--c-goal)"></i>粉 = 目标</span>
+  </div>
+</div>
+<p class="small muted">页面上的数值由参考代码 <a href="code/ch13_differential_models.py"><code>part4/code/ch13_differential_models.py</code></a> 核对（只用 Python 标准库）。带键盘操作的互动图，先点一下图让它获得焦点。</p>
+</section>
+
+<!-- ============================================================ 13.1 -->
+<section id="s13-1">
+<h2>13.1 C-space 上的速度约束 <span class="en">Velocity Constraints on the Configuration Space</span></h2>
+<p>本节假设 \(X = \mathcal{C}\)：一个或多个刚体的 C-space（4.2 节）。这里的微分模型都是「在每个 \(q\in\mathcal{C}\) 处，允许的速度集合受到限制」，因而是<b>一阶</b>微分方程——只约束速度，不约束加速度或更高阶导数。为了谈速度，假设 \(\mathcal{C}\) 是光滑流形（8.3.2 节）。脑子里先放着 \(\mathcal{C} = \mathbb{R}^2\)、\(\mathbb{R}^3\) 就好：不用操心流形的技术细节，也能画出来。</p>
+
+<h3 id="s13-1-1">13.1.1 隐式与参数表示 <span class="en">Implicit vs. Parametric Representations</span></h3>
+<p>表示微分约束有两种方式，和表示函数的两种方式完全平行。<b>参数表示 parametric</b> 更好理解、更好用；<b>隐式表示 implicit</b> 更一般，但往往难以利用。直观的区别：<b>隐式表示说哪些速度被禁止，参数表示直接列出哪些速度被允许</b>。本章尽可能给出参数表示，但两种都要懂。</p>
+
+<h4>隐式表示：平面的例子</h4>
+<p>设 \(\mathcal{C} = \mathbb{R}^2\)，位形 \(q = (x,y)\)，速度 \((\dot x, \dot y)\) 是切空间 \(T_q(\mathbb{R}^2)\)（一个二维向量空间）中的元素。在每个 \(q\) 处限制速度，就得到某个集合 \(U(q) \subset T_q(\mathbb{R}^2)\)。书中列了 8 个简单约束：</p>
+<ol>
+  <li>\(\dot x &gt; 0\)：像在向 \(+x\) 方向奔流的河上划船——\(y\) 方向随便，但永远不能逆流。所有积分曲线沿 \(x\) 单调增加。</li>
+  <li>\(\dot x \ge 0\)：允许在 \(x\) 方向停下。例如 \((0,1)\) 让你以单位速度沿 \(+y\) 走。</li>
+  <li>\(\dot x &gt; 0,\ \dot y &gt; 0\)：积分曲线在 \(x\)、\(y\) 上都单调增加。</li>
+  <li>\(\dot x = 0\)：前三个例子里 \(U(q)\) 都是二维的；这里只剩一维：所有 \((0, \dot y)\)。从 \((x_0,y_0)\) 出发的积分曲线是 \((x_0, y(t))\)，被困在一条竖直线上。</li>
+  <li>\(a\dot x + b\dot y = 0\)：本质和上一个一样，只是运动被限制在由 \(a,b\) 决定的一族平行直线上。例如 \(a = b = 1\) 时只能沿斜线走。</li>
+  <li>\(a\dot x + b\dot y + c = 0\)：看起来像上一个，行为却很不同——积分曲线不再重合，能到达<b>一整个半平面</b>；而且<b>不能停下</b>，因为 \(\dot x = \dot y = 0\) 违反约束。</li>
+  <li>\(\dot x^2 + \dot y^2 \le 1\)：第 8 章用过。它对「可行运动规划问题有没有解」毫无影响——任何方向都能走，只是限制了最大速度。</li>
+  <li>\(\dot x^2 + \dot y^2 \ge 1\)：任何方向、任何不小于 1 的速度都行，但不能停下，也不能慢下来。</li>
+</ol>
+<p>还可以想出复杂得多的约束。如果忽略 \(\dot x, \dot y\) 是导数这件事，3.1 节的几何建模工具都能用来在每个 \(q\) 处定义复杂的约束——上面这些其实就是 3.1.2 节的<b>半代数模型</b>，只是把 \(x,y\) 换成了 \(\dot x, \dot y\)。</p>
+<p>一个重要结论：<b>如果在每个 \(q\) 处都存在开集 \(O\) 满足 \((0,0)\in O\subseteq U(q)\)，那么约束对可行运动规划问题的解的存在性没有影响</b>——各个方向的速度仍然都允许。这对任何光滑流形上的速度约束都成立。</p>
+<p>到目前为止，每个 \(q\) 处的约束都一样，形如 \(g(\dot x, \dot y) \bowtie 0\)，其中 \(\bowtie\) 可以是 \(=, &lt;, &gt;, \le, \ge\)，\(g\) 是 \(\mathbb{R}^2\to\mathbb{R}\) 的函数。通常「\(=\)」让 \(U(q)\) 的维数减一，其余关系一般不改变维数。再看约束 \(\dot x = x\)：在 \(q = (x,y)\) 处允许的速度必须是 \((x, \dot y)\)（\(\dot y\) 任意），所以 \(x\) 越大，\(x\) 方向的速度也越大。从 \(x &gt; 0\) 出发永远到不了 \(y\) 轴；从 \(y\) 轴上出发则永远留在 \(y\) 轴上。这类约束一般写成 \(g(x,y,\dot x,\dot y)\bowtie 0\)，允许依赖 \(x\)、\(y\)。</p>
+
+<div class="widget wide" data-widget="velocity-gallery"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>依次选 1、2、3：左图绿色区域就是 \(U(q)\)；点「撒 40 条随机积分曲线」，所有曲线都落在右图浅绿的可达集里（参考代码第 1 项对每个约束都做了这个检验）。</li>
+  <li>选 6 并把 c 拖到 0 附近又拖开：c = 0 时退化成一条直线（例 5），c ≠ 0 时一下子能到达整个半平面；统计栏显示「不能停下」。</li>
+  <li>选 7 和 8 对比：两者都能到达整个平面，但只有 7 满足「\(U(q)\) 含 0 的开邻域」。选最后一个 \(\dot x = x\)，把 q₀ 拖到 y 轴上（会自动吸附）：积分曲线再也离不开 y 轴。</li>
+</ul></div>
+
+<h4>一般的 C-space</h4>
+<p>在一般的 C-space 上也一样考虑速度约束。假设 \(\mathcal{C}\) 是光滑流形（第 4 章的流形不必光滑，因为那里用不到导数），约束都在 8.3.2 节的<b>坐标邻域</b>里表达——这让 \(n\) 维流形在局部看起来很像 \(\mathbb{R}^n\)。偶尔需要换坐标，但这不会让约束的表达变复杂，所以可以把约束当成施加在 \(\mathbb{R}^n\) 上来想。</p>
+<p>如果允许任意半代数模型，\(\mathcal{C}\) 上的速度约束可以和任何 \(\mathcal{C}_{obs}\) 一样复杂，甚至不必是代数的。一般地，约束可以写成</p>
+<div class="eq">$$g(q, \dot q) \bowtie 0, \tag{13.1}$$</div>
+<p>\(\bowtie\) 同样可以是 \(=, &lt;, &gt;, \le, \ge\)。只保留其中一部分关系也不损失表达能力：例如任何 (13.1) 形式的约束都能用 \(g(q,\dot q) = 0\) 与 \(g(q,\dot q) &lt; 0\) 的组合表示。(13.1) 形式的约束称为<b>隐式的 implicit</b>。正如第 3、4 章所示，求隐式方程的解的参数化可能非常复杂——4.4 节闭链约束的解集就很难刻画。但如果能得到参数表示，开发规划算法就容易得多。幸运的是，大多数来自机器人、车辆和其它机械系统的约束都能写成参数形式。</p>
+
+<h4>参数约束</h4>
+<p>参数方式给 \(U(q)\) 另一种解释：每个 \(u\in U(q)\) 不再直接是一个速度，而是一个抽象的<b>动作向量 action vector</b>；允许的速度通过一个把动作映到 \(T_q(\mathcal{C})\) 的函数得到。这给出<b>位形转移方程 configuration transition equation</b>（或称系统）：</p>
+<div class="eq">$$\dot q = f(q, u), \tag{13.2}$$</div>
+<p>\(f\) 是 2.1 节状态转移函数的连续时间版本。(13.2) 实际上是 \(n\) 个标量方程（\(n = \dim\mathcal{C}\)），但仍称它为一个（向量）方程。通常 \(U(q)\) 对所有 \(q\) 都相同，记作 \(U\)，下面除非特别说明都这样假设。(13.2) 有两种有趣的解读：</p>
+<ol>
+  <li><b>切空间的子空间</b>：固定 \(q\)，\(f\) 把 \(U\) 映进 \(T_q(\mathcal{C})\)——它把 \(q\) 处允许的速度参数化了：每个 \(u\in U(q)\) 给出一个速度 \(f(q,u)\)。</li>
+  <li><b>向量场</b>：固定 \(u\)，\(f\) 把每个 \(q\) 映到 \(T_q(\mathcal{C})\)——对每个固定的 \(u\)，\(f\) 是 \(\mathcal{C}\) 上的一个向量场。</li>
+</ol>
+<p><b>例 13.1（\(\dot q = f(q,u)\) 的两种解读）</b>：\(\mathcal{C} = \mathbb{R}^2\)，\(U = \mathbb{R}\)，\(\dot x = u\)、\(\dot y = x\)。固定 \(q = (x,y)\)：每个 \(u\) 给出速度 \((\dot x,\dot y) = (u, x)\)，所以 \(q\) 处允许的速度集合是</p>
+<div class="eq">$$\{(\dot x, \dot y)\in\mathbb{R}^2 \mid \dot y = x\}. \tag{13.3}$$</div>
+<p>例如 \(q = (1,2)\) 时，任何形如 \((u, 1)\) 的向量都允许。固定 \(u\)：例如 \(u = 1\) 得到 \(\mathbb{R}^2\) 上的向量场 \((\dot x,\dot y) = (1, x)\)。</p>
+
+<div class="widget wide" data-widget="two-interp"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>点「q = (1, 2)」：左图所有箭头的尖端都落在绿线 \(\dot y = 1\) 上——这就是 (13.3)。拖 u 滑块，橙色箭头沿绿线滑动；右图 q 处的向量跟着变，两边始终是同一个向量。</li>
+  <li>把 q 拖到 x = 0：允许的速度都是水平的（\(\dot y = 0\)）。把 q 拖到 x &lt; 0：所有允许的速度都朝下。</li>
+  <li>在右图点几下放积分曲线：固定 u 时它们是抛物线 \(y = y_0 + x_0t + ut^2/2\)；u = 0 时退化成竖直线。</li>
+</ul></div>
+
+<p>定义位形转移方程时，指定 \(U\) 很重要。前面允许（但不鼓励）动作集合依赖于 \(q\)。任何写成 \(\dot q = f(q,u)\) 的微分约束（\(U\) 任意）都可以等价地写成 \(\dot q = u(q)\)，只要定义</p>
+<div class="eq">$$U(q) = \{\dot q \in\mathbb{R}^n \mid \exists u\in U \text{ 使得 } \dot q = f(q,u)\} \tag{13.4}$$</div>
+<p>（对每个 \(q\in\mathcal{C}\)）。这里 \(U(q)\) 不一定是 \(U\) 的子集。不过通常还是用 \(\dot q = f(q,u)\) 而让 \(U\) 对所有 \(q\) 不变更方便：常见的理解是 \(U\) 是一组可以在 C-space 任何位置施加的固定动作。</p>
+<p>在普通运动规划里，位形转移方程不必特别提出来（8.4 节讨论过）：只要 \(U\) 含有一个包含原点的开集，任何方向都能走，基本运动规划的位形转移方程就是 \(\dot q = u\)。它不限制方向，所以没有明确写出来。本章接下来的模型会限制方向，这需要能处理微分模型的规划算法——那是第 14 章的主题。</p>
+
+<h4>从隐式到参数形式</h4>
+<p>两种表示各有利弊：隐式更一般，参数更有用，因为它明确给出了可能的动作。所以常希望从隐式表示推导出参数表示。在很一般的条件下，这在理论上可行（隐式函数定理，见下文）；可惜理论上存在并不意味着实际能做出变换，很多时候求参数表示并不现实。</p>
+<p>给机械系统建模时，最简单的是先用隐式形式写出约束，再推导参数表示 \(\dot q = f(q,u)\)。隐式表示里还没有 \(u\)；\(u\) 是动作，推导参数表示时要自己指定。先假设隐式约束都是 \(\dot q\) 的<b>线性</b>方程：</p>
+<div class="eq">$$g_1(q)\dot q_1 + g_2(q)\dot q_2 + \cdots + g_n(q)\dot q_n = 0, \tag{13.5}$$</div>
+<p>称为 <b>Pfaffian 约束</b>。只有在 \(q\) 已知时它们才是线性的：想象 \(q\) 固定在某个已知值，于是 (13.5) 中每个系数 \(g_i(q)\) 都是常数。</p>
+<p>设给定 \(k\le n\) 个线性无关的 Pfaffian 约束（把系数排成 \(k\times n\) 矩阵，其秩为 \(k\)）。回忆解线性方程组：\(k = n\) 时解唯一；\(k &lt; n\) 时有一族连续的解，构成 \((n-k)\) 维超平面；\(k &gt; n\) 不可能，因为线性无关的方程最多 \(n\) 个。</p>
+<p>若 \(k = n\)，每个 \(q\) 处只有一个速度满足约束：约束直接导出一个向量场，没有选择余地，从规划的角度看不有趣。若 \(k &lt; n\)，\(\dot q\) 的 \(n-k\) 个分量可以自由选取，剩下 \(k\) 个由约束算出（可以用奇异值分解等线性代数方法）。可以自由选择的分量就当作标量动作，合起来得到 \((n-k)\) 维动作向量 \(u = (u_1,\ldots,u_{n-k})\)。不妨设前 \(n-k\) 个分量由 \(u\) 指定，位形转移方程写成</p>
+<div class="eq">$$\begin{aligned}
+\dot q_1 &= u_1 & \dot q_{n-k+1} &= f_{n-k+1}(q,u)\\
+\dot q_2 &= u_2 & \dot q_{n-k+2} &= f_{n-k+2}(q,u)\\
+&\ \,\vdots & &\ \,\vdots\\
+\dot q_{n-k} &= u_{n-k} & \dot q_n &= f_n(q,u),
+\end{aligned} \tag{13.6}$$</div>
+<p>其中每个 \(f_i\) 是 \(u\) 的线性函数：把 \(u_i\) 代入 \(\dot q_i\)（\(i = 1,\ldots,n-k\)），再解 Pfaffian 约束得到其余分量。对某些 \(q\)，约束可能变成线性相关——这只会削弱约束，在失去独立性的点上 \(u\) 的维数可以增加。这样的点通常是孤立的，不再深入。</p>
+<p><b>例 13.2（Pfaffian 约束）</b>：设 \(\mathcal{C} = \mathbb{R}^3\)，有一个 (13.5) 形式的约束</p>
+<div class="eq">$$2\dot q_1 - \dot q_2 - \dot q_3 = 0. \tag{13.7}$$</div>
+<p>这里 \(n = 3\)、\(k = 1\)，有 \(n - k = 2\) 个动作变量。位形转移方程是</p>
+<div class="eq">$$\dot q_1 = u_1,\qquad \dot q_2 = u_2,\qquad \dot q_3 = 2u_1 - u_2, \tag{13.8}$$</div>
+<p>最后一个分量由 \(u_1, u_2\) 分别代替 \(\dot q_1,\dot q_2\) 代入 (13.7)、再解出 \(\dot q_3\) 得到。(13.7) 甚至不依赖 \(q\)。同样的思路也适用于更一般的 Pfaffian 约束，例如</p>
+<div class="eq">$$(\cos q_3)\dot q_1 - (\sin q_3)\dot q_2 - \dot q_3 = 0, \tag{13.9}$$</div>
+<p>同样的步骤给出</p>
+<div class="eq">$$\dot q_1 = u_1,\qquad \dot q_2 = u_2,\qquad \dot q_3 = (\cos q_3)u_1 - (\sin q_3)u_2. \tag{13.10}$$</div>
+
+<div class="widget wide" data-widget="pfaffian-3d"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>选 (13.7)，点「随机驾驶 6 秒」再拖动画面旋转：蓝色路径始终贴在一张平面上，统计栏第三个数恒为 0。方形回路回到原点。</li>
+  <li>换成 (13.9)：绿色小片随高度 q₃ 扭转。走方形回路，统计栏显示净位移 ≈ (0, 0, −τ²)——两个动作合起来能在第三个方向上挪动。把 τ 调小，比值 q₃/(−τ²) 趋于 1。</li>
+  <li>这个区别（可积 vs 不可积）在 13.1.3 节「困在曲面上」会正式出现。</li>
+</ul></div>
+
+<p>这些想法自然推广到对 \(\dot q\) 非线性的等式约束。在每个 \(q\) 处，只要约束函数的 Jacobian \(\partial(g_1,\ldots,g_k)/\partial(\dot q_1,\ldots,\dot q_n)\)（回忆 (6.28)）在 \(q\) 处秩为 \(k\)，就保证存在 \((n-k)\) 维的动作集合 \(U(q)\)——这是<b>隐式函数定理 implicit function theorem</b> 的结论。</p>
+<p>若除了等式约束还有 \(g(q,\dot q) \le 0\) 这样的不等式约束，仍然可以对 \(1\le i\le n-k\) 直接令 \(\dot q_i = u_i\)。没有不等式约束时 \(u\) 不受限制，\(U = \mathbb{R}^{n-k}\)。但 \(u\) 被解释为物理系统的输入，\(U\) 往往有约束：例如消耗的能量可能正比于 \(u\)。做完 \(\dot q_i = u_i\) 的代换后，不等式约束就表示为 \(q\) 与其余分量 \(\dot q_{n-k+1},\ldots,\dot q_n\) 的限制。很多问题里不等式约束足够简单，可以直接推出 \(U\) 上的约束——例如 \(u_1\) 表示车的标量加速度时，可能有 \(|u_1|\le 1\) 这样的简单界。</p>
+<p>最后一个复杂情况：动作变量已经出现在等式约束里，\(g(q,\dot q,u) = 0\)。固定 \(q\)，若有 \(k\) 个独立约束，由隐式函数定理可以解出 \(\dot q = f(q,u)\)（理论上可行，实际上可能很难）。若 Jacobian \(\partial(f_1,\ldots,f_n)/\partial(u_1,\ldots,u_k)\) 在 \(q\) 处秩为 \(k\)，动作就能让速度取遍 \(T_q(\mathcal{C})\) 中一个 \(k\) 维超平面；若 \(k = n\)，动作足以克服约束，\(T_q(\mathcal{C})\) 中任何速度都能达到——前提是 \(U\) 上没有不等式约束。</p>
+
+<h3 id="s13-1-2">13.1.2 轮式系统的运动学 <span class="en">Kinematics for Wheeled Systems</span></h3>
+<p>机器人学里最常见的一族例子来自必须沿着它指的方向滚动的轮子。大多数轮子不能侧滑，这就给滚动车辆加上了速度约束。结果，可用的动作通常比自由度少，这类系统称为<b>欠驱动 underactuated</b>。有趣的是，很多时候车辆能做出「绕过」约束的运动：例如汽车可以平行泊车到任何它能到的地方——就像四个轮子都能转向一样。这引出<b>非完整约束 nonholonomic constraints</b> 和<b>小时间局部可控 small-time local controllability</b> 这样的正式概念（15.4 节）。</p>
+
+<h4>简单车 simple car</h4>
+<p>最容易理解的例子之一是图 13.1 的<b>简单车</b>。谁都知道车不能横着开：后轮要滑而不是滚。这就是平行泊车难的原因。如果四个轮子都能同时朝向路边，泊车就很简单；泊车时那些复杂的操作，都源于滚动约束。</p>
+<p>车可以看作在平面上运动的刚体，所以 \(\mathcal{C} = \mathbb{R}^2\times\mathbb{S}^1\)，位形记作 \(q = (x,y,\theta)\)。车身坐标系的原点放在<b>后轴中心</b>，\(x\) 轴沿车的主轴。记 \(s\) 为车的（带符号的）速度<span class="fn">（书中脚注：带符号的速度有点不寻常——倒车时 \(s\) 为负。更准确的名字是「车身坐标系中 \(x\) 方向的速度」，但太啰嗦）</span>，\(\phi\) 为转向角（图 13.1 所示的轮子朝向下 \(\phi\) 为负），\(L\) 为前后轴的距离（轴距）。如果转向角固定为 \(\phi\)，车做圆周运动，后轴中心走过的圆半径为 \(\rho\)；\(\rho\) 由图中两条轴线的交点决定（两轴夹角为 \(|\phi|\)）。</p>
+
+<svg class="fig" viewBox="0 0 400 310" role="img" aria-label="图 13.1 的重画：简单车的参数">
+  <defs><marker id="f131a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker></defs>
+  <line x1="40" y1="170" x2="120" y2="170" stroke="var(--muted)" stroke-width="1.2" marker-end="url(#f131a)"/>
+  <path d="M 100 170 A 40 40 0 0 0 110.6 144.3" fill="none" stroke="var(--muted)" stroke-width="1.2"/>
+  <text x="104" y="160" font-size="13" fill="var(--muted)" font-style="italic">θ</text>
+  <polygon points="140.1,209.1 255.0,112.6 216.5,66.7 101.6,163.1" fill="color-mix(in srgb, var(--accent) 14%, transparent)" stroke="var(--accent)" stroke-width="1.6"/>
+  <polygon points="113.8,165.2 139.8,143.4 132.8,134.9 106.7,156.8" fill="var(--text)"/>
+  <polygon points="147.2,205.1 173.3,183.2 166.2,174.8 140.2,196.6" fill="var(--text)"/>
+  <polygon points="183.6,93.1 217.4,89.4 216.2,78.5 182.4,82.2" fill="var(--warn)"/>
+  <polygon points="217.0,133.0 250.8,129.2 249.6,118.3 215.8,122.0" fill="var(--warn)"/>
+  <line x1="114.3" y1="139.4" x2="236.4" y2="284.9" stroke="var(--muted)" stroke-width="1" stroke-dasharray="4 3"/>
+  <line x1="216.6" y1="105.7" x2="236.4" y2="284.9" stroke="var(--muted)" stroke-width="1" stroke-dasharray="4 3"/>
+  <line x1="216.6" y1="105.7" x2="262" y2="67.6" stroke="var(--muted)" stroke-width="1" stroke-dasharray="2 3"/>
+  <line x1="216.6" y1="105.7" x2="264" y2="100.5" stroke="var(--warn)" stroke-width="1.4"/>
+  <path d="M 251.1 76.8 A 45 45 0 0 1 261.3 100.8" fill="none" stroke="var(--warn)" stroke-width="1.2"/>
+  <text x="266" y="88" font-size="13" fill="var(--warn)" font-style="italic">φ</text>
+  <line x1="111.1" y1="135.5" x2="187.7" y2="71.2" stroke="var(--text-2)" stroke-width="1" marker-start="url(#f131a)" marker-end="url(#f131a)"/>
+  <text x="138" y="92" font-size="13" fill="var(--text-2)" font-style="italic">L</text>
+  <line x1="140" y1="170" x2="236.4" y2="284.9" stroke="var(--ok)" stroke-width="1.6" marker-end="url(#f131a)"/>
+  <text x="170" y="242" font-size="13" fill="var(--ok)" font-style="italic">ρ</text>
+  <circle cx="236.4" cy="284.9" r="3.5" fill="var(--ok)"/>
+  <circle cx="140" cy="170" r="4" fill="var(--accent)" stroke="var(--surface)" stroke-width="1.2"/>
+  <text x="60" y="198" font-size="13" fill="var(--accent)">(x, y)</text>
+  <path d="M 92 194 Q 120 192 135 175" fill="none" stroke="var(--accent)" stroke-width="1" marker-end="url(#f131a)"/>
+  <text x="250" y="292" font-size="11.5" fill="var(--ok)">转弯中心</text>
+</svg>
+<p class="small muted" style="text-align:center">图 13.1 的重画：简单车有三个自由度，但任何位形处的速度空间只有二维。原点 = 后轴中心；橙色是前轮（转向角 φ，此处为右转，φ &lt; 0）；两条虚线是后轴与前轴的延长线，交于转弯中心。</p>
+
+<p>接下来要把车的运动写成</p>
+<div class="eq">$$\dot x = f_1(x,y,\theta,s,\phi),\qquad \dot y = f_2(x,y,\theta,s,\phi),\qquad \dot\theta = f_3(x,y,\theta,s,\phi). \tag{13.11}$$</div>
+<p>在很短的时间 \(\Delta t\) 内，车必须大致沿后轮的指向运动。令 \(\Delta t\to 0\)，就得到 \(dy/dx = \tan\theta\)。由 \(dy/dx = \dot y/\dot x\)、\(\tan\theta = \sin\theta/\cos\theta\)，这个条件可以写成 Pfaffian 约束（回忆 (13.5)）：</p>
+<div class="eq">$$-\dot x\sin\theta + \dot y\cos\theta = 0. \tag{13.12}$$</div>
+<p>\(\dot x = \cos\theta\)、\(\dot y = \sin\theta\) 满足它；任何标量倍数也满足，缩放因子正对应车的速度 \(s\)。于是前两个分量是 \(\dot x = s\cos\theta\)、\(\dot y = s\sin\theta\)。</p>
+<p>再推 \(\dot\theta\)。记 \(w\) 为车走过的路程（速度的积分）。如图 13.1，\(\rho\) 是转向角固定时后轴中心走的圆半径，\(dw = \rho\,d\theta\)。由三角关系 \(\rho = L/\tan\phi\)，于是</p>
+<div class="eq">$$d\theta = \frac{\tan\phi}{L}\,dw. \tag{13.13}$$</div>
+<p>两边除以 \(dt\)、利用 \(\dot w = s\)：</p>
+<div class="eq">$$\dot\theta = \frac{s}{L}\tan\phi. \tag{13.14}$$</div>
+<p>到这里车的运动已经建好模，但还没指定动作。设速度 \(s\) 与转向角 \(\phi\) 分别由动作变量 \(u_s\)、\(u_\phi\) 直接设定（约定：动作变量记作 \(u\)、下标是原来的变量名，这样在转移方程里一眼就能认出动作）。动作向量 \(u = (u_s,u_\phi)\)，简单车的位形转移方程是</p>
+<div class="eq">$$\dot x = u_s\cos\theta,\qquad \dot y = u_s\sin\theta,\qquad \dot\theta = \frac{u_s}{L}\tan u_\phi. \tag{13.15}$$</div>
+<p>还要指定 \(U\)。先假设 \(u_s\in\mathbb{R}\) 任意。转向角呢？区间 \([-\pi/2, \pi/2]\) 已经够了，其它值都等价于这个区间里的某个值。\(\pm\pi/2\) 有问题：推导 \(\dot x, \dot y\) 时假设车沿后轮方向运动。想象坐在三轮车上，把前轮转到与后轮垂直（\(u_\phi = \pi/2\)）再蹬：三轮车会<b>原地转圈</b>，\(\dot x = \dot y = 0\)，因为后轴中心不平移。普通汽车不允许这样：后驱车大概会把前轮拖着在路面上滑；前驱车试图这样做时应该像三轮车一样，但前轮转到 \(\phi = \pi/2\) 会撞上前轴。所以简单车应该有最大转向角 \(\phi_{max} &lt; \pi/2\)，要求 \(|\phi|\le\phi_{max}\)。从图 13.1 可以看出，最大转向角意味着<b>最小转弯半径</b> \(\rho_{min}\)；三轮车 \(\rho_{min} = 0\)。想在一条窄路上掉头、而车的转弯半径太大，你大概也遇到过。</p>
+<p>再说速度 \(u_s\)。平地上真实车辆有最高速度，而且行为随速度变化很大：例如以最小转弯半径转弯时不应该开到 140 km/h。最大转向角似乎应随速度增大而减小——这进入了动力学的范畴，要等 13.2 节引入相空间后才能处理（之后 13.2.4、13.3.3 节会给出带动力学的车模型）。</p>
+<p>前面隐含地假设车开得足够慢，可以安全地忽略动力学而不影响可达的位形。可以加上 \(|u_s|\le 1\) 这样的界，甚至限制 \(u_s\in\{-1,0,1\}\)，都不破坏可达性。但要小心 \(0\le u_s\le 1\) 这样的界：车不能倒车了！这显然影响可达位形——想象车头对着墙、又不能倒车，只能撞上去。基于这些考虑，有几种有趣的变体：</p>
+<div class="table-wrap">
+<table class="data">
+  <tr><th>名称</th><th>\(U\)</th><th>要点</th></tr>
+  <tr><td>三轮车 Tricycle</td><td>\([-1,1]\times[-\pi/2,\pi/2]\)</td><td>假设前驱，\(u_\phi = \pm\pi/2\) 时能原地转（对普通汽车不现实）；与后面的独轮车 (13.18) 相似。</td></tr>
+  <tr><td>简单车 Simple Car</td><td>\([-1,1]\times(-\phi_{max},\phi_{max})\)</td><td>\(|u_\phi|\le\phi_{max}&lt;\pi/2\)，最小转弯半径 \(\rho_{min} = L/\tan\phi_{max}\)。</td></tr>
+  <tr><td>Reeds–Shepp 车</td><td>\(u_s\in\{-1,0,1\}\)</td><td>三档：倒车、停、前进<span class="fn">（书中脚注：很多文献不含 \(u_s = 0\)；这里含它是为了能定义正常的终止条件）</span>。两位形间（无障碍时）后轴中心走过的最短路径？见 15.3 节。</td></tr>
+  <tr><td>Dubins 车</td><td>\(u_s\in\{0,1\}\)</td><td>去掉倒车。最短路径和 Reeds–Shepp 车很不一样，见 15.3 节。</td></tr>
+</table>
+</div>
+<p>1.2 节图 1.12a 的车比 Dubins 车还受限：它还只能左转。</p>
+<p>简单车的基本可控性问题已经研究得很透彻（15.4 节），这里先建立直觉，帮助理解第 14 章的规划算法。简单车是<b>非完整的 nonholonomic</b>：它的微分约束不能完全积分掉，所以车的位形<b>不</b>被限制在 \(\mathcal{C}\) 的一个低维子空间里。Reeds–Shepp 车可以在任意小的停车位里调整位置，只要留有一点点间隙——这个性质叫<b>小时间局部可控 small-time local controllability</b>（15.1.3 节）。Dubins 车是非完整的，但不具备这个性质：想象一下不能倒车的平行泊车。不过在无限大、没有障碍的停车场里，Dubins 车能到达任何位形。</p>
+
+<div class="widget wide" data-widget="simple-car"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>选「三轮车」，把 u_φ 拖到 ±89°，按住「前进」：后轴中心几乎不动，车原地转——这就是 ρmin = 0。换回「简单车」，绿色转弯圆的半径不会小于 ρmin。</li>
+  <li>（补充）选「Reeds–Shepp 车」，把摆动角 α 调小再点「向右平移一个车宽」：粉色框是整个动作所需的空间，α 越小框越窄，重复次数越多——停车位再窄也能挪过去，这就是小时间局部可控的直觉（参考代码第 3 项）。</li>
+  <li>选「Dubins 车」再点平移：不能倒车，这招用不了；只能绕一个至少 ρmin 大的圈。</li>
+</ul></div>
+
+<h4>差速驱动 differential drive</h4>
+<p>大多数室内移动机器人不像汽车那样运动。图 13.2a 的移动机器人平台是室内机器人最流行的驱动方式的一个例子：两个主轮各接一个电机，第三个轮子（万向轮）放在后面被动滚动，防止机器人翻倒。为差速驱动的约束建立一个简单模型只需要两个参数：两轮间距 \(L\) 和轮半径 \(r\)（图 13.2b）。动作向量 \(u = (u_r, u_l)\) 直接给出两个轮子的角速度（例如弧度每秒）。</p>
+<p>看不同的动作下机器人怎么动（图 13.3）。若 \(u_l = u_r &gt; 0\)，机器人朝轮子指的方向前进，速度正比于 \(r\)：一般地，若 \(u_l = u_r\)，时长 \(t\) 内走过的距离是 \(rtu_l\)（\(tu_l\) 是轮子转过的总角度）。若 \(u_l = -u_r \ne 0\)，两个轮子反向转，机器人原地转动<span class="fn">（原书说此时顺时针转；按 (13.16)，方向取决于 \(u_r\) 的符号：\(u_r &gt; 0\) 时逆时针）</span>。这启发我们把机体坐标系原点放在两轮轴的中点：这样两轮同速反向时没有平移。由这些观察，位形转移方程是</p>
+<div class="eq">$$\dot x = \frac r2(u_l+u_r)\cos\theta,\qquad \dot y = \frac r2(u_l+u_r)\sin\theta,\qquad \dot\theta = \frac rL(u_r-u_l). \tag{13.16}$$</div>
+<p>平移部分和简单车一样含 \(\cos\theta\)、\(\sin\theta\)，因为差速驱动也沿驱动轮的指向运动。平移速度取决于两轮角速度的<b>平均</b>：一个轮子不动、另一个转时，平移速度只有两轮同速时的一半。转速 \(\dot\theta\) 正比于两轮角速度之差，随轮半径线性增大，随两轮间距线性减小。</p>
+<p>有时换一组动作更方便。令 \(u_\omega = (u_r+u_l)/2\)、\(u_\psi = u_r - u_l\)，可以把 \(u_\omega\) 理解为「平移」、\(u_\psi\) 理解为「转动」的动作。于是</p>
+<div class="eq">$$\dot x = ru_\omega\cos\theta,\qquad \dot y = ru_\omega\sin\theta,\qquad \dot\theta = \frac rL u_\psi. \tag{13.17}$$</div>
+<p>这个形式很像简单车的 (13.15)（试着令 \(u_\psi = \tan u_\phi\)、\(u_s = ru_\omega\)）。差速驱动能轻松模拟简单车。区别是：差速驱动的转速可以独立于平移速度设定；简单车的 \(\dot\theta\) 表达式里出现了速度 \(u_s\)，转速依赖于平移速度。</p>
+<p>回到 Reeds–Shepp 车和 Dubins 车的最短路问题。对差速驱动，这个问题很无趣：差速驱动能让轴中心沿平面上<b>任何</b>连续路径运动。如图 13.4，它可以这样连接任意两个位形：1）原地转向目标位置（不平移）；2）平移到目标位置；3）原地转到目标朝向（同样不平移）。轴中心走过的总路程永远是两点间的欧氏距离。这个奇怪的效果来自坐标原点的选取——转动看起来是免费的。修正方法是优化轮子转过的总角度，或在速度固定时优化所需时间 [11]。设 \(u_r, u_l\in\{-1,0,1\}\)，两位形之间的最短时间问题很有意思，15.3 节会讲；它恰当地考虑了转动的代价，尽管转动不产生平移。</p>
+
+<h4>简单独轮车 simple unicycle</h4>
+<p>看图 13.5 的独轮车模型。忽略平衡问题，有两个动作变量：骑车人能设定蹬踏速度，以及轮子相对 \(z\) 轴的朝向。记 \(\sigma\) 为蹬踏角速度，\(r\) 为轮半径，则独轮车速度 \(s = r\sigma\)。这里速度直接由动作 \(u_s\) 设定（也可以把蹬踏速度作为动作 \(u_\sigma\)，再由 \(s = ru_\sigma\) 得到速度）。令 \(\omega\) 为独轮车在 \(xy\) 平面内朝向的角速度（于是 \(\omega = \dot\theta\)），由动作 \(u_\omega\) 直接设定。位形转移方程是</p>
+<div class="eq">$$\dot x = u_s\cos\theta,\qquad \dot y = u_s\sin\theta,\qquad \dot\theta = u_\omega. \tag{13.18}$$</div>
+<p>这正是 \(L = 1\) 且 \(u_s = ru_\sigma\) 的差速驱动 (13.17)。所以差速驱动能模拟独轮车——这看起来奇怪，但因为这些模型都不考虑动力学，所以成立。独轮车也能模拟简单车，所以三轮车和独轮车模型很相似。</p>
+
+<div class="widget wide" data-widget="diff-drive"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>点「左轮不动」再运行：机器人绕左轮转，统计栏的轴中心速度正好是「纯平移」时的一半；绿点是瞬时转动中心，离轴中心 R = (L/2)(u_r+u_l)/(u_r−u_l)（参考代码第 4 项）。</li>
+  <li>切到 (13.17) 或 (13.18)：滑块换成平移 / 转动两个量，驱动的仍是同一个机器人——三种写法只是同一组动作的不同参数化。</li>
+  <li>切到「图 13.4」，把粉色目标拖到任意位置再运行：轴中心路程恰好等于欧氏距离，两次原地转在「路程」里不花代价。</li>
+</ul></div>
+
+<h4>拉拖车的车 a car pulling trailers</h4>
+<p>简单车一个有趣的扩展是挂上一节或多节拖车。你可能在机场见过一串行李车。这类模型的约束有很多微妙之处：方程的形式对拖车挂接点的位置、对机体坐标系的选取都非常敏感。可以用 3.3 节的表达式表示运动学，但这可能让约束的分析变复杂；找到简洁的约束表达式多少是门艺术。这里的模型改编自 [57]（原模型的转向角是连续的）。</p>
+<p>考虑拉着 \(k\) 节拖车的简单车（图 13.6）。每节拖车挂在前一个车体后轴的中点上。重要的新参数是<b>挂接长度 hitch length</b> \(d_i\)：第 \(i\) 节拖车后轴中点到它挂在前一车体上的挂接点的距离。车本身给 \(\mathcal{C}\) 贡献 \(\mathbb{R}^2\times\mathbb{S}^1\)，每节拖车贡献一个 \(\mathbb{S}^1\)，所以 \(\mathcal{C}\) 的维数是 \(k + 3\)。记 \(\theta_i\) 为第 \(i\) 节拖车在世界坐标系中的朝向（\(\theta_0\) 是车本身）。位形转移方程是</p>
+<div class="eq">$$\begin{aligned}
+\dot x &= s\cos\theta_0, \qquad \dot y = s\sin\theta_0, \qquad \dot\theta_0 = \frac sL\tan\phi,\\
+\dot\theta_1 &= \frac{s}{d_1}\sin(\theta_0-\theta_1),\\
+&\ \,\vdots\\
+\dot\theta_i &= \frac{s}{d_i}\Big(\prod_{j=1}^{i-1}\cos(\theta_{j-1}-\theta_j)\Big)\sin(\theta_{i-1}-\theta_i),\\
+&\ \,\vdots\\
+\dot\theta_k &= \frac{s}{d_k}\Big(\prod_{j=1}^{k-1}\cos(\theta_{j-1}-\theta_j)\Big)\sin(\theta_{k-1}-\theta_k).
+\end{aligned} \tag{13.19}$$</div>
+<p class="small">（补充：连乘积 \(s\prod_{j=1}^{i-1}\cos(\theta_{j-1}-\theta_j)\) 正是第 \(i-1\) 节车体后轴中点的前进速度——每经过一个挂接点，速度只有沿下一节拖车方向的分量 \(\cos(\theta_{j-1}-\theta_j)\) 传下去。参考代码第 5 项沿一条 6 秒的轨迹核对过：按 (13.19) 积分，每节拖车的轮子都不侧滑。）</p>
+<p>一个有趣的变体是让拖车的轮子也能转向。对单节拖车，这得到类似<b>消防车 firetruck</b> 的模型 [20]。</p>
+
+<div class="widget wide" data-widget="trailers"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>k = 3，先打一点方向前进，再回正：拖车们自动排成一列，夹角趋于 0。</li>
+  <li>点「倒车演示」：只打 3° 方向，倒着走几秒后夹角就越来越大，拖车变红（夹角超过 90°，折刀 jackknife）。倒车时拖车的角度动力学是不稳定的——拖车越多越难控制。</li>
+  <li>把挂接长度调短：拖车跟得更紧、反应更快，倒车时也坏得更快。</li>
+</ul></div>
+
+<h3 id="s13-1-3">13.1.3 其它速度约束的例子 <span class="en">Other Examples of Velocity Constraints</span></h3>
+<p>前面的微分模型来自在平面上滚动的轮子。考虑物体之间的其它接触方式，可以有很多推广；在机器人学里，很多有趣的微分模型出现在<b>操作 manipulation</b> 中。本节简要介绍 C-space 上速度约束的其它例子。仍然忽略动力学。这类模型有时称为<b>准静态 quasi-static</b> 的：运动虽然发生了，模型的某些方面却把物体当作静止的。速度足够慢时这类模型往往很真实。</p>
+
+<h4>推箱子</h4>
+<p>设想用差速驱动机器人在地面上推一个箱子（图 13.7a）。箱子是凸多边形，它的一条边贴着机器人的前面。箱子与地面、箱子与机器人之间都有摩擦接触。设机器人移动得足够慢，动力学可以忽略；箱子只有在机器人动时才动——不允许把箱子「踢」过房间。<b>稳定推动 stable pushing</b> [2, 49, 52] 指机器人推着箱子运动，箱子就像焊在机器人上一样。</p>
+<p>机器人推箱子时，箱子可能滑走或转走（图 13.7b、c）；这些情形不算稳定推动，视为非法。机器人能做哪些运动？从差速驱动的位形转移方程 (13.17) 出发，再确定要给 \(U\) 加哪些约束来保持稳定推动。显然只能前进：一倒车机器人就和箱子分开了。所以 \(s\) 必须为正（为了符合准静态模型，\(s\) 还要足够小）。转速 \(\psi\) 的约束取决于摩擦模型（例如 Coulomb）、箱子形状以及推的是哪条边，细节见 [49, 52]。结果是一个区间 \([a,b]\subseteq[-\pi/2,\pi/2]\)，\(a &lt; 0\)、\(b &gt; 0\)，要求 \(\psi\in[a,b]\)。这组约束得到的运动模型和 Dubins 车很像，主要区别是左右两个方向的最大「转向」可以不同。</p>
+<p>要把它用于规划，C-space 似乎应该是 \(\mathbb{R}^2\times\mathbb{S}^1\times\mathbb{R}^2\times\mathbb{S}^1\)，因为有两个刚体。可以用 7.3.2 节的操作规划框架得到一个混合系统和操作图，表达机器人与箱子接触或不接触的各种方式。例如机器人可以沿几条边之一推箱子；如果卡住了，可以换一条边，把箱子往新的方向推。</p>
+
+<div class="widget wide" data-widget="push-box"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>保持 ψ = 0 点「推」：箱子跟着走。推的过程中慢慢把 ψ 拖到 a 与 b 之间的任意值，都能稳定推动。</li>
+  <li>把 ψ 拖出 [a, b]：箱子立刻脱离（红色）。两个绿圈是左、右两侧能转的最急的圈——它们的半径 s/b 与 s/|a| 不一样，这就是「不对称的 Dubins 车」。</li>
+</ul></div>
+
+<h4>开飞机</h4>
+<p>13.1.2 节的 Dubins 车可以扩展到三维世界，作为一个可能对空中交通分析够用的简单飞机模型。先设飞机保持固定高度、只能偏航转动：直接用 (13.15)，加上约束 \(s = 1\)（或其它合适的正速度），就等价于 Dubins 车——只是 \(s = 0\) 被禁止，因为那意味着飞机能瞬间停在空中。这个模型假设飞机相对 C-space 很小。更精确的模型要考虑俯仰、滚转、扰动和动力学效应；比如研究飞机设计的飞行稳定性时这些就很重要，这里都忽略。</p>
+<p>再考虑能改变高度的飞机（除了做 Dubins 车那样的运动）。令 \(\mathcal{C} = \mathbb{R}^3\times\mathbb{S}^1\)，多出的 \(\mathbb{R}\) 是在平面上方飞行的高度。位形 \(q = (x,y,z,\theta)\)。令 \(u_z\) 直接改变高度：\(\dot z = u_z\)；转向动作 \(u_\omega\) 和 Dubins 车一样。位形转移方程是</p>
+<div class="eq">$$\dot x = \cos\theta,\qquad \dot y = \sin\theta,\qquad \dot z = u_z,\qquad \dot\theta = u_\omega. \tag{13.20}$$</div>
+<p>固定 \(u = (u_z, u_\omega)\) 且 \(u_z\ne0\)、\(u_\omega\ne0\) 时，路径是螺旋线：中心轴平行于 \(z\) 轴，在 \(xy\) 平面上的投影是圆或圆弧。\(u_z\)、\(u_\omega\) 的最大绝对值应按飞机能达到的最大高度变化率和偏航率来设。</p>
+
+<div class="widget" data-widget="airplane"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>u_z = 0：水平面上的 Dubins 圆。慢慢加大 u_z，圆被拉成螺旋；每圈升高 2πu_z/u_ω（参考代码第 6 项：u_z = 0.3、u_ω = 1.5 时一圈升高 1.2566）。</li>
+  <li>把 u_ω 拖向 0：投影圆半径 1/|u_ω| 变大，极限是直线爬升。</li>
+</ul></div>
+
+<h4>滚球 rolling a ball</h4>
+<p>不用轮子，改为在平面上滚球。把球放在桌上，用手掌平压在它上面滚：应该感觉到两个自由度——向前滚、向两侧滚。球不能原地自转。这两个方向可以看作两个动作变量。但球的总自由度是五：它能处于 \(SO(3)\) 中的任何朝向、平面上的任何 \((x,y)\) 位置，所以 \(\mathcal{C} = \mathbb{R}^2\times SO(3)\)。只有两个动作变量，能把球滚到任意位形吗？[48, 39] 证明可以——甚至对一个球在另一个球上滚动这种更一般的问题也可以（平面是半径无穷大的球）。这个问题在机器人操作中确实会出现：一个球状物体与别的物体接触时（例如机械手的指尖是球形的），见 [15, 50, 56, 58]。</p>
+<p>[55]（另见 [56]）给出的转移方程是</p>
+<div class="eq">$$\begin{aligned}
+\dot\theta &= -u_2, & \dot\phi &= \frac{u_1}{\cos\theta}, & \dot\psi &= -u_1\tan\theta,\\
+\dot x &= -u_1\rho\sin\psi - u_2\rho\cos\psi, & \dot y &= -u_1\rho\cos\psi + u_2\rho\sin\psi. &&
+\end{aligned} \tag{13.21}$$</div>
+<p>其中 \(x, y\) 是接触点在平面上的位置；\(\theta, \phi\) 是接触点在球坐标系中的位置（用球面坐标表示）；\(\rho\) 是球半径；\(\psi\) 表示球相对接触点的朝向。</p>
+<p class="small">（补充：(13.21) 中平面上接触点的速度 \(\rho\sqrt{u_1^2+u_2^2}\) 与球面上接触点的弧速度 \(\rho\sqrt{\dot\theta^2+\cos^2\theta\,\dot\phi^2}\) 相等——这正是「不打滑」，参考代码第 6 项核对过。下面的互动图不用 (13.21) 的球面坐标（它在 \(\theta = \pm\pi/2\) 处奇异），而是直接用旋转矩阵模拟纯滚动：球心速度为 \(v\) 时角速度 \(\omega = \hat z\times v/\rho\)，\(\dot R = [\omega]_\times R\)。）</p>
+
+<div class="widget wide" data-widget="rolling-ball"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>按住球往右拖一段再拖回原处：球回到原位，姿态也回到原样——沿同一条线来回不改变任何东西。</li>
+  <li>点「沿正方形滚一圈」（a = 0.3）：球回到原位，但绕竖直轴转了约 a²/ρ²（统计栏两个角度几乎相等）。逆时针绕圈，球顺时针自转——手掌没让它自转，它却「自转」了。</li>
+  <li>把 a 调大到 1 以上：净转动不再只绕竖直轴（转轴 z 分量明显小于 1），小回路的近似失效。</li>
+</ul></div>
+
+<h4>困在曲面上 trapped on a surface</h4>
+<p>约束可能把位形困在一个低维曲面上。设 \(\mathcal{C} = \mathbb{R}^2\)，系统为</p>
+<div class="eq">$$\dot x = yu,\qquad \dot y = -xu, \tag{13.22}$$</div>
+<p>\((x,y)\in\mathbb{R}^2\)，\(u\in U = \mathbb{R}\)。常值动作 \(u\ne 0\) 的积分曲线是什么？从任意点 \((x,y)\) 出发，轨迹沿以原点为圆心、半径 \(\sqrt{x^2+y^2}\) 的圆运动；速度大小由 \(|u|\) 决定，方向由 \(u\) 的符号决定。所以 (13.22) 表明位形被限制在一个圆上，除此之外没有别的约束。</p>
+<p>设初始位形为 \((x_0,y_0)\)。既然位形被限制在圆上，也可以直接把 C-space 定义为 \(\mathcal{C} = \mathbb{S}^1\)：每个点映到半径 \(r = \sqrt{x_0^2+y_0^2}\)、圆心 \((0,0)\) 的圆上。这时只要运动被困在圆上，速度就没有任何微分约束——圆上一维切空间中的任何速度都允许。这个模型等价于 (13.22)。</p>
+<p>现在考虑被约束在圆上运动的轨迹：</p>
+<div class="eq">$$h(x,y) = x^2 + y^2 - r^2 = 0. \tag{13.23}$$</div>
+<p>即对所有时间 \(t\)，</p>
+<div class="eq">$$h(x(t),y(t)) = x(t)^2 + y(t)^2 - r^2 = 0. \tag{13.24}$$</div>
+<p>对时间求导，得到速度上的约束：</p>
+<div class="eq">$$\frac{dh(x,y)}{dt} = 2x\dot x + 2y\dot y = 0. \tag{13.25}$$</div>
+<p>这是一个 (13.5) 形式的 Pfaffian 约束，它的参数形式恰好就是 (13.22)：任何 \((y,-x)\) 的倍数都满足 (13.25)。写成微分约束后，半径 \(r\) 不再出现——它由初始位形决定。</p>
+
+<div class="widget wide" data-widget="trapped"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>选「u 随机跳」再播放：轨迹来回抖动，但始终在虚线圆上，右边 h 的曲线一直贴着 0（参考代码第 7 项用随机 u(t) 积分了 4 秒，x² + y² 变化不到 1e−9）。</li>
+  <li>把起点拖到别处：圆变了——半径完全由初始位形决定，约束本身不含 r。</li>
+</ul></div>
+
+<p>刚才发生的是<b>完全可积 completely integrable</b> 微分模型的特例。一般地，如果模型 \(\dot q = f(q,u)\) 能表示成形如 \(h(q) = 0\) 的约束的时间导数，就称位形转移方程<b>完全可积</b>。从 \(h_i(q) = 0\) 形式的约束得到隐式微分模型不难：对每个约束求导，</p>
+<div class="eq">$$\frac{dh_i(q)}{dt} = 0. \tag{13.26}$$</div>
+<p>例如 4.4 节的闭运动链就产生这样的约束；隐式微分模型只表达「速度必须在约束的切空间里」。得到参数形式可能很难，但任何特定 \(q\) 处的可能速度向量可以用 7.4.1 节的线性代数方法算出。</p>
+<p>判断一个微分模型是否完全可积（即位形被困在低维曲面上）就更难了。对某些系统（将由 (13.41) 描述），15.4.2 节的 <b>Frobenius 定理</b>能解决这个问题。不完全可积的系统称为<b>非完整 nonholonomic</b>，否则称为<b>完整 holonomic</b>。一般说来，即使模型在理论上可积，真正把积分做出来又是另一回事；大多数情况下积分很难甚至做不到。</p>
+<p>所以有时即使约束可积，也要直接在微分形式下工作。而且，处理微分约束的规划方法也能用于 \(h(q) = 0\) 形式的约束——这意味着闭运动链的运动规划可以交给为微分约束设计的规划算法。</p>
+<div class="box warn"><div class="box-title">补充：为什么平面上的 (13.22) 一定可积，而 \(\mathbb{R}^3\) 中的 (13.9) 可以不可积</div>
+<p>\(\mathbb{R}^2\) 中一个 Pfaffian 约束只留下一维的允许速度（一条直线方向），沿它走只能画出一条曲线，所以一定被困在这条曲线上——单个方向场总是可积的。到了 \(\mathbb{R}^3\)，一个 Pfaffian 约束留下二维的允许速度平面：如果这些平面能「拼」成一族曲面（如 (13.7)），就是可积的；如果平面在移动时扭转（如 (13.9)），交替使用两个方向就能离开任何曲面——上面的 Pfaffian 互动图里方形回路的净位移就是这种扭转的痕迹。15.4 节会用 Lie 括号把这件事说清楚。</p></div>
+</section>
+
+<!-- ============================================================ 13.2 -->
+<section id="s13-2">
+<h2>13.2 动力系统的相空间表示 <span class="en">Phase Space Representation of Dynamical Systems</span></h2>
+<p>13.1 节的微分约束常被称为<b>运动学的 kinematic</b>，因为它们只用 C-space 上的速度表达。这对很多问题已经够用，例如给轮式移动机器人的可能运动方向建模；但它没法表达<b>动力学 dynamics</b>。比如简单车开得很快时，考虑动力学就不应该允许它瞬间启动或停下：全速冲向墙时，任何合理的模型都不该允许它在一毫米外才刹车还能避免碰撞。由于动量，所需的刹车距离取决于速度——驾校里大概也学过。</p>
+<p>要考虑动量等动力学因素，需要更高阶的微分方程。通常会约束<b>加速度</b> \(\ddot q = d\dot q/dt\)：例如车只能以某个最大减速度刹车（否则车轮打滑或翻车）。很多时候动作本身就用高阶导数表达：汽车的油门踏板直接设定加速度，把踏下的程度当作动作变量是合理的。这时位形要经过两次积分：第一次得到速度，第二次得到位形。</p>
+<p>所以动力学模型除了速度 \(\dot q\) 与位形 \(q\) 还涉及加速度 \(\ddot q\)。同样有隐式和参数两种模型。隐式模型的约束写成</p>
+<div class="eq">$$g_i(\ddot q, \dot q, q) = 0. \tag{13.27}$$</div>
+<p>参数模型写成</p>
+<div class="eq">$$\ddot q = f(\dot q, q, u). \tag{13.28}$$</div>
+
+<h3 id="s13-2-1">13.2.1 升维降阶 <span class="en">Reducing Degree by Increasing Dimension</span></h3>
+<p>考虑高阶导数的约束看起来复杂得多。本节介绍一个方便的技巧：把含高阶导数的约束换成只含一阶导数的新约束。这需要引入<b>相空间 phase space</b>，它比原来的 C-space 维数更多——这是个权衡：维数增加了；但人们普遍认为，增加空间的维数往往比直接处理高阶导数容易。一般地，<b>状态空间 state space</b> 指 C-space 或由它导出的相空间。</p>
+
+<h4>标量情形</h4>
+<p>具体些，考虑微分方程</p>
+<div class="eq">$$\ddot y - 3\dot y + y = 0, \tag{13.29}$$</div>
+<p>\(y\in\mathbb{R}\) 是标量。因为含 \(\ddot y\)，这是二阶微分方程。定义相空间：令 \(x = (x_1,x_2)\) 为二维的<b>相向量 phase vector</b>，\(x_1 = y\)、\(x_2 = \dot y\)。在定义了相空间的场合，「状态空间」「状态向量」与「相空间」「相向量」混用。代入 (13.29) 得</p>
+<div class="eq">$$\ddot y - 3x_2 + x_1 = 0. \tag{13.30}$$</div>
+<p>到这里似乎没帮上什么。但 \(\ddot y\) 既可以写成 \(\dot x_2\) 也可以写成 \(\ddot x_1\)；前者更好，因为导数阶数更低。用 \(\dot x_2 = \ddot y\)，方程变成</p>
+<div class="eq">$$\dot x_2 - 3x_2 + x_1 = 0. \tag{13.31}$$</div>
+<p>它本身和 (13.29) 等价吗？不等价。还差一个约束 \(x_2 = \dot x_1\)，隐式写作 \(\dot x_1 - x_2 = 0\)。让相空间方法正确工作的关键，就是把某些相变量与另一些相变量的导数联系起来。用相空间，我们把二阶方程 (13.29) 换成了两个一阶方程</p>
+<div class="eq">$$\dot x_1 = x_2,\qquad \dot x_2 = 3x_2 - x_1, \tag{13.32}$$</div>
+<p>即解出 \(\dot x_1\)、\(\dot x_2\)。(13.32) 可以写成 \(\dot x = f(x)\)，\(f\) 是 \(\mathbb{R}^2\to\mathbb{R}^2\) 的函数。</p>
+<p>同样的方法适用于任何隐式微分方程 \(g(\ddot y,\dot y,y) = 0\)：令 \(x_1 = y\)、\(x_2 = \dot y\)、\(\dot x_2 = \ddot y\)，得到隐式方程 \(g(\dot x_2, x_2, x_1) = 0\) 和 \(\dot x_1 = x_2\)。再设方程中出现一个标量动作 \(u\in U = \mathbb{R}\)，方法照旧：\(g(\ddot y,\dot y,y,u) = 0\) 写成 \(g(\dot x_2,x_2,x_1,u) = 0\)。</p>
+<p>设加速度约束以参数形式给出 \(\ddot y = h(\dot y, y, u)\)（13.3 节的动力学模型常是这样）。它可以换成<b>相转移方程 phase transition equation</b> 或<b>状态转移方程</b> \(\dot x = f(x,u)\)，\(f:\mathbb{R}^2\times\mathbb{R}\to\mathbb{R}^2\)：</p>
+<div class="eq">$$\dot x_1 = x_2,\qquad \dot x_2 = h(x_2, x_1, u). \tag{13.33}$$</div>
+<p>二阶微分方程通常给两个初始条件：要确定所有 \(t\ge0\) 的 \(y(t)\)，需要 \(y(0)\) 与 \(\dot y(0)\)。用相空间表示就不需要更高阶的初始条件，因为相空间中任何一点都同时给出了 \(y\) 与 \(\dot y\)。所以给定相空间中的初始点和所有 \(t\ge0\) 的 \(u(t)\)，就能确定 \(y(t)\)。</p>
+<p><b>例 13.3（双积分器 double integrator）</b>：双积分器简单却重要，很好地说明了相空间。设二阶方程为 \(\ddot q = u\)，\(q, u\in\mathbb{R}\)：动作直接设定加速度。积分一次得到速度 \(\dot q\)，两次得到位置 \(q\)<span class="fn">（书中脚注：凡是做积分的地方，都假设被积函数可积）</span>。给定 \(q(0)\)、\(\dot q(0)\) 和所有 \(t'\in[0,t)\) 的 \(u(t')\)，就能确定任意 \(t &gt; 0\) 的 \(q(t)\) 与 \(\dot q(t)\)。定义二维相空间 \(X = \mathbb{R}^2\)：</p>
+<div class="eq">$$x = (x_1, x_2) = (q, \dot q). \tag{13.34}$$</div>
+<p>状态（相）转移方程 \(\dot x = f(x,u)\) 是</p>
+<div class="eq">$$\dot x_1 = x_2,\qquad \dot x_2 = u. \tag{13.35}$$</div>
+<p>要确定状态轨迹，除了动作历史，还要给初值 \(x_1(0) = q_0\)（位置）与 \(x_2(0) = \dot q_0\)（速度）。若 \(u\) 为常数，状态轨迹是二次的，因为它是常函数积分两次得到的。</p>
+
+<h4>向量情形</h4>
+<p>到相空间的变换可以推广到含多个变量导数的微分方程。设 \(q\) 是用光滑 \(n\) 维流形 \(\mathcal{C}\) 的坐标邻域表示的位形。形如 \(g(\ddot q,\dot q,q) = 0\) 或 \(g(\ddot q,\dot q,q,u) = 0\) 的二阶约束，可以表示成 \(2n\) 维状态空间中的一阶约束。记 \(x\) 为 \(2n\) 维相向量，仿照标量情形定义 \(x = (q,\dot q)\)：对 \(1\le i\le n\)，\(x_i = q_i\)；对 \(n+1\le i\le 2n\)，\(x_i = \dot q_{i-n}\)。这些代换可以直接放进隐式约束里降阶。</p>
+<p>设 \(n\) 个微分方程以参数形式 \(\ddot q = h(q,\dot q,u)\) 给出。在相空间中有 \(2n\) 个微分方程：前 \(n\) 个对应相空间的定义 \(\dot x_i = x_{n+i}\)（\(1\le i\le n\)），因为 \(x_{n+i} = \dot q_i\) 而 \(\dot x_i\) 是 \(q_i\) 的时间导数；其余 \(n\) 个分量直接由 \(h\) 得到——在 \(h(q,\dot q,u)\) 中把 \(x\) 的前 \(n\) 个分量代替 \(q\)、后 \(n\) 个代替 \(\dot q\)，记作 \(h(x,u)\)，于是 \(\dot x_i = h_{i-n}(x,u)\)（\(n+1\le i\le2n\)）。这 \(2n\) 个方程定义了 \(\dot x = f(x,u)\) 形式的<b>相（状态）转移方程</b>。现在很清楚：加速度约束可以化成相空间上的速度约束，于是 8.3 节的切空间概念可以用来表达涉及加速度的约束。而且状态空间 \(X\) 就是 \(\mathcal{C}\) 的<b>切丛 tangent bundle</b>（\(\mathbb{R}^n\) 见 (8.9)，一般光滑流形见 (15.67)），因为 \(q\) 与 \(\dot q\) 合起来指出了一个切空间 \(T_q(\mathcal{C})\) 和其中一个切向量 \(\dot q\in T_q(\mathcal{C})\)。</p>
+
+<h4>高阶微分约束</h4>
+<p>相空间的想法也能用于更高阶的微分方程。例如约束可能涉及加速度的时间导数 \(q^{(3)}\)，常称为<b>加加速度 jerk</b>。若方程含 jerk 变量，就定义 \(3n\) 维相空间得到一阶约束：约束 \(g(q^{(3)},\ddot q,\dot q,q,u) = 0\) 中的每个 \(q_i\)、\(\dot q_i\)、\(\ddot q_i\) 都定义为一个相变量。类似地，\(k\) 阶微分约束可以通过引入 \(kn\) 维相空间化成一阶约束。</p>
+<p><b>例 13.4（积分器链 chain of integrators）</b>：高阶约束的简单例子是<b>积分器链</b>（它在系统框图中画成一串积分器方块，故名），这是例 13.3 的高阶推广。设 \(k\) 阶微分方程 \(q^{(k)} = u\)，\(q, u\) 是标量，\(q^{(k)}\) 是 \(q\) 对时间的 \(k\) 阶导数。定义 \(k\) 维相空间 \(X\)：</p>
+<div class="eq">$$x = (q, \dot q, \ddot q, q^{(3)}, \ldots, q^{(k-1)}). \tag{13.36}$$</div>
+<p>状态（相）转移方程 \(\dot x = f(x,u)\) 是 \(\dot x_i = x_{i+1}\)（\(1\le i\le k-1\)）与 \(\dot x_k = u\)；合起来这 \(k\) 个方程等价于 \(q^{(k)} = u\)<span class="fn">（原书这里把下标写成 \(1\le i\le n-1\)、\(\dot x_n = u\)、「these \(n\) individual equations」，但本例的维数是 \(k\)）</span>。初始状态给出初始位置和直到 \(k-1\) 阶的所有时间导数；有了它们和动作 \(u\)，状态轨迹由一串积分得到。</p>
+<p>你也许会问：能否引入维数足够高的相空间，把导数<b>完全</b>消掉？确实可以。例如二阶约束可以引入 \(3n\) 维相空间 \(x = (q,\dot q,\ddot q)\)，于是 \(g(q,\dot q,\ddot q) = 0\) 这样的约束变成 \(g(x) = 0\)。麻烦在于：状态必须沿约束曲面运动，就像 4.4 节闭运动链的解集那样——这就是那里出现切空间的原因。两种做法里，每个点处允许的速度集合都受到约束。</p>
+<p>用相空间定义的问题通常有个有趣的性质：<b>漂移 drift</b>。意思是对某些 \(x\in X\)，<b>不存在</b>使 \(f(x,u) = 0\) 的 \(u\in U\)。13.1.2 节的例子里总有这样的动作：它们都是<b>无漂移系统 driftless systems</b>——因为约束不涉及动力学。在动力系统中，由于动量，无法瞬间停下，这就是一种漂移。例如车以 100 km/h 的速度在离砖墙 3 米处，会「漂」进墙里：没有任何动作（比如猛踩刹车）能让它瞬间停下。一般地，在相空间中无法瞬间停下。</p>
+
+<div class="widget wide" data-widget="phase-plane" data-preset="eq32"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>(13.32)：在原点附近点几下——所有轨迹都远离原点，因为 A 的两个特征值 (3 ± √5)/2 都是正的（右上角统计）。下方曲线是 x₁ = y(t) 与 x₂ = ẏ(t)。</li>
+  <li>切到双积分器、u = 0：每条轨迹是水平直线（匀速运动），红色的 x₂ = 0 轴是平衡点。把 u 拖到 ±1：轨迹变成抛物线。看绿色竖线——它是 u ∈ [−1, 1] 时允许的速度，只要 x₂ ≠ 0 它就不过原点：漂移。</li>
+  <li>切到「线性 ẋ = Ax」，点「中心」「稳定焦点」「鞍点」，看特征值如何决定相图（补充，为 15.1 节的稳定性做铺垫）。</li>
+</ul></div>
+
+<h3 id="s13-2-2">13.2.2 线性系统 <span class="en">Linear Systems</span></h3>
+<p>相空间作为一种能处理动力学的特殊状态空间定义好之后，就可以按数学形式给微分模型分类。<b>线性系统 linear systems</b> 研究得最多，尤其在控制论中：线性代数的很多强大工具能用来得到好的控制律 [21]。这些想法也推广到涉及最优性准则 [3, 45]、自然 [13, 43] 或多个参与者 [10] 的线性系统。</p>
+<p>设 \(X = \mathbb{R}^n\) 是相空间，\(U = \mathbb{R}^m\)（\(m\le n\)）是动作空间。<b>线性系统</b>是状态转移方程可以写成</p>
+<div class="eq">$$\dot x = f(x,u) = Ax + Bu \tag{13.37}$$</div>
+<p>的微分模型，其中 \(A\)、\(B\) 分别是 \(n\times n\)、\(n\times m\) 的常实矩阵。</p>
+<p><b>例 13.5（线性系统的例子）</b>：设 \(X = \mathbb{R}^3\)、\(U = \mathbb{R}^2\)，</p>
+<div class="eq">$$\begin{pmatrix}\dot x_1\\ \dot x_2\\ \dot x_3\end{pmatrix} = \begin{pmatrix}0 & \sqrt2 & 1\\ 1 & -1 & 4\\ 2 & 0 & 1\end{pmatrix}\begin{pmatrix}x_1\\ x_2\\ x_3\end{pmatrix} + \begin{pmatrix}1 & 0\\ 0 & 1\\ 1 & 1\end{pmatrix}\begin{pmatrix}u_1\\ u_2\end{pmatrix}. \tag{13.38}$$</div>
+<p>做完矩阵乘法，三个方程对状态和动作变量都是线性的。可以对比例 11.25 的离散时间线性高斯系统。</p>
+<p class="small">（补充，参考代码第 9 项：例如 \(x = (1,-1,0.5)\)、\(u = (0.3,-0.2)\) 时 \(\dot x \approx (-0.614, 3.8, 2.6)\)。\(A\) 有一个正实特征值 \(\approx 2.915\)，所以 \(u = 0\) 时状态会发散；可控性矩阵 \([B, AB, A^2B]\) 的秩为 3，所以从任何状态都能到达任何状态——这是 15.1.3 节的话题。）</p>
+<p>回忆 13.1.1 节：\(k\) 个线性约束把速度<b>限制</b>在一个 \((n-k)\) 维超平面上。(13.37) 的线性模型是参数形式，每个动作变量都<b>允许</b>一个独立自由度，此时 \(m = n - k\)。极端情形 \(m = 0\)：没有动作，\(\dot x = Ax\)，每点的相速度 \(\dot x\) 都是固定的。\(m = 1\)：每个 \(x\in X\) 处可以用 \(u\) 选择一维的速度集合——方向固定、大小可选。一般地，\(x\in\mathbb{R}^n\) 处允许的速度集合是切空间 \(T_x(\mathbb{R}^n)\) 中一个 \(m\) 维的线性子空间（若 \(B\) 非奇异）<span class="fn">（补充说明：更准确地说，它是过 \(Ax\) 的仿射子空间 \(\{Ax + Bu\}\)，平行于 \(B\) 的列空间；「\(B\) 非奇异」应理解为 \(B\) 列满秩，因为 \(B\) 一般不是方阵）</span>。</p>
+<p>尽管有 (13.37) 的约束，仍有可能从任何初始状态到达整个状态空间。但到达附近的点可能代价高昂，因为切空间上的限制：某些方向的速度根本无法指令。对非线性系统，有时能在只停留在状态附近一个小区域内的同时，快速到达一个小邻域内的任何点。这些问题属于<b>可控性 controllability</b>，见 15.1.3 与 15.4.3 节。</p>
+<p>这里不讨论的<b>可观性 observability</b> 是控制中的重要话题 [21, 38]。用第 11 章的 I-space 概念说：定义传感器 \(y = h(x)\)，任务是在给定历史 I-state 时确定当前状态。若系统可观，非确定 I-state 就是单点；否则系统可能只是部分可观。对线性系统，若感知模型也是线性的</p>
+<div class="eq">$$y = h(x) = Cx, \tag{13.39}$$</div>
+<p>就有简单的矩阵条件判断系统是否可观 [21]<span class="fn">（原书 (13.39) 印作 \(y = h(x) = Cy\)，右边应为 \(Cx\)，见脚注 <a href="#fn-1" id="fn-1-ref">1</a>）</span>。也存在非线性可观性理论 [38]。</p>
+<p>和离散规划问题一样，可以定义依赖于时间的微分模型。离散情形里这是对阶段的依赖；连续阶段的情形，<b>时变线性系统 time-varying linear system</b> 定义为</p>
+<div class="eq">$$\dot x = f(x(t), u(t), t) = A(t)x(t) + B(t)u(t). \tag{13.40}$$</div>
+<p>矩阵元素可以是时间的函数。很多强大的控制技术都能轻松用于这种情形，但这里不讨论，因为大多数规划问题是<b>时不变 time-invariant</b>（平稳 stationary）的。</p>
+
+<h3 id="s13-2-3">13.2.3 非线性系统 <span class="en">Nonlinear Systems</span></h3>
+<p>虽然线性系统有强大的控制律，物理世界中的绝大多数系统都不是线性的。任何不符合 (13.37) 或 (13.40) 的微分模型都称为<b>非线性系统 nonlinear systems</b>。13.1.2 节的所有模型都是 \(X = \mathcal{C}\) 这个特殊情形下的非线性系统。</p>
+<p>有一族重要的非线性系统在某种意义上「看起来是线性的」。设 \(X\) 是光滑 \(n\) 维流形，\(U\subseteq\mathbb{R}^m\)，令 \(U = \mathbb{R}^m\)（\(m\le n\)）。在坐标邻域中，形如</p>
+<div class="eq">$$\dot x = f(x) + \sum_{i=1}^m g_i(x)u_i \tag{13.41}$$</div>
+<p>的非线性系统（\(f\)、\(g_i\) 光滑）称为<b>控制仿射系统 control-affine system</b> 或<b>仿射控制输入系统 affine-in-control system</b><span class="fn">（书中脚注：不要把它和 affine control systems 混淆，后者形如 \(\dot x = Ax + Bu + w\)，\(A, B\) 是常矩阵、\(w\) 是常向量）</span>。非线性控制理论研究得很多 [38, 66]。它们对动作是线性的，对状态是非线性的；更多内容见 15.4.1 节。</p>
+<p>对控制仿射系统，不一定能得到零速度，因为 \(f\) 造成了漂移。重要的特例是 \(f\equiv0\) 的<b>无漂移</b>控制仿射系统：</p>
+<div class="eq">$$\dot x = \sum_{i=1}^m g_i(x)u_i. \tag{13.42}$$</div>
+<p>令所有 \(u_i = 0\)，就得到零速度 \(\dot x = 0\)。</p>
+<p><b>例 13.6（非完整积分器 nonholonomic integrator）</b>：无漂移控制仿射系统最简单的例子之一是 Brockett 在控制文献中引入的<b>非完整积分器</b> [18]，有时也叫 <b>Brockett 系统</b>或 <b>Heisenberg 系统</b>（因为它出现在量子力学中 [16]）。令 \(X = \mathbb{R}^3\)、\(U = \mathbb{R}^2\)，状态转移方程为</p>
+<div class="eq">$$\dot x_1 = u_1,\qquad \dot x_2 = u_2,\qquad \dot x_3 = x_1u_2 - x_2u_1. \tag{13.43}$$</div>
+
+<div class="widget wide" data-widget="brockett"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>点「从当前点逆时针绕圆一圈」：(x₁, x₂) 回到起点，x₃ 却增加了 2 × 圆面积（半径 0.8 时为 2π·0.64 ≈ 4.02）。点「顺时针」，x₃ 又减回去。</li>
+  <li>先把点拖到远离原点的地方再绕同样大的圆：增量完全一样——闭合回路的 Δx₃ 只取决于围成的面积，不取决于位置（参考代码第 9 项）。</li>
+  <li>自己拖一个「8」字：两个圈方向相反，面积互相抵消，x₃ 几乎回到原值。</li>
+</ul></div>
+
+<p>很多非线性系统可以用 13.1.1 节的 Pfaffian 约束隐式地表示，它也能从 C-space 推广到相空间。用 \(X\) 表示，Pfaffian 约束写成</p>
+<div class="eq">$$g_1(x)\dot x_1 + g_2(x)\dot x_2 + \cdots + g_n(x)\dot x_n = 0. \tag{13.44}$$</div>
+<p>方程对 \(\dot x\) 是线性的，但允许对 \(x\) 有非线性依赖。和 13.1.3 节的 C-space 一样，相空间上也可能有完整和非完整模型。15.4.2 节的 Frobenius 定理可以判断控制仿射系统是否完全可积。</p>
+
+<h3 id="s13-2-4">13.2.4 加积分器扩展模型 <span class="en">Extending Models by Adding Integrators</span></h3>
+<p>13.1 节的微分模型在很多应用中显得不真实，因为它们要求动作能瞬间改变。例如简单车的转向角和速度能瞬间变到任何值，这意味着车能瞬间改变加速度。车开得很慢时（例如分析平行泊车动作）这可能是合理的近似；高速时这个模型就荒唐了。</p>
+<p>设给定状态转移方程 \(\dot x = f(x,u)\)，\(X\) 的维数为 \(n\)。可以这样增强模型：</p>
+<ol>
+  <li>选一个动作变量 \(u_i\)；</li>
+  <li>把它改名为新的状态变量 \(x_{n+1} = u_i\)；</li>
+  <li>定义新的动作变量 \(u'_i\) 取代 \(u_i\) 的位置；</li>
+  <li>把状态转移方程扩展一维，加上 \(\dot x_{n+1} = u'_i\)。</li>
+</ol>
+<p>这称为<b>在 \(u_i\) 前面放一个积分器 placing an integrator in front of \(u_i\)</b>。可以对同一个动作变量反复做，得到一串积分器；也可以对不同的动作变量做。</p>
+
+<h4>更好的独轮车模型</h4>
+<p>在动作变量前放积分器，可以改进 13.1 节的模型。例如独轮车 (13.18)：不直接用 \(u_s\) 设定速度，而是让速度由表示加速度的动作 \(u_a\) 积分得到——用 \(\dot s = u_a\) 代替 \(s = u_s\)，动作设定的是速度的<b>变化</b>。若 \(u_a\) 取自有界区间，速度就是时间的连续函数。</p>
+<p>此时转移方程怎么写？\(u_a\) 的取值集合给 \(x\)、\(y\) 加上了二阶约束，因为要两次积分才能定出它们。用相空间的想法，\(s\) 可以看作一个相变量，得到四维相空间，每个状态是 \((x,y,\theta,s)\)。状态（相）转移方程为</p>
+<div class="eq">$$\dot x = s\cos\theta,\qquad \dot y = s\sin\theta,\qquad \dot\theta = u_\omega,\qquad \dot s = u_a, \tag{13.45}$$</div>
+<p>可以和 (13.18) 对比：动作 \(u_s\) 换成了 \(s\)（速度现在是相变量），并多了一个方程反映速度与加速度的关系。</p>
+<p>再用一次积分器的想法，让独轮车的朝向也随时间连续变化。令 \(u_\alpha\) 为角加速度动作，\(\omega\) 为角速度，作为新的状态变量。得到五维相空间和称为<b>二阶独轮车 second-order unicycle</b> 的模型：</p>
+<div class="eq">$$\dot x = s\cos\theta,\quad \dot y = s\sin\theta,\quad \dot\theta = \omega,\quad \dot s = u_a,\quad \dot\omega = u_\alpha, \tag{13.46}$$</div>
+<p>\(u = (u_a, u_\alpha)\) 是二维动作向量。有时 \(s\) 可以固定为常数，这意味着 \(u_a\) 固定为 \(u_a = 0\)。</p>
+
+<h4>连续转向的车</h4>
+<p>再看简单车。按 (13.15)，转向角可以不连续地变化。为简单起见，设速度固定为 \(s = 1\)。要让转向角随时间连续变化，令 \(u_\omega\) 为转向角速度的动作：\(\dot\phi = u_\omega\)。得到四维状态空间，每个状态是 \((x,y,\theta,\phi)\)。这给出<b>连续转向车 continuous-steering car</b>：</p>
+<div class="eq">$$\dot x = \cos\theta,\qquad \dot y = \sin\theta,\qquad \dot\theta = \frac{\tan\phi}{L},\qquad \dot\phi = u_\omega, \tag{13.47}$$</div>
+<p>这个模型在 [67] 中用于规划<span class="fn">（原书说这里有「两个动作变量 \(u_s\) 和 \(u_\omega\)」，但速度已固定为 \(s = 1\)，(13.47) 中只剩一个动作 \(u_\omega\)，见脚注 <a href="#fn-2" id="fn-2-ref">2</a>）</span>。</p>
+<p>再加一个积分器，可以让转向角成为 \(C^1\) 光滑的时间函数。令 \(\omega\) 为状态变量、\(u_\alpha\) 为转向角的角加速度，状态向量是 \((x,y,\theta,\phi,\omega)\)，状态转移方程为</p>
+<div class="eq">$$\dot x = \cos\theta,\qquad \dot y = \sin\theta,\qquad \dot\theta = \frac{\tan\phi}{L},\qquad \dot\phi = \omega,\qquad \dot\omega = u_\alpha. \tag{13.48}$$</div>
+<p>积分器可以加任意多次，让任何变量要多光滑有多光滑；而且由于相变量和动作集合上的限制，每一阶的变化率都可以有界。</p>
+
+<h4>光滑的差速驱动</h4>
+<p>把动作 \(u_l\)、\(u_r\) 定义为电机的<b>加速</b>而不是直接设定转速，就得到<b>二阶差速驱动</b>模型。记 \(\omega_l\)、\(\omega_r\) 为左右电机的角速度，状态转移方程为</p>
+<div class="eq">$$\dot x = \frac r2(\omega_l+\omega_r)\cos\theta,\quad \dot y = \frac r2(\omega_l+\omega_r)\sin\theta,\quad \dot\theta = \frac rL(\omega_r-\omega_l),\quad \dot\omega_l = u_l,\quad \dot\omega_r = u_r. \tag{13.49}$$</div>
+<p>总结：让现有模型更真实的一个重要技巧，是在动作变量前插入一个或多个积分器。每引入一个积分器，相空间的维数就加一。单个积分器迫使原来的动作随时间连续；若新动作有界，原动作的变化率在可微处有界（一般地它是 (8.16) 意义下的 Lipschitz 函数）。用双积分器，原动作被迫是 \(C^1\) 光滑的。在一个动作变量前串更多积分器，会进一步约束它的值：\(k\) 个积分器串在原动作前，迫使它 \(C^{k-1}\) 光滑并满足 Lipschitz 界。</p>
+<p>一个重要的局限是：要得到真实的模型，其它变量可能依赖于新的相变量。例如简单车开得快时，就不应该像平行泊车时那样急转（想想泊车时你能多急地打方向，和在高速公路上比）。开发更好的微分模型，最终需要仔细考虑力学——这是 13.3、13.4 节的动机。</p>
+
+<div class="widget wide" data-widget="integrators"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>点「开车」：三辆车收到同一串方波命令（橙）。k = 0 的转向角跟着命令瞬间跳变；k = 1 斜坡式变化；k = 2 平滑地 S 形变化。下面的 φ(t) 图看得最清楚。</li>
+  <li>把 |u_ω| 上界调大：k = 1 的斜坡变陡，越来越接近 k = 0。把 |u_α| 调小：k = 2 反应更迟钝，路径更「圆」。</li>
+  <li>切到「按住按钮」：自己左右打方向，体会「方向盘有惯性」的车更难急转弯——这正是给转向加积分器的意义（参考代码第 10 项）。</li>
+</ul></div>
+</section>
+
+<!-- ============================================================ 13.3 -->
+<section id="s13-3">
+<h2>13.3 Newton–Euler 力学基础 <span class="en">Basic Newton–Euler Mechanics</span></h2>
+<p>力学是一门广而难的学科，几节篇幅不可能完整介绍。这里的目的是概述主要概念，并给出一些可以用于第 14 章规划算法的模型。本节和 13.4 节希望能激发进一步学习力学的兴趣（见章末的延伸阅读）。如果你只想<b>使用</b>微分模型，可以放心跳过推导——只要记住本节得到的所有模型最后都是 \(\dot x = f(x,u)\) 的形式，可以直接用于规划算法。</p>
+<p>学习力学时要记住两点：</p>
+<ol>
+  <li><b>模型要与关于物体在物理世界中行为的实验观测保持一致。</b>这些观测取决于实验的种类。在具体应用中，很多效应可能微不足道，甚至实验根本测不出来——比如用测速雷达测车速时，很难测出相对论效应。所以要说明关于世界的简化假设，以及会在其中做什么样的实验。</li>
+  <li><b>做法通常是写出一些定律，翻译成相空间中允许速度的约束。</b>这意味着力学通常给出隐式表示，必须再转成参数形式。而且多数力学教材不明确提到动作变量：动作来自<b>控制</b>物理世界的意图。从力学的角度，动作可以看作已经确定，所以约束写成 \(g(\dot x, x) = 0\)，而不是 \(g(\dot x, x, u) = 0\)。</li>
+</ol>
+<p>几种力学表述从不同的数学推理出发，得到相同的微分约束。本章其余部分概述三个流派，一个比一个优雅、现代。最容易理解的是 <b>Newton–Euler 力学</b>，它从牛顿著名的物理定律出发，在本节介绍。<b>Lagrange 力学</b>在 13.4.1 节，用函数空间上的优化（变分法）这一非常一般的原理得到微分约束。<b>Hamilton 力学</b>在 13.4.4 节，定义一个更高维的状态空间，同样通过优化得到微分约束。</p>
+
+<h3 id="s13-3-1">13.3.1 牛顿模型 <span class="en">The Newtonian Model</span></h3>
+<p>最基本的力学表述可以追溯到牛顿和欧拉，基础物理课里常学到它的一部分。考虑 3.1 节定义的世界 \(\mathcal{W}\)，不过这里除了 2D、3D 世界还允许一维世界 \(\mathcal{W} = \mathbb{R}\)。还需要时间的概念。时空连续体中可得到的运动空间可以形式化为 Galilei 群 [6]；但这里用标准的直觉的时间与欧氏空间概念，并假设不存在由时空弯曲引起的相对论效应（牛顿和欧拉不知道这些，对地球上或附近的大多数小尺度机械系统也可以忽略）。</p>
+<p><b>惯性坐标系 inertial coordinate frames</b>：Newton–Euler 力学的核心是：\(\mathcal{W}\) 中的点用<b>惯性坐标系</b>表示。想象把原点和坐标轴放在宇宙某处，它们要以不干扰我们观察基本运动定律的方式固定。设想在室内壁球场打球，想给球在墙之间反弹的运动建模。如果坐标系固连在球上，球看起来永远不动，墙、地球和宇宙其余部分却疯狂地绕着球转（想象一台沿球的某根机体轴拍摄的相机——你很快就会看晕）。如果坐标系相对球场固定，就能得到合理的球的位置测量（电影也好看得多）。实用上可以认为这个固定坐标系是惯性的。注意：如果坐标系相对太阳固定，球会疯狂地舞动——地球的自转和公转会让球以惊人的速度运动。实际上惯性系并不存在；不过对地球上的机械系统，假设惯性系固定在地球上是合理的。</p>
+<p>惯性系严格说应满足：1）运动定律在任何惯性系中看起来都一样；2）相对惯性系以恒定速度运动、且不转动的坐标系也是惯性的。作为第二条的例子，设壁球实验在一辆行驶在高速公路上的大卡车里进行。忽略振动，如果卡车在直路上匀速行驶，可以把惯性系固定在卡车上，球的反弹就像卡车没动一样。如果路拐弯或卡车变速，球就不会按正确的方式反弹；若仍坚持认为固定在卡车上的坐标系是惯性的，运动定律就显得很奇怪。这种情况下惯性系必须固定在地球上，才能正确描述卡车与球的整体行为。</p>
+<p><b>封闭系统 closed system</b>：Newton–Euler 模型的另一个重要方面是，被建模的物体系统是<b>封闭</b>的：除了明确建模的物体，没有任何其它物体能影响它们的运动（想象一下，如果忘了考虑壁球场几百米外的一个黑洞会怎样）。</p>
+<p><b>牛顿定律</b>：物体的运动基于牛顿通过实验验证的三条定律，它们应在任何惯性系中成立：</p>
+<ol>
+  <li>静止的物体保持静止，运动的物体保持匀速运动，除非有非零的<b>合力</b>（作用在该点上所有力之和）作用于它。</li>
+  <li>物体的质量 \(m\)、加速度 \(a\) 与外力 \(f\) 的关系是 \(f = ma\)。</li>
+  <li>两个物体之间的相互作用力大小相等、方向相反。</li>
+</ol>
+<p>基于这些定律，就能为运动物体系统建立微分约束。</p>
+
+<h3 id="s13-3-2">13.3.2 质点的运动 <span class="en">Motions of Particles</span></h3>
+<p>Newton–Euler 模型用<b>质点 particle</b> 描述：每个质点是一个带质量 \(m\) 的点，力可以作用于任何质点。刚体的运动（13.3.3 节）实际上就是把刚体建模为一群粘在一起的质点来确定的，所以先理解质点的行为。</p>
+<h4>单个质点</h4>
+<p>考虑质量为 \(m\)、在 \(\mathcal{W} = \mathbb{R}\) 中运动的单个质点。力成为标量 \(f\in\mathbb{R}\)。记 \(q(t)\) 为质点在时刻 \(t\) 的位置，则加速度是 \(\ddot q\)，牛顿第二定律成为 \(f = m\ddot q\)，解出</p>
+<div class="eq">$$\ddot q = f/m. \tag{13.50}$$</div>
+<p>若把 \(f\) 当作动作 \(u\)、并令 \(m = 1\)，(13.50) 恰好就是例 13.3 的双积分器 \(\ddot q = u\)。引入相变量 \(x_1 = q\)、\(x_2 = \dot q\) 得到状态向量 \(x = (q,\dot q)\)：对固定的 \(u\)，质点从任何初始状态出发的运动可以用 \(\mathbb{R}^2\) 上的向量场描述。状态转移方程为</p>
+<div class="eq">$$\dot x_1 = x_2,\qquad \dot x_2 = \frac um, \tag{13.51}$$</div>
+<p>其中 \(x_1 = q\)、\(x_2 = \dot q\)、\(u = f\)。令 \(U = [-f_{max}, f_{max}]\)，\(f_{max}\) 是能施加在质点上的最大力；不允许任意大的力，因为那在物理上不现实。</p>
+<p>推广到 \(\mathcal{W} = \mathbb{R}^2\) 和 \(\mathbb{R}^3\)。记 \(n\) 为 \(\mathcal{W}\) 的维数（2 或 3），\(q\) 为质点在 \(\mathcal{W}\) 中的位置。牛顿第二定律仍然给出 \(f = m\ddot q\)，但现在有 \(n\) 个独立方程 \(f_i = m\ddot q_i\)，每个都是一个按 \(m\) 缩放的双积分器。力的每个分量 \(f_i\) 都可以看作一个动作变量 \(u_i\)。定义 \(2n\) 维状态空间 \(x = (q,\dot q)\)。\(n = 2\) 时状态转移方程为</p>
+<div class="eq">$$\dot x_1 = x_3,\quad \dot x_2 = x_4,\quad \dot x_3 = u_1/m,\quad \dot x_4 = u_2/m, \tag{13.52}$$</div>
+<p>\(n = 3\) 时为</p>
+<div class="eq">$$\dot x_1 = x_4,\quad \dot x_2 = x_5,\quad \dot x_3 = x_6,\quad \dot x_4 = u_1/m,\quad \dot x_5 = u_2/m,\quad \dot x_6 = u_3/m. \tag{13.53}$$</div>
+<p>对固定的动作，它们分别定义 \(\mathbb{R}^4\)、\(\mathbb{R}^6\) 上的向量场。动作集合也应有界，和一维情形一样。设</p>
+<div class="eq">$$U = \{u\in\mathbb{R}^n \mid \|u\|\le f_{max}\}. \tag{13.54}$$</div>
+<p>再设多个力作用在同一个质点上。这时向量和</p>
+<div class="eq">$$F = \sum f \tag{13.55}$$</div>
+<p>给出这一组力的<b>合力 resultant force</b>：单个力 \(F\) 对质点的作用等价于这组力的合作用，于是牛顿第二定律可以写成 \(F = m\ddot q\)。下面两个例子说明一组力（其中一些对应动作）产生的状态转移方程。</p>
+
+<p><b>例 13.7（月球着陆器 lunar lander）</b>：用质点的 Newton–Euler 模型构造一个 \(X = \mathbb{R}^4\) 的例子。把月球着陆器建模成 2D 世界中质量为 \(m\) 的质点（图 13.8）。它不能转动，所以 \(\mathcal{C} = \mathbb{R}^2\)。着陆器左、右、底部有三个推进器，作用在着陆器上的力如图 13.8。每个推进器的开关是二值的：各有一个二值动作变量，1 表示点火、0 表示关闭。左右两个侧向推进器点火时分别提供大小为 \(f_l\)、\(f_r\) 的力（注意左推进器把着陆器向右推，反之亦然）。装在底部的向上推进器点火时提供大小为 \(f_u\) 的力。记 \(g\) 为重力加速度常数（月球上约为 1.622 m/s²）。</p>
+<p>由 (13.55) 和牛顿第二定律 \(F = m\ddot q\)，水平方向为</p>
+<div class="eq">$$m\ddot q_1 = u_lf_l - u_rf_r, \tag{13.56}$$</div>
+<p>竖直方向为</p>
+<div class="eq">$$m\ddot q_2 = u_uf_u - mg. \tag{13.57}$$</div>
+<p>相反的力相减，因为 \(f_l, f_r, f_u, g\) 给的只是大小；若写成 \(\mathbb{R}^2\) 中的向量则应相加。月球着陆器模型可以变到四维相空间 \(x = (q_1,q_2,\dot q_1,\dot q_2)\)。把 \(\ddot q_1\)、\(\ddot q_2\) 分别换成 \(\dot x_3\)、\(\dot x_4\)，(13.56)、(13.57) 可以写成</p>
+<div class="eq">$$\dot x_3 = \frac1m(u_lf_l - u_rf_r) \tag{13.58}$$</div>
+<p>和</p>
+<div class="eq">$$\dot x_4 = \frac{u_uf_u}{m} - g. \tag{13.59}$$</div>
+<p>再用 \(\dot x_1 = x_3\)、\(\dot x_2 = x_4\)，状态转移方程成为</p>
+<div class="eq">$$\dot x_1 = x_3,\qquad \dot x_2 = x_4,\qquad \dot x_3 = \frac1m(u_lf_l - u_rf_r),\qquad \dot x_4 = \frac{u_uf_u}{m} - g, \tag{13.60}$$</div>
+<p>这正是所需的 \(\dot x = f(x,u)\) 形式<span class="fn">（原书 (13.60) 第三式印作 \(\frac{f_s}{m}(u_lf_l - u_rf_r)\)，多了一个 \(f_s\)，与 (13.58) 不符，见脚注 <a href="#fn-3" id="fn-3-ref">3</a>）</span>。动作空间 \(U\) 有八个元素，表示三个推进器各自开或关；每个动作向量形如 \((u_l,u_r,u_u)\)，各分量为 0 或 1。</p>
+
+<div class="widget wide" data-widget="lunar-lander"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>什么都不按：着陆器沿抛物线掉下去（\(\dot x_3 = 0\)、\(\dot x_4 = -g\)）。按住「↑」：竖直加速度变成 f_u/m − g ≈ +1.18，比重力只大一点——想刹住要提前很久。</li>
+  <li>试着落到粉色着陆台上，触地速度要小于 0.6 m/s。你会发现最难的是「预判」：动量让你无法在最后一刻停下——这就是相空间里的漂移。</li>
+  <li>左右推进器只改变水平速度，而且不能转动——着陆器是质点。习题 7 要你把它推广成带转动的刚体（下面的「平面刚体与推进器」图是一个起点）。</li>
+</ul></div>
+
+<p>下一个例子说明牛顿第三定律的重要性。</p>
+<p><b>例 13.8（摆 pendulum）</b>：一个简单又非常重要的模型是图 13.9 的摆。记 \(m\) 为挂着的质点的质量（摆绳质量不计），\(g\) 为重力加速度常数，\(L\) 为摆绳长度，\(\theta\) 为摆的角位移（它刻画了摆的位形）。由牛顿第二定律，假设摆在真空中运动（无风阻），得到约束</p>
+<div class="eq">$$mL\ddot\theta = -mg\sin\theta. \tag{13.61}$$</div>
+<p>可以定义二维状态空间 \(x_1 = \theta\)、\(x_2 = \dot\theta\)，得到</p>
+<div class="eq">$$\dot x_1 = x_2,\qquad \dot x_2 = -\frac gL\sin x_1, \tag{13.62}$$</div>
+<p>没有动作（形如 \(\dot x = f(x)\)）。可以加上线性阻尼项 \(kL\dot\theta\) 来考虑风阻：</p>
+<div class="eq">$$mL\ddot\theta = -mg\sin\theta - kL\dot\theta, \tag{13.63}$$</div>
+<p>写成状态空间形式为</p>
+<div class="eq">$$\dot x_1 = x_2,\qquad \dot x_2 = -\frac gL\sin x_1 - \frac km x_2. \tag{13.64}$$</div>
+<p>再在垂直于摆绳的方向对质点施加一个力 \(u_f\)。可以把它想成装在质点侧面的推进器。这给 (13.63) 加上 \(u_f\) 项，它的符号取决于所选的垂直方向（向左或向右推）。状态转移方程 \(\dot x = f(x,u)\) 成为</p>
+<div class="eq">$$\dot x_1 = x_2,\qquad \dot x_2 = -\frac gL\sin x_1 - \frac km x_2 + \frac1{mL}u_f. \tag{13.65}$$</div>
+
+<div class="widget wide" data-widget="phase-plane" data-preset="pend"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>k = 0：在原点附近点一下是小幅摆动（闭曲线），点在 θ̇ 很大处是越过顶端的翻转（波浪线）；两类轨迹之间的分界线经过 (±π, 0)。能量一栏始终不变（参考代码第 11 项：小角度周期 ≈ 2π√(L/g)）。</li>
+  <li>把阻尼 k 调到 0.5：轨迹螺旋收敛到 (0, 0)，能量单调下降。</li>
+  <li>加推力 u_f：平衡点（红）从 θ = 0 移到 sin θ = u_f/(g/L)；|u_f| 超过 g/L 时没有平衡点，摆被推着一直转。</li>
+</ul></div>
+
+<p>虽然已经给出了足够的信息来为质点指定微分模型，再介绍几个概念会很有用，尤其是推广到多个质点与刚体时。主要想法是：由牛顿定律可以推出<b>守恒律</b>。质点的<b>线动量 linear momentum</b>（或简称动量）\(d\) 定义为</p>
+<div class="eq">$$d = m\dot q. \tag{13.66}$$</div>
+<p>它是把 \(f = m\ddot q\) 对时间积分得到的。</p>
+<p>讲刚体转动时会用到<b>动量矩 moment of momentum</b>（或<b>角动量 angular momentum</b>）。基于力矩的动量版本，先要定义作用在点 \(q\in\mathcal{W}\) 上的力 \(f\) 的<b>力矩 moment of force</b>（或<b>转矩 torque</b>）：</p>
+<div class="eq">$$n = q\times f, \tag{13.67}$$</div>
+<p>\(\times\) 是 \(\mathbb{R}^3\) 中的叉积。对线动量为 \(d\) 的质点，动量矩 \(e\) 定义为</p>
+<div class="eq">$$e = q\times d. \tag{13.68}$$</div>
+<p>可以证明</p>
+<div class="eq">$$\frac{de}{dt} = n, \tag{13.69}$$</div>
+<p>它等价于牛顿第二定律，只是用动量表达。对封闭系统中的质点运动，若没有外力作用，线动量与动量矩都<b>守恒</b>——这本质上是牛顿第一定律的重述。</p>
+<p>这个想法也可以用能量表达，它依赖于和线动量相同的变量。质点的<b>动能 kinetic energy</b> 为</p>
+<div class="eq">$$T = \frac12 m\dot q\cdot\dot q, \tag{13.70}$$</div>
+<p>\(\cdot\) 是熟悉的内积（点积）。质点系的总动能是各质点动能之和。</p>
+
+<h4>质点系</h4>
+<p>上面的概念自然推广到在封闭系统中运动的一组质点。这为过渡到刚体提供了平滑的桥梁：刚体被建模为无穷多个「粘在一起」的无穷小质点，相邻质点间的力相互抵消。在现在的模型里，质点各自独立运动；一对质点相撞时，由牛顿第三定律，它们在碰撞瞬间受到大小相等、方向相反的力。</p>
+<p>可以证明所有动量表达式都推广为对质点的求和 [52]。对质点系，把各自的线动量相加得到系统的线动量：</p>
+<div class="eq">$$D = \sum d. \tag{13.71}$$</div>
+<p>总外力为</p>
+<div class="eq">$$F = \sum f_i, \tag{13.72}$$</div>
+<p>它是整个系统的一种合力。\(dD/dt = F\) 成立，推广了单个质点的情形。总质量为</p>
+<div class="eq">$$M = \sum m, \tag{13.73}$$</div>
+<p>系统的<b>质心 center of mass</b> 为</p>
+<div class="eq">$$p = \frac1M\sum mq, \tag{13.74}$$</div>
+<p>\(m\)、\(q\) 是各质点的质量与位置。\(D = M\dot p\) 和 \(F = M\ddot p\) 成立，类似于单个质点的 \(d = m\dot q\)、\(f = m\ddot q\)。</p>
+<p>到这里只刻画了运动的平移部分；系统的转动也很重要，这正是引入力矩概念的动机。令总力矩（或总转矩）为</p>
+<div class="eq">$$N = \sum q\times f, \tag{13.75}$$</div>
+<p>系统的动量矩为</p>
+<div class="eq">$$E = \sum q\times d. \tag{13.76}$$</div>
+<p>可以证明 \(dE/dt = N\)，与单个质点的情形一样。</p>
+<p>这些想法让质点系看起来很像单个质点。但模拟它们的行为时，要考虑质点之间的碰撞：检测碰撞并计算撞击力，才能得到正确的运动。</p>
+<p>当质点数趋于无穷，考虑刚体这一极限情形。质点被「缝」在一起，内力相互抵消，只需处理作用在物体边界上的力。刚体运动的表达式在 13.3.3 节给出，也可以用 13.4 节的其它概念得到。</p>
+
+<h3 id="s13-3-3">13.3.3 刚体的运动 <span class="en">Motion of a Rigid Body</span></h3>
+<p>回忆 4.2.2 节：自由漂浮的 3D 刚体的 C-space 有六维。设动作作为外力施加于物体，这些力直接产生加速度，得到二阶微分方程。把状态定义为 \((q,\dot q)\)，就可以在十二维相空间 \(X\) 中得到一阶微分方程。</p>
+<p>记 \(\mathcal{A}\subseteq\mathbb{R}^3\) 为自由漂浮的刚体，\(\sigma(r)\) 为 \(r\in\mathcal{A}\) 处的<b>体密度 body density</b>，\(\mathcal{A}\) 的总质量为</p>
+<div class="eq">$$m = \int_{\mathcal{A}}\sigma(r)\,dr, \tag{13.77}$$</div>
+<p>\(dr = dr_1dr_2dr_3\) 是 \(\mathbb{R}^3\) 中的体积元。记 \(p\in\mathbb{R}^3\) 为 \(\mathcal{A}\) 的<b>质心</b>，\(p = (p_1,p_2,p_3)\) 定义为</p>
+<div class="eq">$$p_i = \frac1m\int_{\mathcal{A}} r_i\,\sigma(r)\,dr. \tag{13.78}$$</div>
+<p>设有一组外力作用于 \(\mathcal{A}\)（假设 \(\mathcal{A}\) 中的所有内力相互抵消），每个力 \(f\) 作用在边界上的一点，如图 13.10（作用线上任何一点都可以作为作用点）。这组力可以合成为作用在质心 \(p\) 上的一个力和一个力矩。记 \(F\) 为作用于 \(\mathcal{A}\) 的总外力，\(N\) 为对 \(\mathcal{A}\) 质心的总外力矩：</p>
+<div class="eq">$$F = \sum f \tag{13.79}$$</div>
+<div class="eq">$$N = \sum r\times f \tag{13.80}$$</div>
+<p>\(F\)、\(N\) 常称为这组力的<b>合力 resultant force</b> 和<b>合力矩 resultant moment</b>。Poinsot 证明了任何力系都等价于一个力加上一个平行于力的作用线的力矩，称为<b>力旋量 wrench</b>，它是旋量 screw 在力上的类比（[52] 有很好的讨论）。</p>
+<p>\(u\in U\) 形式的动作可以表示为作用于刚体的外力和 / 或外力矩。例如推进器点火时可以对物体施加一个力。给定 \(u\)，可以求出总力与总力矩 \(F(u)\)、\(N(u)\)。</p>
+<p><b>重要的坐标系</b>：下面要用到三个坐标系：</p>
+<ol>
+  <li><b>惯性系 inertial frame</b>：相对所有感兴趣的运动固定的全局坐标系。</li>
+  <li><b>平移系 translating frame</b>：原点在 \(\mathcal{A}\) 的质心、坐标轴与惯性系对齐的运动坐标系。</li>
+  <li><b>机体系 body frame</b>：原点同样在 \(\mathcal{A}\) 的质心，但坐标轴固连在 \(\mathcal{A}\) 上——就是第 3 章定义物体时用的坐标系。</li>
+</ol>
+<p><b>平移部分</b>：状态转移方程有 12 个标量方程，其中 6 个由线速度刻画，很容易得到。这里可以想象物体相对惯性系不转动。线动量为 \(D = m\dot p\)，牛顿第二定律给出</p>
+<div class="eq">$$F(u) = \frac{dD}{dt} = m\ddot p. \tag{13.81}$$</div>
+<p>解出 \(\ddot p\) 立刻得到状态转移方程的一半：它是例 13.3 双积分器的 3D 版本，按 \(m\) 缩放。记 \((p_1,p_2,p_3)\) 为 \(p\) 的坐标，\((v_1,v_2,v_3)\) 为质心的线速度。三个标量方程是 \(\dot p_i = v_i\)，另三个是 \(\dot v_i = F_i(u)/m\)（\(i = 1,2,3\)）。若没有力矩、且物体相对惯性系不转动，这六个方程就足以描述它的运动——例如一个最初静止的航天器，推进器只通过质心施力。</p>
+<p><b>转动部分</b>：上面六个方程即使 \(\mathcal{A}\) 相对惯性系转动也成立：它们只是运动的平移部分。利用平移系，转动部分可以与平移部分解耦：运动的所有平移方面已经考虑过了。想象 \(\mathcal{A}\) 只在转动，质心不动。求出转动部分后，只要从惯性系的角度看，就能与平移部分组合起来。所以下面相对平移系考虑 \(\mathcal{A}\) 的运动，它看起来是纯转动。</p>
+<p>可惜刻画运动的转动部分比平移情形和 2D 转动情形复杂得多——鉴于第 3、4 章中 3D 旋转的种种困难，这并不意外。由牛顿第二定律，动量矩的变化为</p>
+<div class="eq">$$N(u) = \frac{dE}{dt}. \tag{13.82}$$</div>
+<p>剩下的挑战是把 (13.82) 的右边写成能放进状态转移方程的形式。</p>
+<p><b>微分转动 differential rotations</b>：要详细表达动量矩的变化，需要微分转动的概念。平面上直接定义 \(\omega = \dot\theta\) 即可；但对 \(SO(3)\) 就复杂了。一种选择是对 yaw-pitch-roll 变量求导，但这会带来扭曲和奇异，对 Newton–Euler 表述是个问题。所以按图 13.11 定义微分转动：记 \(v\) 为 \(\mathbb{R}^3\) 中的单位向量，\(\theta\) 为类似 2D 情形的转角，<b>角速度向量</b>为</p>
+<div class="eq">$$\omega = v\frac{d\theta}{dt}. \tag{13.83}$$</div>
+<p>这给出了角速度的自然表达<span class="fn">（书中脚注：要注意 \(\omega\) 的积分不是路径无关的，见 [79] 的例 2.15）</span>。旋转矩阵 \(R\) 对时间的变化为</p>
+<div class="eq">$$\dot R = \omega\times R. \tag{13.84}$$</div>
+<p>这个关系可以用来推导 \(\omega\) 与 yaw-pitch-roll 角或四元数之间的关系。例如用 yaw-pitch-roll 矩阵 (3.42)，从 \(\omega\) 到 yaw、pitch、roll 角变化率的换算是</p>
+<div class="eq">$$\begin{pmatrix}\dot\gamma\\ \dot\beta\\ \dot\alpha\end{pmatrix} = \frac1{\cos\beta}\begin{pmatrix}\cos\alpha & \sin\alpha & 0\\ -\sin\alpha\cos\beta & \cos\alpha\cos\beta & 0\\ \cos\alpha\sin\beta & \sin\alpha\sin\beta & \cos\beta\end{pmatrix}\begin{pmatrix}\omega_1\\ \omega_2\\ \omega_3\end{pmatrix}. \tag{13.85}$$</div>
+<p class="small">（右下角原书印作 \(-\cos\beta\)。用 (3.42) 的 \(R = R_z(\alpha)R_y(\beta)R_x(\gamma)\) 和 (13.84) 数值核对，应为 \(+\cos\beta\)：只绕世界 \(z\) 轴转时（\(\beta = \gamma = 0\)、\(\omega = (0,0,1)\)），偏航角速度显然是 \(\dot\alpha = +1\)，原书给出 \(-1\)。见脚注 <a href="#fn-4" id="fn-4-ref">4</a>。）</p>
+
+<p><b>惯性矩阵 inertia matrix</b>：把 \(\mathcal{A}\) 看作一群刚性连在一起的质点（它们之间的接触力都由牛顿第三定律抵消），推导<b>惯性矩阵</b>（也叫<b>惯性张量</b>或<b>惯性算子</b>）。(13.77) 中的 \(\sigma(r)dr\) 是 \(\mathcal{A}\) 的一个无穷小质点的质量，它的动量矩是 \(r\times\dot r\,\sigma(r)dr\)，所以 \(\mathcal{A}\) 的总动量矩为</p>
+<div class="eq">$$E = \int_{\mathcal{A}(q)}(r\times\dot r)\,\sigma(r)\,dr. \tag{13.86}$$</div>
+<p>利用 \(\dot r = \omega\times r\)，</p>
+<div class="eq">$$E = \int_{\mathcal{A}(q)} r\times(\omega\times r)\,\sigma(r)\,dr. \tag{13.87}$$</div>
+<p>注意 \(r\) 在被积函数里出现了两次。做些代数变换可以把 \(\omega\) 从被积函数中提出来，得到 \(r\) 的二次函数（因为 \(r\) 是向量，严格说是二次型）。第一步是用恒等式 \(a\times(b\times c) = (a\cdot c)b - (a\cdot b)c\)：</p>
+<div class="eq">$$E = \int_{\mathcal{A}(q)}\big((r\cdot r)\omega - (r\cdot\omega)r\big)\sigma(r)\,dr. \tag{13.88}$$</div>
+<p>把角速度移到右边：</p>
+<div class="eq">$$E = \Big(\int_{\mathcal{A}(q)}\big((r\cdot r)I_3 - rr^T\big)\sigma(r)\,dr\Big)\,\omega, \tag{13.89}$$</div>
+<p>积分现在作用在一个 \(3\times3\) 矩阵上，\(I_3\) 是 \(3\times3\) 单位矩阵。定义<b>惯性矩阵</b></p>
+<div class="eq">$$I(q) = \Big(\int_{\mathcal{A}(q)}\big((r\cdot r)I_3 - rr^T\big)\sigma(r)\,dr\Big). \tag{13.90}$$</div>
+<p>于是</p>
+<div class="eq">$$E = I\omega. \tag{13.91}$$</div>
+<p>这让 (13.82) 可以简洁地写成</p>
+<div class="eq">$$N(u) = \frac{dE}{dt} = \frac{d(I\omega)}{dt} = I\frac{d\omega}{dt} + \frac{dI}{dt}\omega, \tag{13.92}$$</div>
+<p>用到了链式法则。</p>
+<p><b>简化惯性矩阵</b>：仔细看惯性矩阵。它是对称的 \(3\times3\) 矩阵：</p>
+<div class="eq">$$I(q) = \begin{pmatrix}I_{11}(q) & I_{12}(q) & I_{13}(q)\\ I_{12}(q) & I_{22}(q) & I_{23}(q)\\ I_{13}(q) & I_{23}(q) & I_{33}(q)\end{pmatrix}. \tag{13.93}$$</div>
+<p>对每个 \(i\in\{1,2,3\}\)，\(I_{ii}(q)\) 称为<b>转动惯量 moment of inertia</b>：</p>
+<div class="eq">$$I_{11}(q) = \int_{\mathcal{A}(q)}(r_2^2 + r_3^2)\sigma(r)\,dr, \tag{13.94}$$</div>
+<div class="eq">$$I_{22}(q) = \int_{\mathcal{A}(q)}(r_1^2 + r_3^2)\sigma(r)\,dr, \tag{13.95}$$</div>
+<div class="eq">$$I_{33}(q) = \int_{\mathcal{A}(q)}(r_1^2 + r_2^2)\sigma(r)\,dr. \tag{13.96}$$</div>
+<p>其余元素：对 \(i\ne j\)，<b>惯性积 product of inertia</b> 为</p>
+<div class="eq">$$H_{ij}(q) = \int_{\mathcal{A}(q)} r_ir_j\,\sigma(r)\,dr, \tag{13.97}$$</div>
+<p>且 \(I_{ij}(q) = -H_{ij}(q)\)。</p>
+<p>到目前为止的表述有个问题：物体转动时惯性矩阵也在变，因为所有元素都依赖于朝向 \(q\)。它是把 \(\mathcal{A}\) 看作平移系中的一群无穷小质点推导出来的。不过可以在 \(\mathcal{A}\) 的机体系中表示惯性矩阵，此时记作 \(I\)，它不依赖于 \(\mathcal{A}\) 相对平移系的朝向。原来的惯性矩阵由一个把机体系联系到平移系的旋转恢复：\(I(q) = RI\)（\(R\) 是旋转矩阵）<span class="fn">（补充说明：严格地说应为 \(I(q) = RIR^T\)）</span>。可以证明（见 [79] 的式 (2.91) 和 3.2 节），代换之后 (13.92) 化简为</p>
+<div class="eq">$$N(u) = I\frac{d\omega}{dt} + \omega\times(I\omega). \tag{13.98}$$</div>
+<p>\(\mathcal{A}\) 的机体系原点必须在质心 \(p\)，但它的朝向还没约束。不同的朝向给出不同的惯性矩阵。由于 \(I\) 刻画的是 \(\mathcal{A}\) 的物理特性，任意两个惯性矩阵只相差一个旋转：对给定的 \(\mathcal{A}\)，不同机体系朝向下的所有惯性矩阵有相同的特征值和特征向量。考虑正定二次型 \(x^TIx = 1\)，它是一个椭球的方程。线性代数里的标准技巧是求椭球的主轴——它们恰好是 \(I\) 的特征向量，轴长由特征值给出。定义 \(x' = Rx\)（\(R\) 由特征向量作列构成），就得到轴对齐的椭球表达式。所以存在一个机体系朝向，使惯性矩阵化简为</p>
+<div class="eq">$$I = \begin{pmatrix}I_{11} & 0 & 0\\ 0 & I_{22} & 0\\ 0 & 0 & I_{33}\end{pmatrix}, \tag{13.99}$$</div>
+<p>对角元就是特征值。若物体恰好是椭球，主轴就对应椭球的轴。很多书里有转动惯量表 [53]；表中通常选主轴作为机体系的轴，因为这样 \(I\) 的表达式最简单。</p>
+<p><b>完成状态转移方程</b>：设 \(\mathcal{A}\) 的机体系与主轴对齐。余下的六个运动方程终于可以写成漂亮的形式。用 (13.99)，(13.98) 化为 [52]</p>
+<div class="eq">$$\begin{pmatrix}N_1(u)\\ N_2(u)\\ N_3(u)\end{pmatrix} = \begin{pmatrix}I_{11} & 0 & 0\\ 0 & I_{22} & 0\\ 0 & 0 & I_{33}\end{pmatrix}\begin{pmatrix}\dot\omega_1\\ \dot\omega_2\\ \dot\omega_3\end{pmatrix} + \begin{pmatrix}0 & -\omega_3 & \omega_2\\ \omega_3 & 0 & -\omega_1\\ -\omega_2 & \omega_1 & 0\end{pmatrix}\begin{pmatrix}I_{11} & 0 & 0\\ 0 & I_{22} & 0\\ 0 & 0 & I_{33}\end{pmatrix}\begin{pmatrix}\omega_1\\ \omega_2\\ \omega_3\end{pmatrix}. \tag{13.100}$$</div>
+<p>乘出来得到</p>
+<div class="eq">$$\begin{aligned}
+N_1(u) &= I_{11}\dot\omega_1 + (I_{33}-I_{22})\omega_2\omega_3\\
+N_2(u) &= I_{22}\dot\omega_2 + (I_{11}-I_{33})\omega_3\omega_1\\
+N_3(u) &= I_{33}\dot\omega_3 + (I_{22}-I_{11})\omega_1\omega_2.
+\end{aligned} \tag{13.101}$$</div>
+<p>为写成状态转移方程的形式，解出 \(\dot\omega\)：</p>
+<div class="eq">$$\begin{aligned}
+\dot\omega_1 &= \big(N_1(u) + (I_{22}-I_{33})\omega_2\omega_3\big)/I_{11}\\
+\dot\omega_2 &= \big(N_2(u) + (I_{33}-I_{11})\omega_3\omega_1\big)/I_{22}\\
+\dot\omega_3 &= \big(N_3(u) + (I_{11}-I_{22})\omega_1\omega_2\big)/I_{33}.
+\end{aligned} \tag{13.102}$$</div>
+<p>最后一个麻烦：\(\omega\) 要和表示 \(SO(3)\) 元素的角联系起来，这取决于 \(SO(3)\) 的具体参数化。设用四元数 \((a,b,c,d)\) 表示旋转，回忆给定 \(b,c,d\) 后 \(a\) 可以由 \(a^2+b^2+c^2+d^2 = 1\) 恢复。\(\omega\) 与四元数分量的时间导数之间的关系，原书用 (13.84) 得到（见 [53] 第 433 页）：</p>
+<div class="eq">$$\dot b = \omega_3c - \omega_2d,\qquad \dot c = \omega_1d - \omega_3b,\qquad \dot d = \omega_2b - \omega_1c. \tag{13.103}$$</div>
+<p class="small">（这组式子不完整：从单位四元数 \((1,0,0,0)\) 出发，它给出 \(\dot b = \dot c = \dot d = 0\)，无论 \(\omega\) 多大，物体都不会转。与 (13.102) 的机体角速度配套的正确关系是 \(\dot h = \tfrac12\,h\otimes(0,\omega)\)，即 \(\dot a = -\tfrac12(b\omega_1 + c\omega_2 + d\omega_3)\)、\(\dot b = \tfrac12(a\omega_1 + c\omega_3 - d\omega_2)\)、\(\dot c = \tfrac12(a\omega_2 + d\omega_1 - b\omega_3)\)、\(\dot d = \tfrac12(a\omega_3 + b\omega_2 - c\omega_1)\)。原书只保留了不含 \(a\) 的部分，还少了系数 \(\tfrac12\)。见脚注 <a href="#fn-5" id="fn-5-ref">5</a>，参考代码第 13 项。）</p>
+<p>这终于完成了 \(\dot x = f(x,u)\) 的指定，其中</p>
+<div class="eq">$$x = (p_1,p_2,p_3,v_1,v_2,v_3,b,c,d,\omega_1,\omega_2,\omega_3) \tag{13.104}$$</div>
+<p>是十二维的相向量。为方便起见，状态转移方程的完整形式是</p>
+<div class="eq">$$\begin{aligned}
+\dot p_1 &= v_1 & \dot b &= \omega_3c - \omega_2d\\
+\dot p_2 &= v_2 & \dot c &= \omega_1d - \omega_3b\\
+\dot p_3 &= v_3 & \dot d &= \omega_2b - \omega_1c\\
+\dot v_1 &= F_1(u)/m & \dot\omega_1 &= \big(N_1(u) + (I_{22}-I_{33})\omega_2\omega_3\big)/I_{11}\\
+\dot v_2 &= F_2(u)/m & \dot\omega_2 &= \big(N_2(u) + (I_{33}-I_{11})\omega_3\omega_1\big)/I_{22}\\
+\dot v_3 &= F_3(u)/m & \dot\omega_3 &= \big(N_3(u) + (I_{11}-I_{22})\omega_1\omega_2\big)/I_{33}.
+\end{aligned} \tag{13.105}$$</div>
+<p class="small">（实际实现时，右上三行应换成上面括号里的正确四元数关系；下面的互动图就是这样做的。）</p>
+<p>惯性矩阵与椭球的关系其实比这里讲的深刻得多。转动的动能可以优雅地写成</p>
+<div class="eq">$$T = \tfrac12\omega^TI\omega. \tag{13.106}$$</div>
+<p>Poinsot 对无外力矩时的转动给出了一个迷人的解释 [6, 52]：物体转动时，它的运动等价于由 (13.106) 给出的惯性椭球，在法向量为 \(I\omega\) 的平面上纯滚动（不打滑）。</p>
+
+<div class="widget wide" data-widget="rigid-body"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>「绕中间轴」：盒子先老老实实地绕 y 轴转，过一会儿突然翻个身，再转回来——ω₂（蓝）在 +2 和 −2 之间周期性跳变（补充：网球拍定理 / Dzhanibekov 效应）。换成「最小惯量轴」或「最大惯量轴」，转动稳定。</li>
+  <li>任何情况下统计栏的 T 与 |Iω| 都不变（参考代码第 13 项）；黑色箭头（角动量 Iω 在世界系中的方向）始终不动。</li>
+  <li>红色虚框是按原书 (13.103) 积分的姿态：从单位四元数出发它一动不动——这就是 (13.103) 缺项的直接后果。</li>
+</ul></div>
+
+<h4>2D 情形</h4>
+<p>在平面上运动的 2D 刚体的动力学可以作为 3D 刚体的特例处理。设 \(\mathcal{A}\subset\mathbb{R}^2\) 是表示在其机体系中的 2D 物体。作用于 \(\mathcal{A}\) 的总外力可以表示为过质心的二维总力和一个力矩。这个模型的相空间有六维：三维来自 \(SE(2)\) 的自由度，两维来自线速度，一维来自角速度。</p>
+<p>平移部分同样是</p>
+<div class="eq">$$F(u) = \frac{dD}{dt} = m\ddot p, \tag{13.107}$$</div>
+<p>给出状态转移方程的四个分量。</p>
+<p>2D 表述中所有转动都绕 \(z\) 轴，所以角速度 \(\omega\) 是标量。记 \(\theta\) 为 \(\mathcal{A}\) 的朝向，\(\omega\) 与 \(\theta\) 的关系 \(\dot\theta = \omega\) 给出状态转移方程的又一个分量。</p>
+<p>只剩一个分量。回忆 (13.92)，观察 (13.101) 可以看出惯性项都消失了：在那个表述里 \(\omega_3\) 就等价于 2D 情形的标量 \(\omega\)；因为 \(\omega_1 = \omega_2 = 0\)，三个方程的最后一项都为零；因为 \(\dot\omega_1 = \dot\omega_2 = 0\)，前两个方程的第一项也为零。剩下 \(N_3(u) = I_{33}\dot\omega_3\)。在 2D 情形可以简记为</p>
+<div class="eq">$$N(u) = \frac{dE}{dt} = \frac{d(I\omega)}{dt} = I\frac{d\omega}{dt} = I\dot\omega, \tag{13.108}$$</div>
+<p>\(I\) 现在是标量。注意在 3D 情形，即使 \(N(u) = 0\)，角速度也可能改变；在 2D 情形这不可能。两种情形下动量矩都守恒；2D 情形中这意味着 \(\omega\) 固定。状态转移方程的第六个分量由 (13.108) 解出 \(\dot\omega\) 得到。平面上 2D 刚体的状态转移方程于是为</p>
+<div class="eq">$$\dot p_1 = v_1,\quad \dot p_2 = v_2,\quad \dot\theta = \omega,\quad \dot v_1 = F_1(u)/m,\quad \dot v_2 = F_2(u)/m,\quad \dot\omega = N(u)/I. \tag{13.109}$$</div>
+
+<div class="widget wide" data-widget="planar-thrusters"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>只勾 T₁ 再运行：合力过质心，N = 0，纯平移。只勾 T₂：力一样大，作用线却偏离质心，物体边走边转。</li>
+  <li>勾 T₃ + T₄：合力 F = 0（质心不加速），N ≠ 0——这对力是力偶，物体原地越转越快。关掉推进器后 ω 保持不变（2D 中动量矩守恒 ⇒ ω 固定）。</li>
+</ul></div>
+
+<h4>带轮胎侧滑的车 a car with tire skidding</h4>
+<p>本节最后介绍一个把车当作平面上会侧滑的刚体的模型，由 Jim Bernard 提出。C-space 是 \(\mathcal{C} = \mathbb{R}^2\times\mathbb{S}^1\)，\(q = (x,y,\theta)\)。设车速很高时轮胎能在垂直于车主轴的方向（即平行于后轴的方向）侧滑。记 \(\omega\) 为车的角速度，\(v\) 为侧向滑动速度（另一个状态变量），得到五维状态空间，每个状态形如 \((x,y,\theta,\omega,v)\)。</p>
+<p>后轴中心的位置变化为</p>
+<div class="eq">$$\dot x = s\cos\theta - v\sin\theta,\qquad \dot y = s\sin\theta + v\cos\theta, \tag{13.110}$$</div>
+<p>这是状态转移方程的两个分量。令 \(\omega = \dot\theta\) 为角速度，又得到一个分量。剩下的两个方程由 2D 刚体力学推出<span class="fn">（原书这里说「将在 13.3.3 节介绍」，但本段就在 13.3.3 节内，指的是上面刚讲的 2D 情形）</span>。状态转移方程为</p>
+<div class="eq">$$\dot x = s\cos\theta - v\sin\theta,\quad \dot y = s\sin\theta + v\cos\theta,\quad \dot\theta = \omega,\quad \dot\omega = (af_f - bf_r)/I,\quad \dot v = -s\omega + (f_f + f_r)/m, \tag{13.111}$$</div>
+<p>\(f_f\)、\(f_r\) 是前、后轮胎力，\(m\) 是质量，\(I\) 是转动惯量，\(a\)、\(b\) 是质心到前、后轴的距离。第一个力为</p>
+<div class="eq">$$f_f = c_f\big((v + a\omega)/s + \phi\big), \tag{13.112}$$</div>
+<p>\(c_f\) 是前轮<b>侧偏刚度 cornering stiffness</b>，\(\phi\) 是转向角。第二个力为</p>
+<div class="eq">$$f_r = c_r(v - b\omega)/s, \tag{13.113}$$</div>
+<p>\(c_r\) 是后轮侧偏刚度。转向角可以作为动作变量：\(u_\phi = \phi\)。也可以在速度前放一个积分器以允许加速，状态空间维数加一。</p>
+<p>汽车应用的合理参数值是：\(m = 1460\) kg，\(c_f = 17000\)，\(c_r = 20000\)，\(a = 1.2\) m，\(b = 1.5\) m，\(I = 2170\) kg·m²<span class="fn">（原书印作 kg/m²）</span>，\(s = 27\) m/s。这个状态转移方程用的是线性轮胎侧滑模型，在很多应用中是很差的近似；非线性轮胎模型更接近汽车的实际行为 [12]。汽车动力学的全面介绍见 [64]。</p>
+<div class="box warn"><div class="box-title">符号约定的疑点（补充）</div>
+<p>把书中的正数 \(c_f, c_r\) 直接代入 (13.111)–(13.113)，在 \((v,\omega)\) 上线性化得到特征值约 \(+3.18\) 和 \(-1.05\)（参考代码第 14 项）：侧滑速度 \(v\) 一旦出现就指数增长——轮胎把车往它正在滑的方向推，这不合物理。要么像 SAE 约定那样把侧偏刚度取为<b>负数</b>，要么让 (13.111) 中的轮胎力取「阻止侧滑」的方向：\(f_f = c_f(\phi - (v+a\omega)/s)\)、\(f_r = c_r(b\omega - v)/s\)。后一种写法的特征值约为 \(-1.06\pm2.09i\)，是稳定的。下面的互动图两种都能看，默认用后者。见脚注 <a href="#fn-6" id="fn-6-ref">6</a>。</p></div>
+
+<div class="widget wide" data-widget="tire-skid"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>默认（s = 27 m/s、φ = 2°）：侧滑模型的稳态横摆角速度只有 0.068 rad/s，而运动学简单车 (13.15) 给出 0.349——这辆车 b·c_r &gt; a·c_f，是强烈的不足转向，高速时同样的方向盘转角转得慢得多。</li>
+  <li>把速度降到 5 m/s：两条路径几乎重合——低速时运动学模型够用，这正是 13.2.4 节末尾说的「其它变量依赖于速度」。</li>
+  <li>切到「按字面」：转向一开始，侧滑速度就发散（曲线变红），车自己打转。</li>
+</ul></div>
+</section>
+
+<!-- ============================================================ 13.4 -->
+<section id="s13-4">
+<h2>13.4 进阶力学概念 <span class="en">Advanced Mechanics Concepts</span></h2>
+<p>Newton–Euler 力学的好处是从非常基本的原理出发，但它有些令人沮丧的限制，让复杂机械系统的建模更困难。主要限制之一是所有定律都必须在带正交坐标轴的惯性系中表达。本节介绍 Lagrange 力学与 Hamilton 力学的基本思想：它们把力学归结为<b>在 C-space 的任何坐标邻域中求最优路径</b>，从而去掉这些限制。最优性准则用能量表达。这些技术可以用于光滑流形的任何坐标邻域。确定一个或多个物体的运动时，Lagrange 表述通常最好用。13.4.1 节用变分法介绍 Lagrange 力学的基本概念；13.4.2 节给出 Euler–Lagrange 方程的一般形式，可用于确定众多动力系统（包括物体链）的运动；对涉及额外微分约束（如摩擦、滚动的轮子）的系统，Lagrange 表述也很方便，13.4.3 节简要介绍。13.4.4 节的 Hamilton 表述基于一个特殊的相空间，是 Lagrange 表述的替代；它推广到 Pontryagin 极小值原理——15.2.3 节介绍的一种强大的最优控制技术。</p>
+
+<h3 id="s13-4-1">13.4.1 Lagrange 力学 <span class="en">Lagrangian Mechanics</span></h3>
+<h4>变分法 calculus of variations</h4>
+<p>Lagrange 力学基于<b>变分法</b>，即在路径空间上做优化。最著名的变分问题之一是让一个质点沿曲线运动（想象质点沿无摩擦轨道滑动）：求一条曲线，使球从静止出发、只受重力加速，从一点到另一点所用时间最短。答案是一条摆线，称为<b>最速降线 Brachistochrone curve</b> [65]。在进一步描述这个问题之前，先回忆微积分里求函数极值（极小、极大）的经典问题。记 \(\tilde x\) 为 \(\mathbb{R}\) 到 \(\mathbb{R}\) 的光滑函数，\(x(t)\) 为它在 \(t\in\mathbb{R}\) 处的值。由标准微积分，\(\tilde x\) 的极值都在满足 \(\dot x = 0\) 的 \(t\) 处。设 \(\tilde x\) 在某个 \(t'\in\mathbb{R}\) 处取局部极小，那么对 \(t'\) 的微小扰动应得到更大的函数值：存在 \(d &gt; 0\) 使得对任何 \(\epsilon\in[-d,d]\)（\(\epsilon\ne0\)）都有 \(x(t'+\epsilon) &gt; x(t')\)。每个 \(\epsilon\) 代表 \(t'\) 的一种可能扰动。</p>
+<p>变分法处理一个更难的问题：优化发生在<b>函数空间</b>上。每个函数由一个称为<b>泛函 functional</b> 的准则赋予一个值<span class="fn">（书中脚注：这就是全书一直用「代价泛函」这个说法的原因——它是函数空间上的函数）</span>。类似于对函数求导并令其为零的过程，这将通过考虑对<b>整个函数</b>的微小扰动来实现，而不是像上面那样对 \(\epsilon\) 扰动。每个扰动本身就是一个函数，称为<b>变分 variation</b>。一个函数要使泛函取极小，任何足够小的扰动都必须让泛函值变大。在单变量函数的优化中，扰动只有两个方向 \(\pm\epsilon\)（图 13.12）。在变分法里，构造一个扰动原函数的小变分函数有不可数无穷多种方式，所以有无穷多个「方向」（所有变分构成无穷维函数空间，回忆例 8.5）。</p>
+<p>记 \(\tilde x\) 为从 \(T = [t_0,t_1]\) 到 \(\mathbb{R}\) 的光滑函数。泛函通过在 \(\tilde x\) 的定义域上积分一个函数来定义。记 \(L\) 为三个变量 \(a,b,c\) 的光滑实值函数<span class="fn">（书中脚注：遗憾的是，这里 \(L\) 表示一个代价函数，泛函 \(\Phi\) 基于它定义；这与运动规划表述中用 \(l\) 表示代价函数、\(L\) 表示泛函冲突。这个记号冲突保留下来，因为 \(L\) 是 Lagrange 量的标准记号。请注意区分）</span>。\(L\) 的自变量可以是任何 \(a,b\in\mathbb{R}\)、\(c\in T\)，得到 \(L(a,b,c)\)，但每个都有特定的解释：对某个光滑函数 \(\tilde x\)，在特定的 \(t\in T\) 处用 \(L\) 计算 \(L(x,\dot x,t)\)。用 \(L\) 对整个函数 \(\tilde x\) 求值，构造<b>泛函</b> \(\Phi\)：</p>
+<div class="eq">$$\Phi(\tilde x) = \int_T L(x(t), \dot x(t), t)\,dt. \tag{13.114}$$</div>
+<p>问题是选择一个使 \(\Phi\) 最优的 \(\tilde x\)。做法是对 \(\Phi\) 求导并令其为零，和标准微积分一样；但对 \(\tilde x\) 求 \(\Phi\) 的导数不是标准微积分，通常要对可能的函数类（例如光滑性）和变分的向量空间提一些特殊条件，本节默认这些条件对所考虑的问题成立。</p>
+<p><b>例 13.9（最短路泛函）</b>：作为泛函的例子，考虑</p>
+<div class="eq">$$L(x,\dot x,t) = \sqrt{1+\dot x^2}. \tag{13.115}$$</div>
+<p>在函数 \(\tilde x\) 上求值，得到路径的弧长。</p>
+<p>运动规划里已经见过另一个泛函的例子：代价泛函 (8.39) 给状态空间中走过的路径赋予代价，这是表述最优路径规划的自然方式；(7.26) 给出了它的离散近似版本。</p>
+<p>记 \(h\) 为 \(T\) 上的光滑函数，\(\epsilon\in\mathbb{R}\) 为一个小常数。考虑对所有 \(t\in T\) 定义的函数 \(x(t) + \epsilon h(t)\)<span class="fn">（原书这里写 \(t\in[0,1]\)，与前面的 \(T = [t_0,t_1]\) 不一致）</span>。若 \(\epsilon = 0\)，(13.114) 保持不变；\(\epsilon\) 增大或减小时，\(\Phi(\tilde x + \epsilon h)\) 可能改变。函数 \(h\) 就像方向导数中的「方向」。若对任何光滑函数 \(h\)，都存在 \(\epsilon &gt; 0\) 使 \(\Phi(\tilde x + \epsilon h)\) 增大，则称 \(\tilde x\) 为 \(\Phi\) 的<b>极值曲线 extremal</b>：对 \(\tilde x\) 的任何小扰动都让 \(\Phi\) 增大，所以 \(\tilde x\) 的表现就像标准优化问题中的局部极小。</p>
+<p>令 \(g = \epsilon h\)（\(\epsilon &gt; 0\)，\(h\) 是某个函数）。泛函的微分可以近似为 [6]</p>
+<div class="eq">$$\begin{aligned}
+\Phi(\tilde x + g) - \Phi(\tilde x) &= \int_T\Big(L(x(t)+g(t), \dot x(t)+\dot g(t), t) - L(x(t),\dot x(t),t)\Big)dt + \cdots\\
+&= \int_T\Big(\frac{\partial L}{\partial x}g + \frac{\partial L}{\partial\dot x}\dot g\Big)dt + \cdots\\
+&= \int_T\Big(\frac{\partial L}{\partial x}g - \frac{d}{dt}\frac{\partial L}{\partial\dot x}g\Big)dt + \Big(\frac{\partial L}{\partial\dot x}g\Big)\Big|_{t_0}^{t_1} + \cdots,
+\end{aligned} \tag{13.116}$$</div>
+<p>其中 \(\cdots\) 表示在极限下消失的高阶项。最后一步来自分部积分：</p>
+<div class="eq">$$\Big(\frac{\partial L}{\partial\dot x}g\Big)\Big|_{t_0}^{t_1} = \int_T\frac{\partial L}{\partial\dot x}\dot g\,dt + \int_T\frac{d}{dt}\frac{\partial L}{\partial\dot x}h\,dt, \tag{13.117}$$</div>
+<p>就是 \(uv = \int v\,du + \int u\,dv\)。考虑 \(\epsilon\) 变小时 (13.116) 的值，并假设 \(h(t_0) = h(t_1) = 0\)。\(\tilde x\) 要是极值函数，(13.116) 表示的变化在变分趋于零时应趋于零。基于进一步的技术假设，包括<b>变分法基本引理</b>（见 [6] 第 12 节），得到 <b>Euler–Lagrange 方程</b></p>
+<div class="eq">$$\frac{d}{dt}\frac{\partial L}{\partial\dot x} - \frac{\partial L}{\partial x} = 0, \tag{13.118}$$</div>
+<p>作为 \(\tilde x\) 成为极值的必要条件。研究 (13.116) 的最后一行可以获得直觉：恰好在 (13.118) 成立时，积分取零值；其它项为零是因为 \(h(t_0) = h(t_1) = 0\)，高阶项在极限过程中消失。</p>
+<p>\(L\) 对 \(\dot x\) 和 \(x\) 的偏导数用标准微积分定义：求 \(\partial L/\partial\dot x\) 时把 \(\dot x\) 当作普通变量（即变量按 \(L(a,b,c)\) 命名时的 \(\partial L/\partial b\)）。之后再对 \(t\) 求 \(\partial L/\partial\dot x\) 的导数。下面的例子说明这个过程。</p>
+<p><b>例 13.10（一个简单的变分问题）</b>：设泛函由</p>
+<div class="eq">$$L(x,\dot x,t) = x^3 + \dot x^2 \tag{13.119}$$</div>
+<p>定义。对 \(x\) 和 \(\dot x\) 的偏导数为</p>
+<div class="eq">$$\frac{\partial L}{\partial x} = 3x^2 \tag{13.120}$$</div>
+<p>和</p>
+<div class="eq">$$\frac{\partial L}{\partial\dot x} = 2\dot x. \tag{13.121}$$</div>
+<p>对 (13.121) 求时间导数：</p>
+<div class="eq">$$\frac{d}{dt}\frac{\partial L}{\partial\dot x} = 2\ddot x. \tag{13.122}$$</div>
+<p>代入 Euler–Lagrange 方程 (13.118)：</p>
+<div class="eq">$$\frac{d}{dt}\frac{\partial L}{\partial\dot x} - \frac{\partial L}{\partial x} = 2\ddot x - 3x^2 = 0. \tag{13.123}$$</div>
+<p>这是约束加速度的二阶微分约束：\(\ddot x = 3x^2/2\)。构造二维相空间后，可以用一阶微分方程表达这个约束。</p>
+
+<div class="widget wide" data-widget="variations"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>例 13.10、「x̃ = 极值曲线」：拖动 h 的位置和宽度，右图 Φ(ε) 在 ε = 0 处始终是平的，「dΦ/dε」≈ 0，E–L 残差 ≈ 0（参考代码第 15 项：x(0) = 0.5、x(1) = 1 的极值曲线初速度 ≈ 0.213）。</li>
+  <li>换成「x̃ = 直线」：Φ(ε) 在 ε = 0 处有斜率——沿某个 h 方向就能把 Φ 变小，所以直线不是这个泛函的极值曲线。</li>
+  <li>换成「弧长」：极值曲线就是直线，Φ(ε) 是一个最低点在 ε = 0 的「碗」。再试「自己拖」：任意弯曲都会让弧长变大。</li>
+</ul></div>
+
+<h4>Hamilton 最小作用量原理 Hamilton's principle of least action</h4>
+<p>有了足够的背景，就可以回到机械系统的动力学。一组物体在 C-space 中的路径，可以表示为一个变分问题的解——它优化动能与势能之差。变分法的原理可以推广到 \(\mathcal{C}\) 的任何坐标邻域。此时 Euler–Lagrange 方程是</p>
+<div class="eq">$$\frac{d}{dt}\frac{\partial L}{\partial\dot q} - \frac{\partial L}{\partial q} = 0, \tag{13.124}$$</div>
+<p>\(q\) 是 \(n\) 个坐标的向量。它实际上是 \(n\) 个标量方程：</p>
+<div class="eq">$$\frac{d}{dt}\frac{\partial L}{\partial\dot q_i} - \frac{\partial L}{\partial q_i} = 0. \tag{13.125}$$</div>
+<p>下面用 (13.124) 推导相转移方程。它通过优化一个定义为动能与势能之差的泛函得到。质点与刚体的动能已在 13.3.1 节定义。一般地，动能函数必须是 \(\dot q\) 的二次函数。它的定义可以解释为 \(\mathcal{C}\) 上的一个内积，使 \(\mathcal{C}\) 成为 <b>Riemann 流形</b> [19]：流形有了速度向量之间「夹角」的概念，并导出曲率和称为<b>测地线 geodesics</b> 的最短路径。记 \(K(q,\dot q)\) 为用流形坐标表示的动能，它总是形如</p>
+<div class="eq">$$K(q,\dot q) = \tfrac12\dot q^TM(q)\dot q, \tag{13.126}$$</div>
+<p>\(M(q)\) 是 \(n\times n\) 矩阵，称为<b>质量矩阵 mass matrix</b> 或<b>惯性矩阵</b>。</p>
+<p>下一步定义势能。若作用于一点的力只依赖于该点的位置、且力沿路径做的功只依赖于路径端点，系统称为<b>保守的 conservative</b>。保守系统运动时总能量守恒。此时存在<b>势函数 potential function</b> \(\phi:\mathcal{W}\to\mathbb{R}\)，使得对任何 \(p\in\mathcal{W}\) 有 \(F = \partial\phi/\partial p\)。记 \(V(q)\) 为一组物体处于位形 \(q\) 时的总<b>势能 potential energy</b>。</p>
+<p>假设动力学是时不变的。<b>Hamilton 最小作用量原理</b>说：机械系统的轨迹 \(\tilde q: T\to\mathcal{C}\) 与泛函</p>
+<div class="eq">$$\Phi(\tilde q) = \int_T\Big(K(q(t),\dot q(t)) - V(q(t))\Big)dt \tag{13.127}$$</div>
+<p>的极值曲线重合，且可以使用 \(\mathcal{C}\) 的<b>任何</b>坐标邻域。对 \(\mathcal{C} = \mathbb{R}^3\)，把牛顿第二定律写成形似 (13.124) 的形式就能看出这个原理 [6]：</p>
+<div class="eq">$$\frac{d}{dt}(m\dot q) + \frac{\partial V}{\partial q} = 0, \tag{13.128}$$</div>
+<p>其中力被势能的导数代替<span class="fn">（原书 (13.128) 中第二项前印作减号。由 \(F = -\partial V/\partial q\) 与 \(m\ddot q = F\)，应为加号；这也与 (13.130)、例 13.11 的 (13.135) 一致，见脚注 <a href="#fn-7" id="fn-7-ref">7</a>）</span>。这提示对泛函</p>
+<div class="eq">$$L(q,\dot q) = K(q,\dot q) - V(q) \tag{13.129}$$</div>
+<p>应用 Euler–Lagrange 方程，其中已假设动力学是时不变的，所以 \(L(q,\dot q,t) = L(q,\dot q)\)。把 Euler–Lagrange 方程用于 (13.127) 就得到极值曲线。</p>
+<p>Lagrange 表述的优点是：C-space 不必是惯性系中描述的 \(\mathcal{C} = \mathbb{R}^3\)。Euler–Lagrange 方程给出机械系统任何 C-space 中运动的必要条件，这些条件可以用任何坐标邻域表达，而不像 Newton–Euler 表述那样必须用正交坐标系。力学文献中 \(q\) 变量常称为<b>广义坐标 generalized coordinates</b>，意思只是光滑流形任何坐标邻域给出的坐标。</p>
+<p>于是，用 (13.129) 的 (13.124) 给出运动的约束：</p>
+<div class="eq">$$\frac{d}{dt}\frac{\partial L}{\partial\dot q} - \frac{\partial L}{\partial q} = \frac{d}{dt}\frac{\partial K(q,\dot q)}{\partial\dot q} - \frac{\partial K(q,\dot q)}{\partial q} + \frac{\partial V(q)}{\partial q} = 0. \tag{13.130}$$</div>
+<p>它表示 \(n\) 个方程，每个坐标 \(q_i\) 一个。由于 \(K(q,\dot q)\) 不依赖时间，\(d/dt\) 运算只是在算出的 \(\partial K(q,\dot q)/\partial\dot q\) 表达式里把 \(\dot q\) 换成 \(\ddot q\)。出现 \(\ddot q\) 是合理的，因为得到的微分方程是二阶的，与 Newton–Euler 力学一致。</p>
+<p><b>例 13.11（落体）</b>：设质量为 \(m\) 的质点在 \(\mathbb{R}^3\) 中下落。记 \((q_1,q_2,q_3)\in\mathbb{R}^3\) 为质点位置，\(g\) 为 \(-q_3\) 方向的重力加速度常数。势能为 \(V(q) = mgq_3\)，动能为</p>
+<div class="eq">$$K(q,\dot q) = \tfrac12m\dot q\cdot\dot q = \tfrac12m(\dot q_1^2 + \dot q_2^2 + \dot q_3^2). \tag{13.131}$$</div>
+<p>Lagrange 量为</p>
+<div class="eq">$$L(q,\dot q) = K(q,\dot q) - V(q) = \tfrac12m(\dot q_1^2 + \dot q_2^2 + \dot q_3^2) - mgq_3. \tag{13.132}$$</div>
+<p><span class="fn">（原书 (13.132) 末尾还有一个「\(= 0\)」，Lagrange 量并不恒为 0，见脚注 <a href="#fn-8" id="fn-8-ref">8</a>）</span>要得到质点运动的微分约束，用 (13.130)。对 \(i\) 从 1 到 3，</p>
+<div class="eq">$$\frac{d}{dt}\frac{\partial L}{\partial\dot q} = \frac{d}{dt}(m\dot q_i) = m\ddot q_i. \tag{13.133}$$</div>
+<p>由于 \(K(q,\dot q)\) 不依赖 \(q\)，对每个 \(i\) 有 \(\partial K/\partial q_i = 0\)。势能的导数为</p>
+<div class="eq">$$\frac{\partial V}{\partial q_1} = 0,\qquad \frac{\partial V}{\partial q_2} = 0,\qquad \frac{\partial V}{\partial q_3} = mg. \tag{13.134}$$</div>
+<p>代入 (13.130) 得到三个方程：</p>
+<div class="eq">$$m\ddot q_1 = 0,\qquad m\ddot q_2 = 0,\qquad m\ddot q_3 + mg = 0. \tag{13.135}$$</div>
+<p>这表明加速度只发生在 \(-q_3\) 方向，由重力引起。这些方程与牛顿定律一致。照例可以定义六维相空间得到一阶微分约束。</p>
+<p>Hamilton 原理的「最小」其实是个误称。严格说它只是一个「极值」作用量原理，因为 (13.130) 也可能给出使泛函取极大的运动。（在上面的「变分」互动图里选「落体」：真实的抛物线让作用量取驻值。）</p>
+
+<h4>施加动作</h4>
+<p>到目前为止都假设没有动作施加于机械系统。物理学里的 Euler–Lagrange 方程通常就是这样，因为目标是预测运动而不是控制它。记 \(u\in\mathbb{R}^n\) 为动作向量。动作可以作为<b>广义力 generalized forces</b>，「作用」在 Euler–Lagrange 方程的右边：</p>
+<div class="eq">$$\frac{d}{dt}\frac{\partial L}{\partial\dot q} - \frac{\partial L}{\partial q} = u. \tag{13.136}$$</div>
+<p>动作迫使机械系统偏离它通常的行为。有时真正的动作用别的变量表达，\(u\) 再由变换得到（回忆 13.1.2 节对差速驱动动作变量的变换）。这时 (13.136) 中的 \(u\) 可以换成某个变换 \(\phi\) 下的 \(\phi(u)\)，\(u\) 的维数不必是 \(n\)。</p>
+<h4>推导状态转移方程的步骤</h4>
+<p>在光滑 \(n\) 维流形的坐标邻域上，用 Lagrange 力学推导微分模型可以按下面的一般步骤：</p>
+<ol>
+  <li>确定系统的自由度，定义合适的 \(n\) 维光滑流形 \(\mathcal{C}\)。</li>
+  <li>把动能表示为位形速度分量的二次型：
+    <div class="eq">$$K(q,\dot q) = \frac12\dot q^TM(q)\dot q = \frac12\sum_{i=1}^n\sum_{j=1}^n m_{ij}(q)\dot q_i\dot q_j. \tag{13.137}$$</div></li>
+  <li>写出势能 \(V(q)\)。</li>
+  <li>令 \(L(q,\dot q) = K(q,\dot q) - V(q)\) 为 Lagrange 函数，用 Euler–Lagrange 方程 (13.130) 求出微分约束。</li>
+  <li>令 \(x = (q,\dot q)\) 转成相空间形式；可能的话解出 \(\dot x\)，得到 \(\dot x = f(x,u)\)。</li>
+</ol>
+<p><b>例 13.12（再看 2D 刚体）</b>：(13.109) 也可以用 Euler–Lagrange 方程推出。令 \(\mathcal{C} = \mathbb{R}^2\times\mathbb{S}^1\)，为配合 Lagrange 量的记号令 \((q_1,q_2,q_3) = (x,y,\theta)\)。动能是线速度和角速度对应动能之和：</p>
+<div class="eq">$$K(q,\dot q) = \tfrac12m\dot q\cdot\dot q + \tfrac12I\dot q_3^2, \tag{13.138}$$</div>
+<p>\(m\)、\(I\) 分别是质量与转动惯量（这里 \(\dot q\cdot\dot q\) 指平移部分 \(\dot q_1^2 + \dot q_2^2\)）。设没有重力，于是 \(V(q) = 0\)、\(L(q,\dot q) = K(q,\dot q)\)。设广义力 \(u_1,u_2,u_3\) 施加于位形变量。对 \(L(q,\dot q)\) 用 Euler–Lagrange 方程得</p>
+<div class="eq">$$\begin{aligned}
+\frac{d}{dt}\frac{\partial L}{\partial\dot q_1} - \frac{\partial L}{\partial q_1} &= \frac{d}{dt}(m\dot q_1) = m\ddot q_1 = u_1\\
+\frac{d}{dt}\frac{\partial L}{\partial\dot q_2} - \frac{\partial L}{\partial q_2} &= \frac{d}{dt}(m\dot q_2) = m\ddot q_2 = u_2\\
+\frac{d}{dt}\frac{\partial L}{\partial\dot q_3} - \frac{\partial L}{\partial q_3} &= \frac{d}{dt}(I\dot q_3) = I\ddot q_3 = u_3.
+\end{aligned} \tag{13.139}$$</div>
+<p>这些方程与 (13.109) 等价。区别之一是还需要转到相空间；区别之二是 (13.139) 中的动作变量不直接指力和力矩，而解释为作用在位形变量上的广义力。如果需要 (13.109) 中原来的动作，应做一个变换。</p>
+
+<h3 id="s13-4-2">13.4.2 一般的 Lagrange 表达式 <span class="en">General Lagrangian Expressions</span></h3>
+<p>考虑更复杂的力学问题时，用一般形式表达微分约束更方便。例如对运动链计算 (13.130) 会得到非常复杂的表达式；但这些表达式的各项可以组织成标准形式，看起来更简单，也给各分量以直观含义。</p>
+<p>设动能由 (13.126) 表示，记 \(m_{ij}(q)\) 为 \(M(q)\) 的元素，势能为 \(V(q)\)。做完 (13.136) 中的求导，Euler–Lagrange 方程可以写成 \(n\) 个标量方程 [68]：</p>
+<div class="eq">$$\sum_{j=1}^n m_{ij}(q)\ddot q_j + \sum_{j=1}^n\sum_{k=1}^n h_{ijk}(q)\dot q_j\dot q_k + g_i(q) = u_i, \tag{13.140}$$</div>
+<p>其中</p>
+<div class="eq">$$h_{ijk} = \frac{\partial m_{ij}}{\partial q_k} - \frac12\frac{\partial m_{jk}}{\partial q_i}. \tag{13.141}$$</div>
+<p>每个 \(i\) 从 1 到 \(n\) 有一个方程。(13.140) 的各分量有物理解释：\(m_{ii}\) 系数表示关于 \(q_i\) 的惯性；\(m_{ij}\) 表示加速 \(q_j\) 对 \(q_i\) 的影响；\(h_{ijj}\dot q_j^2\) 项表示 \(q_j\) 的速度在 \(q_i\) 上引起的<b>离心效应</b>；\(h_{ijk}\dot q_j\dot q_k\) 项表示 \(q_j\) 与 \(q_k\) 的速度在 \(q_i\) 上引起的 <b>Coriolis 效应</b>；\(g_i\) 项通常来自重力。</p>
+<p>(13.140) 的另一种常见写法用矩阵。可以证明 Euler–Lagrange 方程化为</p>
+<div class="eq">$$M(q)\ddot q + C(q,\dot q)\dot q + g(q) = u, \tag{13.142}$$</div>
+<p>表示 \(n\) 个标量方程。这里引入了 \(n\times n\) 的 <b>Coriolis 矩阵</b> \(C(q,\dot q)\)。许多可能的 Coriolis 矩阵会给出等价的约束。相对于 (13.140)，Coriolis 矩阵必须满足</p>
+<div class="eq">$$\sum_{j=1}^n c_{ij}\dot q_j = \sum_{j=1}^n\sum_{k=1}^n h_{ijk}\dot q_j\dot q_k. \tag{13.143}$$</div>
+<p>用 (13.141)，</p>
+<div class="eq">$$\sum_{j=1}^n c_{ij}\dot q_j = \sum_{j=1}^n\sum_{k=1}^n\Big(\frac{\partial m_{ij}}{\partial q_k} - \frac12\frac{\partial m_{jk}}{\partial q_i}\Big)\dot q_j\dot q_k. \tag{13.144}$$</div>
+<p>确定 \(C(q,\dot q)\) 的标准方法是计算 <b>Christoffel 符号</b>。从嵌套求和内部减去 \(\frac12\frac{\partial m_{jk}}{\partial q_i}\)，方程可以改写为</p>
+<div class="eq">$$\sum_{j=1}^n c_{ij}\dot q_j = \frac12\sum_{j=1}^n\sum_{k=1}^n\frac{\partial m_{ij}}{\partial q_k}\dot q_j\dot q_k + \frac12\sum_{j=1}^n\sum_{k=1}^n\Big(\frac{\partial m_{ij}}{\partial q_k} - \frac{\partial m_{jk}}{\partial q_i}\Big)\dot q_j\dot q_k. \tag{13.145}$$</div>
+<p>于是 \(C(q,\dot q)\) 的元素可以写成</p>
+<div class="eq">$$c_{ij} = \sum_{k=1}^n c_{ijk}\dot q_k, \tag{13.146}$$</div>
+<p>其中</p>
+<div class="eq">$$c_{ijk} = \frac12\Big(\frac{\partial m_{ij}}{\partial q_k} + \frac{\partial m_{ik}}{\partial q_j} - \frac{\partial m_{jk}}{\partial q_i}\Big). \tag{13.147}$$</div>
+<p>它称为 <b>Christoffel 符号</b>，由 (13.145) 得到。注意 \(c_{ijk} = c_{ikj}\)。Christoffel 符号出现在微分几何的仿射联络研究中，通常记作 \(\Gamma^i_{jk}\)。仿射联络提供了一种不用坐标表达加速度的方式，就像 8.3.2 节不用坐标表达切空间一样。微分几何中的仿射联络见 [17]，它在力学中的应用见 [19]。</p>
+<h4>转成相转移方程</h4>
+<p>最后一步是把方程转成相空间形式。引入 \(2n\) 维相向量 \(x = (q,\dot q)\)，任务是得到 \(\dot x = f(x,u)\)，它表示 \(2n\) 个标量方程。前 \(n\) 个方程是 \(\dot x_i = x_{n+i}\)（\(i\) 从 1 到 \(n\)），后 \(n\) 个由解出 \(\ddot q\) 得到。设用 (13.142) 的一般形式，解出 \(\ddot q\)：</p>
+<div class="eq">$$\ddot q = M(q)^{-1}\big(u - C(q,\dot q)\dot q - g(q)\big). \tag{13.148}$$</div>
+<p>然后直接代入相变量：每个 \(\ddot q_i\)（\(i\) 从 1 到 \(n\)）变成 \(\dot x_{n+i}\)，\(M(q)\)、\(C(q,\dot q)\)、\(g(q)\) 用 \(x\) 表示。这样就完成了相转移方程的指定。</p>
+
+<p><b>例 13.13（两连杆机械臂）</b>：图 13.13 是有两个转动关节、两根连杆 \(\mathcal{A}_1\)、\(\mathcal{A}_2\) 的机械臂，所以 \(\mathcal{C} = \mathbb{S}^1\times\mathbb{S}^1\)。记 \(q = (\theta_1,\theta_2)\) 为位形（\(\theta_1\) 是 \(\mathcal{A}_1\) 相对水平 \(x\) 轴的角度，\(\theta_2\) 是 \(\mathcal{A}_2\) 相对 \(\mathcal{A}_1\) 延长线的角度）。两个关节各由一个施加力矩 \(u_i\) 的电机控制：\(u_1\) 加在基座上，\(u_2\) 加在 \(\mathcal{A}_1\) 与 \(\mathcal{A}_2\) 之间的关节上。记 \(d_1\) 为 \(\mathcal{A}_1\) 的长度，\(\ell_i\) 为 \(\mathcal{A}_i\) 原点到其质心的距离，\(m_i\)、\(I_i\) 分别为 \(\mathcal{A}_i\) 的质量与转动惯量。</p>
+<p class="small">原书这一例的记号有几处笔误（见脚注 <a href="#fn-9" id="fn-9-ref">9</a>）。下面给出的是按图 13.13 的几何<b>改正后</b>的公式，参考代码第 16 项从 Lagrange 量出发数值求出 \(M\)、\(C\)、\(g\) 并逐项核对过。</p>
+<p>\(\mathcal{A}_1\) 的动能与势能为</p>
+<div class="eq">$$K_1(\dot q) = \tfrac12m_1\ell_1^2\dot\theta_1^2 + \tfrac12I_1\dot\theta_1^2, \tag{13.149}$$</div>
+<div class="eq">$$V_1(q) = m_1g\ell_1\sin\theta_1. \tag{13.150}$$</div>
+<p>\(\mathcal{A}_2\) 的动能为</p>
+<div class="eq">$$K_2(\dot q) = \tfrac12m_2\,\dot p\cdot\dot p + \tfrac12I_2(\dot\theta_1+\dot\theta_2)^2, \tag{13.151}$$</div>
+<p>其中 \(p\) 是 \(\mathcal{A}_2\) 质心的位置，由 (3.53) 得</p>
+<div class="eq">$$p_1 = d_1\cos\theta_1 + \ell_2\cos(\theta_1+\theta_2),\qquad p_2 = d_1\sin\theta_1 + \ell_2\sin(\theta_1+\theta_2). \tag{13.152}$$</div>
+<p>\(\mathcal{A}_2\) 的势能为</p>
+<div class="eq">$$V_2(q) = m_2g\big(d_1\sin\theta_1 + \ell_2\sin(\theta_1+\theta_2)\big). \tag{13.153}$$</div>
+<p>于是 Lagrange 函数为</p>
+<div class="eq">$$L(q,\dot q) = K_1(\dot\theta_1) + K_2(\dot\theta_1,\dot\theta_2) - V_1(\theta_1) - V_2(\theta_1,\theta_2), \tag{13.154}$$</div>
+<p>代入 (13.118) 得到用 \(\ddot q\)、\(\dot q\)、\(q\) 表示的隐式微分约束。解出 \(\ddot q\) 并令 \(x = (q,\dot q)\)（四维相向量），就转成了相空间。</p>
+<p>与其直接用 (13.118) 计算，不如直接用 (13.140) 求约束。各项为</p>
+<div class="eq">$$M(q) = \begin{pmatrix}m_{11} & m_{12}\\ m_{21} & m_{22}\end{pmatrix}, \tag{13.155}$$</div>
+<p>其中</p>
+<div class="eq">$$\begin{aligned}
+m_{11} &= I_1 + m_1\ell_1^2 + I_2 + m_2(d_1^2 + \ell_2^2 + 2d_1\ell_2\cos\theta_2)\\
+m_{12} &= m_{21} = I_2 + m_2(\ell_2^2 + d_1\ell_2\cos\theta_2)\\
+m_{22} &= I_2 + m_2\ell_2^2,
+\end{aligned} \tag{13.156}$$</div>
+<p>以及（记 \(r = m_2d_1\ell_2\sin\theta_2\)）</p>
+<div class="eq">$$\begin{aligned}
+c_{111} &= \tfrac12\frac{\partial m_{11}}{\partial\theta_1} = 0, & c_{112} &= c_{121} = \tfrac12\frac{\partial m_{11}}{\partial\theta_2} = -r,\\
+c_{122} &= \frac{\partial m_{12}}{\partial\theta_2} - \tfrac12\frac{\partial m_{22}}{\partial\theta_1} = -r, & c_{211} &= \frac{\partial m_{21}}{\partial\theta_1} - \tfrac12\frac{\partial m_{11}}{\partial\theta_2} = r,\\
+c_{212} &= c_{221} = \tfrac12\frac{\partial m_{22}}{\partial\theta_1} = 0, & c_{222} &= \tfrac12\frac{\partial m_{22}}{\partial\theta_2} = 0.
+\end{aligned} \tag{13.157}$$</div>
+<p>最后一项为</p>
+<div class="eq">$$g_1 = (m_1\ell_1 + m_2d_1)g\cos\theta_1 + m_2\ell_2g\cos(\theta_1+\theta_2),\qquad g_2 = m_2\ell_2g\cos(\theta_1+\theta_2). \tag{13.158}$$</div>
+<p>动力学也可以用 (13.142) 的 \(M(q)\)、\(C(q,\dot q)\)、\(g(q)\) 表达。用 (13.143) 定义 Coriolis 矩阵：</p>
+<div class="eq">$$C(q,\dot q) = -m_2d_1\ell_2\sin\theta_2\begin{pmatrix}\dot\theta_2 & \dot\theta_1+\dot\theta_2\\ -\dot\theta_1 & 0\end{pmatrix}. \tag{13.159}$$</div>
+<p>为方便，令</p>
+<div class="eq">$$r = m_2d_1\ell_2\sin\theta_2. \tag{13.160}$$</div>
+<p>得到的表达式是 (13.142) 的特殊形式：</p>
+<div class="eq">$$\begin{aligned}
+m_{11}\ddot\theta_1 + m_{12}\ddot\theta_2 - 2r\dot\theta_1\dot\theta_2 - r\dot\theta_2^2 + g_1(q) &= u_1\\
+m_{21}\ddot\theta_1 + m_{22}\ddot\theta_2 + r\dot\theta_1^2 + g_2(q) &= u_2.
+\end{aligned} \tag{13.161}$$</div>
+<p>令 \(x = (\theta_1,\theta_2,\dot\theta_1,\dot\theta_2)\) 并把状态变量代入 (13.161)，就得到相转移方程：\(\ddot\theta_1\)、\(\ddot\theta_2\) 分别变成 \(\dot x_3\)、\(\dot x_4\)，方程要解出 \(\dot x_3\)、\(\dot x_4\)。把这个模型推广到带减速比、电机质量不可忽略的情形见 [68]。</p>
+
+<div class="widget wide" data-widget="two-link"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>「从 (0.9, 0.6) 静止释放」再运行：机械臂在重力下乱摆，右图的总能量漂移只有 1e−7 量级（纵轴 ±0.01）——u = 0 时系统保守（参考代码第 16 项）。</li>
+  <li>切到「按原书 (13.159) 字面」：只改了 C 的 (2,1) 元的符号，能量就开始大幅变化（曲线变红），参考代码里 5 秒内漂移约 19。这是检验动力学方程的好办法：保守系统必须守恒能量。</li>
+  <li>「PD + 重力补偿」（补充，第 15 章才讲控制）：拖目标角，机械臂会转过去停住。关掉重力再看，这时 u 只剩 PD 项。</li>
+</ul></div>
+<p>这个例子只是可以优雅建模的系统的冰山一角。很多机器人学教材讨论了更多连杆、不同种类的关节和摩擦力的情形 [29, 56, 68, 70, 79]。物体链的相转移方程也可以用 Newton–Euler 表述推出。虽然 Lagrange 形式更优雅，但递归形式的 Newton–Euler 方程在多体动力系统仿真中效率高得多 [29, 69, 79]。</p>
+
+<h3 id="s13-4-3">13.4.3 Euler–Lagrange 方程的扩展 <span class="en">Extensions of the Euler–Lagrange Equations</span></h3>
+<p>Euler–Lagrange 方程可以构造几种扩展，处理保守场中除动能、势能之外的复杂情况。每种扩展通常是在 (13.129) 上加更多项来考虑新的复杂性。可以这样处理的问题有：闭运动链、非完整约束、非保守力（如摩擦）。</p>
+<h4>加入速度约束</h4>
+<p>13.4.1 节的 Lagrange 表述可以推广为允许对 \(q\)、\(\dot q\) 加额外约束。这对推导有闭运动链或轮式机体的机器人的状态转移方程非常有用。如果有闭链，位形可能被限制在 \(\mathcal{C}\) 的子集里；若能参数化解集，就可以在约化的 C-space 上重新定义 \(\mathcal{C}\)。但正如 4.4 节所说，这通常不可行，因为这样的参数化很难得到。如果有轮子或其它接触约束（如 13.1.3 节那些），\(q\) 与 \(\dot q\) 上就有额外约束。扩展 Euler–Lagrange 方程，就可以把动力学加进 13.1 节的模型。</p>
+<p>下面的方法基于 <b>Lagrange 乘子</b>。回忆标准微积分：要在隐式约束 \(g(x) = 0\) 下优化 \(\mathbb{R}^n\) 上的函数 \(h\)，只需考虑</p>
+<div class="eq">$$h(x) + \lambda g(x) \tag{13.162}$$</div>
+<p>的极值，\(\lambda\in\mathbb{R}\) 是 <b>Lagrange 乘子</b> [40]。极值通过解</p>
+<div class="eq">$$\nabla h(x) + \lambda\nabla g(x) = 0 \tag{13.163}$$</div>
+<p>得到，它表示 \(n\) 个形如</p>
+<div class="eq">$$\frac{\partial h}{\partial x_i} + \lambda\frac{\partial g}{\partial x_i} = 0 \tag{13.164}$$</div>
+<p>的方程。同样的原理适用于处理 \(\mathcal{C}\) 上的速度约束。</p>
+<p>设 \(\mathcal{C}\) 上有 13.1 节那样的速度约束。考虑隐式约束：有 \(k\) 个形如 \(g_i(q,\dot q) = 0\) 的方程（\(i\) 从 1 到 \(k\)）。参数约束可以作为隐式约束的特例处理，写成</p>
+<div class="eq">$$g_i(q,\dot q) = \dot q_i - f_i(q,u) = 0. \tag{13.165}$$</div>
+<p>含动作 \(u\) 的约束不带来额外困难：下面的分析中每个 \(u_i\) 都当作常数，所以表达式里不再写出动作变量。和前面一样假设动力学时不变（时变情形见 [60]）。从 (13.130) 定义的 \(L(q,\dot q)\) 出发，令新的准则为</p>
+<div class="eq">$$L_c(q,\dot q,\lambda) = L(q,\dot q) + \sum_{i=1}^k\lambda_ig_i(q,\dot q). \tag{13.166}$$</div>
+<p>把 (13.114) 中的 \(L\) 换成 \(L_c\) 定义泛函 \(\Phi_c\)。\(\Phi_c\) 的极值由 \(n\) 个方程</p>
+<div class="eq">$$\frac{d}{dt}\frac{\partial L_c}{\partial\dot q_i} - \frac{\partial L_c}{\partial q_i} = 0 \tag{13.167}$$</div>
+<p>和 \(k\) 个方程</p>
+<div class="eq">$$\frac{d}{dt}\frac{\partial L_c}{\partial\dot\lambda_i} - \frac{\partial L_c}{\partial\lambda_i} = 0 \tag{13.168}$$</div>
+<p>给出。理由与 (13.124) 相同，只是现在包括了 \(\lambda\)。(13.168) 的方程等价于约束 \(g_i(q,\dot q) = 0\)：每个方程的第一项为零，因为 \(\dot\lambda\) 不出现在约束中，于是化为</p>
+<div class="eq">$$\frac{\partial L_c}{\partial\lambda_i} = 0. \tag{13.169}$$</div>
+<p>这已经由 \(L\) 的极值条件和约束 \(g_i(q,\dot q) = 0\) 推出。(13.167) 中有 \(n\) 个方程、\(n+k\) 个未知数；用 \(k\) 个约束 \(g_i(q,\dot q) = 0\) 可以消去 \(k\) 个 Lagrange 乘子，这对应标准约束优化中消去 Lagrange 乘子。</p>
+<p>(13.167) 的表达式和约束 \(g_i(q,\dot q)\) 可能很复杂，使状态转移方程的确定变得困难。一般形式见 [60] 的 3.8 节。这里考虑一个重要的特例：约束是 Pfaffian 的，</p>
+<div class="eq">$$g_i(q,\dot q) = \sum_{j=1}^n g_{ij}(q)\dot q_j = 0, \tag{13.170}$$</div>
+<p>如 13.1 节所介绍。这包括 13.1.2 节轮式车辆的非完整速度约束；也包括建模闭运动链的 \(g_i(q) = 0\) 这种特例——这样的约束可以对时间求导得到</p>
+<div class="eq">$$\frac{d}{dt}g_i(q) = \sum_{j=1}^n\frac{\partial g_i}{\partial q_j}\dot q_j = \sum_{j=1}^n g_{ij}(q)\dot q_j = 0, \tag{13.171}$$</div>
+<p>正是 Pfaffian 形式。这样就能在不参数化闭合约束解集的情况下，表达 4.4 节闭链的动力学。从隐式形式出发，要把它们变成 Pfaffian 形式需要求导。</p>
+<p>对 Pfaffian 约束这一重要情形，(13.167) 化简为</p>
+<div class="eq">$$\frac{d}{dt}\frac{\partial L}{\partial\dot q_i} - \frac{\partial L}{\partial q_i} + \sum_{j=1}^k\lambda_jg_{ji}(q) = 0. \tag{13.172}$$</div>
+<p>需要时可以用 Pfaffian 约束消去 Lagrange 乘子。注意 \(g_{ji}\) 表示第 \(j\) 个 Pfaffian 约束的第 \(i\) 项。如果需要，可以在每个约束的右边放一个动作变量 \(u_i\)。(13.172) 常写成</p>
+<div class="eq">$$\frac{d}{dt}\frac{\partial L}{\partial\dot q_i} - \frac{\partial L}{\partial q_i} = \sum_{j=1}^k\lambda_jg_{ji}(q,\dot q), \tag{13.173}$$</div>
+<p>这是约束的另一种但等价的表达，因为 Lagrange 乘子取负不影响极值的存在<span class="fn">（原书 (13.173) 的求和下标写成 \(l = 1\)，求和项里却用 \(j\)）</span>。这时可以给出 D'Alembert 提出的一个很好的解释。(13.173) 右边的表达式可以看作动作，如 13.4.1 节所说；前面说过，这样的动作在力学中称为广义力。<b>虚功原理 principle of virtual work</b> 通过积分维持约束所需的反作用力得到；这些反作用力恰好由 (13.173) 的右边给出。由于力的抵消，约束不做真正的功（如果没有摩擦）。</p>
+<p><b>例 13.14（球面上的质点）</b>：设一个质点在 \(\mathbb{R}^3\) 中的单位球面上运动，没有摩擦也没有重力。记 \((q_1,q_2,q_3)\in\mathbb{R}^3\) 为该点的位置。Lagrange 函数就是动能</p>
+<div class="eq">$$L(q,\dot q) = \tfrac12m(\dot q_1^2 + \dot q_2^2 + \dot q_3^2), \tag{13.174}$$</div>
+<p>\(m\) 是质点质量。为简单起见取 \(m = 2\)。质点必须在球面上运动的约束为</p>
+<div class="eq">$$g_1(q) = q_1^2 + q_2^2 + q_3^2 - 1 = 0. \tag{13.175}$$</div>
+<p>对时间求导得到 Pfaffian 形式：</p>
+<div class="eq">$$2q_1\dot q_1 + 2q_2\dot q_2 + 2q_3\dot q_3 = 0. \tag{13.176}$$</div>
+<p>由于 \(k = 1\)，只有一个 Lagrange 乘子 \(\lambda_1\)。用 (13.172) 得到三个方程</p>
+<div class="eq">$$\ddot q_i - 2q_i\lambda_1 = 0, \tag{13.177}$$</div>
+<p>\(i\) 从 1 到 3<span class="fn">（补充：按 (13.172)、\(m = 2\) 直接推导得 \(2\ddot q_i + 2q_i\lambda_1 = 0\)；与 (13.177) 只差乘子的缩放和符号，书中也说乘子可以取负，不影响结论）</span>。解的一般形式是</p>
+<div class="eq">$$c_1q_1 + c_2q_2 + c_3q_3 = 0, \tag{13.178}$$</div>
+<p>\(c_i\) 是由质点初始位置（和初速度）决定的实常数。这是过原点的平面方程。平面与球面的交线是一个大圆。这意味着质点在两点之间沿大圆运动——它们是球面上的最短路径（测地线）。</p>
+
+<div class="widget wide" data-widget="particle-sphere"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>随便选一个初速度方向再播放：质点沿绿色平面与球面的交线（大圆）一直转下去，「与初始平面的距离」保持在 1e−10 量级（参考代码第 17 项）。</li>
+  <li>速率加倍：轨道不变，只是走得更快；约束力 λ = |q̇|² 变成 4 倍——维持圆周运动需要更大的向心力。</li>
+  <li>勾上「加重力」（补充）：变成球面摆，轨迹在两个纬度之间来回，不再是大圆。</li>
+</ul></div>
+
+<p>13.4.2 节的一般形式可以推广到带约束的情形。例如 (13.142) 推广为</p>
+<div class="eq">$$M(q)\ddot q + C(q,\dot q)\dot q + g(q) + G(q)^T\lambda = u, \tag{13.179}$$</div>
+<p>\(G\) 是表示全部 \(g_{ji}\) Pfaffian 系数的矩阵。此时 Lagrange 乘子可以算出 [56]：</p>
+<div class="eq">$$\lambda = \big(G(q)M(q)^{-1}G(q)^T\big)^{-1}G(q)M(q)^{-1}\big(u - C(q,\dot q)\dot q - g(q)\big), \tag{13.180}$$</div>
+<p>这里假设 \(G\) 是时不变的<span class="fn">（原书说 \(G\) 是 \(n\times k\) 矩阵，但 \(G^T\lambda\) 要是 \(n\) 维，\(G\) 应为 \(k\times n\)；原书 (13.180) 括号里也漏了 \(-g(q)\)，对照 (13.184) 可知。见脚注 <a href="#fn-10" id="fn-10-ref">10</a>）</span>。相转移方程照常确定：做必要的求导，定义 \(2n\) 个相变量，解出 \(\dot x\)。结果推广了 (13.148)。</p>
+<h4>非保守力</h4>
+<p>到目前为止，Lagrange 表述已经推广到处理 \(\mathcal{C}\) 上降低切空间维数的约束。它也能推广到允许<b>非保守力</b>。机械系统中最常见、最重要的例子是摩擦。摩擦模型的细节这里不讲，见 [52]。例如物体接触时（如机械臂的关节）、物体在流体（如空气或水）中运动时都会产生摩擦。非保守力可以表示为额外的广义力，形如 \(n\times1\) 向量 \(B(q,\dot q)\)。若还允许动作向量，修正的 Euler–Lagrange 方程成为</p>
+<div class="eq">$$\frac{d}{dt}\frac{\partial L}{\partial\dot q} - \frac{\partial L}{\partial q} = u - B(\dot q, q). \tag{13.181}$$</div>
+<p>(13.142) 的一种常见推广是</p>
+<div class="eq">$$M(q)\ddot q + C(q,\dot q)\dot q + N(q,\dot q) = u, \tag{13.182}$$</div>
+<p>\(N(q,\dot q)\) 推广了 \(g(q)\) 以包括非保守力。还可以进一步推广到包含 Pfaffian 约束和 Lagrange 乘子：</p>
+<div class="eq">$$M(q)\ddot q + C(q,\dot q)\dot q + N(q,\dot q) + G(q)^T\lambda = u. \tag{13.183}$$</div>
+<p>Lagrange 乘子成为 [56]</p>
+<div class="eq">$$\lambda = \big(G(q)M(q)^{-1}G(q)^T\big)^{-1}G(q)M(q)^{-1}\big(u - C(q,\dot q)\dot q - N(q,\dot q)\big). \tag{13.184}$$</div>
+<p>同样可以用 \(2n\) 个相变量推导相转移方程，推广 (13.148)。</p>
+
+<h3 id="s13-4-4">13.4.4 Hamilton 力学 <span class="en">Hamiltonian Mechanics</span></h3>
+<p>对一组物体，确定状态转移方程最方便的是 Lagrange 表述：一旦确定了动能与势能，剩下的就是直接的求导和代数运算。Hamilton 力学提供了一种与之密切相关的替代表述：不在 \(n\) 维 C-space 上表达二阶微分约束，而在 \(2n\) 维相空间上表达<b>一阶</b>约束。这个想法从 13.2 节应该已经熟悉了。这里考虑的新相空间是<b>辛流形 symplectic manifold</b> 的一个例子，它有很多重要性质，例如可定向、维数为偶数 [6]。标准的相向量定义为 \(x = (q,\dot q)\)；这里不用 \(\dot q\)，而引入 \(n\) 个记作 \(p\) 的变量，于是 \((q,\dot q)\) 与 \((p,q)\) 之间存在一个变换。\(p\) 变量通过相空间上一个特殊的函数——<b>Hamilton 量 Hamiltonian</b>——与位形变量联系起来。虽然 Hamilton 表述通常对确定 \(\dot x = f(x,u)\) 没什么帮助，这里还是介绍它，因为它对最优控制问题的推广非常强大，这个推广称为 Pontryagin 极小值原理，在 15.2.3 节介绍。在力学中，它为能量守恒律提供了一般表达，有助于证明很多理论结果 [6, 31]。</p>
+<p>\((q,\dot q)\) 与 \((p,q)\) 之间的关系可以用 <b>Legendre 变换</b> [6, 31] 得到。考虑两个变量 \(x,y\in\mathbb{R}\) 的实值函数 \(f\)。它的全微分 [40] 为</p>
+<div class="eq">$$df = u\,dx + v\,dy, \tag{13.185}$$</div>
+<p>其中</p>
+<div class="eq">$$u = \frac{\partial f}{\partial x}\qquad\text{和}\qquad v = \frac{\partial f}{\partial y}. \tag{13.186}$$</div>
+<p>考虑构造一个依赖于 \(du\) 和 \(dy\)、而不是 \(dx\) 和 \(dy\) 的全微分。令 \(g\) 为 \(u\) 和 \(y\) 的函数：</p>
+<div class="eq">$$g(u,y) = ux - f. \tag{13.187}$$</div>
+<p>\(g\) 的全微分为</p>
+<div class="eq">$$dg = x\,du + u\,dx - df. \tag{13.188}$$</div>
+<p>用 (13.185) 表示 \(df\)，化简为</p>
+<div class="eq">$$dg = x\,du - v\,dy. \tag{13.189}$$</div>
+<p>\(x\) 与 \(v\) 现在解释为</p>
+<div class="eq">$$x = \frac{\partial g}{\partial u}\qquad\qquad v = -\frac{\partial g}{\partial y}, \tag{13.190}$$</div>
+<p>看起来像是 (13.186) 的一种反演。这个想法将推广到向量形式，得到 Hamilton 表述。</p>
+<p>设动力学不依赖于具体时间（推广到时变动力学并不难，见 [6, 31]）。记 \(L(q,\dot q)\) 为 (13.129) 定义的 Lagrange 函数。令 \(p\in\mathbb{R}^n\) 为<b>广义动量 generalized momentum</b> 向量（或<b>伴随变量 adjoint variables</b>），它的作用与 (13.185) 中的 \(u\) 相同。每个 \(p_i\) 定义为</p>
+<div class="eq">$$p_i = \frac{\partial L}{\partial\dot q_i}. \tag{13.191}$$</div>
+<p>在某些文献中 \(p\) 也记作 \(\lambda\)，因为它也可以解释为 Lagrange 乘子向量。<b>Hamilton 函数</b>定义为</p>
+<div class="eq">$$H(p,q) = p\cdot\dot q - L(q,\dot q) = \sum_{i=1}^n p_i\dot q_i - L(q,\dot q), \tag{13.192}$$</div>
+<p>它可以解释为保守系统的总能量 [31]。这是 (13.187) 的向量版本，\(L\) 和 \(H\) 分别代替 \(f\) 和 \(g\)；\(p\) 和 \(q\) 分别是 \(u\) 和 \(x\) 的向量版本。</p>
+<p>只看作 \(p\) 和 \(q\) 的函数时，\(H\) 的全微分为</p>
+<div class="eq">$$dH = \sum_{i=1}^n\frac{\partial H}{\partial p_i}dp_i + \sum_{i=1}^n\frac{\partial H}{\partial q_i}dq_i. \tag{13.193}$$</div>
+<p>用 (13.192)，\(dH\) 可以写成</p>
+<div class="eq">$$dH = \sum_{i=1}^n\dot q_i\,dp_i + \sum_{i=1}^n p_i\,d\dot q_i - \sum_{i=1}^n\frac{\partial L}{\partial\dot q_i}d\dot q_i - \sum_{i=1}^n\frac{\partial L}{\partial q_i}dq_i. \tag{13.194}$$</div>
+<p>用 (13.191)，所有 \(d\dot q_i\) 项相互抵消，得到</p>
+<div class="eq">$$dH = \sum_{i=1}^n\dot q_i\,dp_i - \sum_{i=1}^n\frac{\partial L}{\partial q_i}dq_i. \tag{13.195}$$</div>
+<p>用 (13.118)，</p>
+<div class="eq">$$\dot p = \frac{\partial L}{\partial q_i}. \tag{13.196}$$</div>
+<p>这意味着</p>
+<div class="eq">$$dH = \sum_{i=1}^n\dot q_i\,dp_i - \sum_{i=1}^n\dot p_i\,dq_i. \tag{13.197}$$</div>
+<p>令 (13.197) 与 (13.193) 相等，得到称为 <b>Hamilton 方程</b>的 \(2n\) 个方程：</p>
+<div class="eq">$$\dot q_i = \frac{\partial H}{\partial p_i}\qquad\qquad \dot p_i = -\frac{\partial H}{\partial q_i}, \tag{13.198}$$</div>
+<p>\(i\) 从 1 到 \(n\)<span class="fn">（原书 (13.198) 第二式漏了负号，印作 \(\dot p_i = \partial H/\partial q_i\)；比较 (13.197) 与 (13.193) 中 \(dq_i\) 的系数即知应带负号，与 (13.190) 中 \(v = -\partial g/\partial y\) 也对应。见脚注 <a href="#fn-11" id="fn-11-ref">11</a>）</span>。这些方程类似于 (13.190)。</p>
+<p>Hamilton 方程与 Euler–Lagrange 方程等价：两种情形的极值给出等价的微分约束。区别是 Lagrange 表述用 \((q,\dot q)\)，Hamilton 表述用 \((p,q)\)；Hamilton 表述得到的是一阶微分方程。这里假设动力学是时不变的、运动发生在保守场中，此时 \(dH = 0\)，对应总能量守恒。在时变情形，Hamilton 方程之外还多一个方程 \(\partial H/\partial t = -\partial L/\partial t\)。如前所说，Hamilton 方程主要用于建立理论力学的基本结论，而不是确定具体系统的运动。例如 Hamilton 量被用来证明 <b>Liouville 定理</b>：相流保持体积，这意味着 Hamilton 系统不可能渐近稳定 [6]（渐近稳定性在 15.1.1 节介绍）。Pontryagin 极小值原理——Hamilton 方程在最优控制理论中的推广——在 15.2.3 节介绍。</p>
+
+<div class="widget wide" data-widget="hamiltonian"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>默认（带负号）播放：蓝色区域被拉成细长的螺旋，但「区域面积（现在）」始终等于初始值——Liouville 定理（参考代码第 18 项）。中心点沿等值线走，H 不变。</li>
+  <li>切到「原书 (13.198)」：中心点的 H 一路变化，轨迹横穿等值线——方程变成了倒立摆。</li>
+  <li>切到「加阻尼」：面积越来越小，区域缩向最低点 (0, 0)：只有非保守系统才能渐近稳定。</li>
+</ul></div>
+</section>
+
+<!-- ============================================================ 13.5 -->
+<section id="s13-5">
+<h2>13.5 多个决策者 <span class="en">Multiple Decision Makers</span></h2>
+<p>微分模型可以扩展为对多个决策者的交互建模。这得到序贯决策（Formulation 10.1）和序贯博弈（Formulation 10.4）的连续时间推广：只需为这些扩展写出微分版本的状态转移方程。</p>
+
+<h3 id="s13-5-1">13.5.1 微分决策 <span class="en">Differential Decision Making</span></h3>
+<p>要把 Formulation 10.1 推广为连续时间的<b>与自然的微分对策 differential game against nature</b>，设自然动作 \(\theta(t)\) 取自 \(\Theta\)。微分模型定义为</p>
+<div class="eq">$$\dot x = f(x,u,\theta). \tag{13.199}$$</div>
+<p>状态空间 \(X\) 和动作空间 \(U\) 的用法与本章其余部分相同，区别只在状态转移方程。也可以用依赖于状态的自然动作空间。</p>
+<p>Part III 中反复看到，自然可以用<b>非确定</b>或<b>概率</b>的方式建模。非确定情形下，(13.199) 等价于一个<b>微分包含 differential inclusion</b> [8]：</p>
+<div class="eq">$$\dot x\in\{\dot x' \mid \exists\theta\in\Theta \text{ 使得 } \dot x' = f(x,u,\theta)\}. \tag{13.200}$$</div>
+<p>\(\dot x\) 未来可能的值可以用前向投影计算。14.2.1 节将介绍的<b>可达集 reachable sets</b> 可以刻画未来可能状态随时间的演化。这种模型下构造的计划通常用最坏情况分析。</p>
+<p><b>例 13.15（非确定前向投影）</b>：作为 (13.199) 的简单例子，考虑用微分方程表达 12.5.1 节原像规划框架中的不确定性模型。在每个时刻 \(t\ge0\)，自然选一个 \(\theta\in\Theta(t)\)，状态转移方程为</p>
+<div class="eq">$$\dot x = u + \theta. \tag{13.201}$$</div>
+<p>图 12.45 中的锥就是施加常值 \(u\in U\) 时的非确定前向投影。</p>
+<p>概率情形下，必须对自然动作轨迹仔细加限制（例如 Wiener 过程 [71]）。在这样的条件下，(13.199) 成为一个<b>随机微分方程 stochastic differential equation</b>。此时的规划成为连续时间随机控制 [44]，任务是优化期望代价。</p>
+<p><b>例 13.16（简单车与自然）</b>：本章的任何模型都可以引入不确定性。例如回忆简单车 (13.15)，设自然干扰转向动作，使车行驶的方向不能精确知道。令 \(\Theta = [-\theta_{max},\theta_{max}]\)，\(\theta_{max}\in(0,\pi/2)\) 表示自然能造成的最大转向角误差。简单车模型可以修改为</p>
+<div class="eq">$$\dot x = u_s\cos\theta,\qquad \dot y = u_s\sin\theta,\qquad \dot\theta = \frac{u_s}{L}\tan(u_\phi + \gamma), \tag{13.202}$$</div>
+<p>其中 \(\tan\) 的定义域要扩展到 \(\mathbb{R}\)，或加其它合适的限制。在每个时刻 \(t\)，自然动作<span class="fn">（书中脚注：这里用 \(\gamma\) 代替 \(\theta\)，以免与车的朝向变量 \(\theta\) 冲突）</span>\(\gamma\in\Theta\) 让车的真实朝向偏离指令方向 \(u_\phi\)。在非确定不确定性下，规划算法必须确定车偏离指令方向的最大程度。也可以给出概率密度函数 \(p(\gamma)\) 得到概率模型；随时间积分时，(13.202) 给出未来车位形上的概率密度函数 [81]。</p>
+<p>类似地，刻画自然的参数几乎可以加到本章任何模型的任何地方。有些误差可能是<b>系统性</b>的，反映建模过程中的错误或简化——这对应在一开始施加一个常值自然动作，此后自然不再改变它。另一些误差可能对应<b>噪声</b>，预计会产生不同的自然动作。</p>
+
+<div class="widget wide" data-widget="nature-car"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>「系统误差」：轨迹像扇子一样张开，t = 4 时终点 y 的跨度约 2.7（θmax = 10°；参考代码第 19 项）。</li>
+  <li>换成「噪声」：同样的 θmax，散布小得多——快速变化的误差相互抵消。把 Δt 调大到 1，散布又变大，越来越像系统误差。</li>
+  <li>切到例 13.15：虚线圆半径随时间线性增长，这就是图 12.45 的锥在各个时刻的截面。</li>
+</ul></div>
+
+<h3 id="s13-5-2">13.5.2 微分对策 <span class="en">Differential Game Theory</span></h3>
+<p>序贯博弈论推广到连续时间的情形称为<b>微分对策 differential game theory</b>（或<b>动态博弈论 dynamic game theory</b> [10]），这个学科由 Isaacs 开创 [37]。9.3、9.4、10.5 节的各种变体都有可能：</p>
+<ol>
+  <li>参与者可以有任意多个。</li>
+  <li>可以是零和或非零和博弈。</li>
+  <li>状态可能已知，也可能未知；未知时出现有趣的 I-space，类似 11.7 节。</li>
+  <li>自然可以干扰博弈。</li>
+  <li>可以定义不同的均衡概念，如鞍点和 Nash 均衡。</li>
+</ol>
+<p>微分对策的全面综述见 [10]。两个参与者 \(\mathrm{P}_1\)、\(\mathrm{P}_2\) 可以进行一个<b>微分对策 differential game</b>，各自有连续的动作集合。记 \(U\)、\(V\) 分别为 \(\mathrm{P}_1\)、\(\mathrm{P}_2\) 的动作空间。状态转移方程定义为</p>
+<div class="eq">$$\dot x = f(x,u,v), \tag{13.203}$$</div>
+<p>\(x\) 是状态，\(u\in U\)，\(v\in V\)。</p>
+<p><b>线性微分对策 linear differential games</b> 是重要的一族，因为最优控制理论中的很多技术可以推广来求解它们 [10]。</p>
+<p><b>例 13.17（线性微分对策）</b>：线性系统模型 (13.37) 可以推广为包含两个参与者。令 \(X = \mathbb{R}^n\) 为相空间，\(U = \mathbb{R}^{m_1}\)、\(V = \mathbb{R}^{m_2}\)（\(m_1,m_2\le n\)）为动作空间。<b>线性微分对策</b>表示为</p>
+<div class="eq">$$\dot x = Ax + Bu + Cv, \tag{13.204}$$</div>
+<p>\(A, B, C\) 分别是 \(n\times n\)、\(n\times m_1\)、\(n\times m_2\) 的常实矩阵。这类博弈的具体解取决于代价泛函和所要的均衡概念。对二次代价，存在闭式解。它们推广了为单个决策者的线性系统开发的技术，见 15.2.2 节和 [10]。</p>
+<p>Isaacs 的原始著作 [37] 包含很多有趣的<b>追逃微分对策 pursuit-evasion differential games</b> 的例子，最著名的之一如下。</p>
+<p><b>例 13.18（杀人司机 homicidal chauffeur）</b>：在<b>杀人司机</b>博弈中，追捕者是一辆 Dubins 车，逃跑者是能向任何方向平移的点机器人。两者在同一个世界 \(\mathcal{W} = \mathbb{R}^2\) 中。车和机器人的速度分别为 \(s_1\)、\(s_2\)，假设 \(|s_1| &gt; |s_2|\)，即追捕者比逃跑者快。转移方程由 (13.15) 扩展两个表示机器人位置的状态变量得到：</p>
+<div class="eq">$$\dot x_1 = s_1\cos\theta_1,\quad \dot y_1 = s_1\sin\theta_1,\quad \dot\theta_1 = \frac{s_1}{L}\tan u_\phi,\quad \dot x_2 = s_2\cos v,\quad \dot y_2 = s_2\sin v. \tag{13.205}$$</div>
+<p>状态空间 \(X\) 是 \(\mathbb{R}^4\times\mathbb{S}^1\)，动作空间是 \(U = [-\phi_{max},\phi_{max}]\) 和 \(V = [0,2\pi)\)。</p>
+<p>任务是判断追捕者能否进入逃跑者的某个规定距离 \(\epsilon\) 之内：</p>
+<div class="eq">$$(x_1-x_2)^2 + (y_1-y_2)^2 &lt; \epsilon^2. \tag{13.206}$$</div>
+<p>若发生，则追捕者胜，否则逃跑者胜。解取决于 \(L, s_1, s_2, \epsilon\) 和初始状态。即使追捕者更快，逃跑者也可能逃脱，因为追捕者的转弯半径有限。对给定的 \(L, s_1, s_2, \epsilon\)，状态空间 \(X\) 可以划分成两个区域，分别对应追捕者胜或逃跑者胜 [10, 37]。想获得这种划分的直觉，可以想象斗牛士为了躲开一头快速冲来的公牛必须做的动作（是的，公牛被激怒时的行为很像一辆快速的 Dubins 车）。</p>
+<p>另一个有趣的追逃博弈出现在一辆车试图拦截另一辆车的情形 [54]。</p>
+<p><b>例 13.19（两辆车的博弈）</b>：设想两辆简单车在同一个世界 \(\mathcal{W} = \mathbb{R}^2\) 中运动，各自的转移方程由 (13.15) 给出。博弈的状态转移方程为</p>
+<div class="eq">$$\begin{aligned}
+\dot x_1 &= u_s\cos\theta_1, & \dot y_1 &= u_s\sin\theta_1, & \dot\theta_1 &= \frac{u_s}{L_1}\tan u_\phi,\\
+\dot x_2 &= v_s\cos\theta_2, & \dot y_2 &= v_s\sin\theta_2, & \dot\theta_2 &= \frac{v_s}{L_2}\tan v_\phi.
+\end{aligned} \tag{13.207}$$</div>
+<p>如果两个参与者都被限制为 Dubins 车，这个追逃博弈会变得非常有趣。</p>
+
+<div class="widget wide" data-widget="chauffeur"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>默认参数下选「背向逃」：约 2.5 秒被抓（参考代码第 19 项）。换回「向前看」（补充的启发式：每 0.05 秒试 16 个方向，选 1.2 秒内与追捕者最近距离最大的那个）：逃跑者在追捕者冲过来时侧闪进它的转弯圆，60 秒内都不被抓。</li>
+  <li>选「跟鼠标」自己当斗牛士：等追捕者快到时往它的侧面一闪。把 s₂/s₁ 调到 0.3 或把 φmax 调大（转弯半径变小），会难得多。</li>
+  <li>切到例 13.19：逃跑者也是 Dubins 车，侧闪需要转弯半径，躲避变得困难。注意这里两边都只是简单启发式，不是微分对策意义下的最优策略。</li>
+</ul></div>
+</section>
+
+<!-- ============================================================ 末尾 -->
+<section id="further">
+<h2>延伸阅读 <span class="en">Further Reading</span></h2>
+<p>本章综合自众多来源，略去了很多重要的相关主题。接触物体的力学和一般的操作见 [52]。三维车辆模型避开了，因为它们会因 \(SO(3)\) 而变复杂，见 [35]。模拟动力系统的计算问题见 [26, 69]。</p>
+<ul>
+  <li><b>C-space 上的速度约束</b>：[46, 56] 以及 15.3–15.5 节。滚动球体的更多问题见 [41] 及其参考文献（滚球问题有时称为 Chaplygin 球）；由滚球关节构造的非完整机械臂见 [58]；曲面物体接触的运动学见 [48, 55]；这类背景下的运动规划见 [14, 15, 25, 50]。其它有趣的非完整系统：snakeboard [36, 47]、roller racer [42]、rollerblader [24]、Trikke [23]，以及 [16] 中的例子（如 Chaplygin 雪橇）。</li>
+  <li><b>相空间表示</b>是微分方程、物理和控制理论的基本内容，见 [7, 21]。</li>
+  <li><b>力学</b>的延伸阅读有两个层次的复杂性：经典力学教材不以微分几何为基础，表述繁琐、术语特别（如「广义坐标」）；现代力学教材把一切干净地表述为 Riemann 流形上的测地线，但没有微分几何背景的读者更难消化。现代力学的优秀资料是 [6]（Arnold）；最著名的经典力学教材之一是 [31]（Goldstein）。包含带约束 Lagrange 量的变分法在线教材见 [61]。本章的带约束 Lagrange 表述基于 [60] 第 3 章、[31] 的 2.4 节和 [33] 的部分内容。Lagrange 量上的积分约束（以及代数、微分约束）见 [61]；不等式约束下的 Lagrange 力学见 [60]。13.4.4 节的 Hamilton 表述基于 [31] 第 7 章和 [6] 第 15 节。用仿射联络与 Christoffel 符号语言的现代力学见 [1, 19, 51]；配图丰富的是 [28]。机器人动力学见 [4, 22, 56, 68, 70, 79]；汽车动力学见 [30]。</li>
+  <li><b>微分对策</b>的主要来源是 [10, 34, 37]，另见 [5, 9, 59, 75, 76, 77, 78, 80]。追逃微分对策算法复杂度的下界见 [63]。</li>
+</ul>
+</section>
+
+<section id="cheatsheet">
+<h2>本章速查表</h2>
+<div class="table-wrap">
+<table class="data">
+  <thead><tr><th style="width:9.5em">概念</th><th>要点</th></tr></thead>
+  <tbody>
+    <tr><td>状态转移方程</td><td>\(\dot x = f(x,u)\)：\(x_{k+1} = f(x_k,u_k)\) 的连续时间版本；给出速度，未来状态靠积分。</td></tr>
+    <tr><td>隐式 vs 参数</td><td>隐式 \(g(q,\dot q)\bowtie0\) (13.1) 说「禁止什么」；参数 \(\dot q = f(q,u)\) (13.2) 说「允许什么」。两种解读：固定 \(q\) 得 \(U(q)\subset T_q(\mathcal{C})\)，固定 \(u\) 得向量场。</td></tr>
+    <tr><td>不影响可解性</td><td>每个 \(q\) 处 \(U(q)\) 含 0 的开邻域 ⇒ 对可行性无影响（如 \(\|\dot q\|\le1\)）。</td></tr>
+    <tr><td>Pfaffian 约束</td><td>(13.5) 对 \(\dot q\) 线性；\(k\) 个独立约束 ⇒ \(n-k\) 个动作，(13.6)；非线性时看 Jacobian 秩（隐式函数定理）。</td></tr>
+    <tr><td>简单车 (13.15)</td><td>\(\dot x = u_s\cos\theta\)、\(\dot y = u_s\sin\theta\)、\(\dot\theta = (u_s/L)\tan u_\phi\)；\(\rho_{min} = L/\tan\phi_{max}\)。三轮车 / 简单车 / Reeds–Shepp \(\{-1,0,1\}\) / Dubins \(\{0,1\}\)。</td></tr>
+    <tr><td>差速驱动 (13.16)(13.17)</td><td>平移 \(\frac r2(u_l+u_r)\)，转速 \(\frac rL(u_r-u_l)\)；可原地转，最短路 = 欧氏距离（图 13.4）；独轮车 (13.18) 是 \(L = 1\) 的特例。</td></tr>
+    <tr><td>拖车 (13.19)</td><td>\(\dim\mathcal{C} = k+3\)；\(\dot\theta_i = \frac{s}{d_i}\prod\cos(\theta_{j-1}-\theta_j)\sin(\theta_{i-1}-\theta_i)\)。</td></tr>
+    <tr><td>完整 / 非完整</td><td>能写成 \(h(q) = 0\) 的时间导数 (13.26) ⇒ 完全可积（完整），被困在低维曲面上；否则非完整（简单车、(13.9)、滚球、(13.43)）。Frobenius 定理见 15.4.2。</td></tr>
+    <tr><td>相空间</td><td>\(x = (q,\dot q)\)，二阶 → 一阶，维数 \(2n\)（切丛）；\(k\) 阶 → \(kn\) 维。积分器链 (13.36)。</td></tr>
+    <tr><td>漂移</td><td>某些 \(x\) 处不存在 \(u\) 使 \(f(x,u) = 0\)；动力系统都有（动量），13.1.2 节的模型无漂移。</td></tr>
+    <tr><td>线性 / 控制仿射</td><td>\(\dot x = Ax + Bu\) (13.37)；\(\dot x = f(x) + \sum g_i(x)u_i\) (13.41)，\(f\equiv0\) 时无漂移 (13.42)；非完整积分器 (13.43)：\(\Delta x_3 = 2\times\) 面积。</td></tr>
+    <tr><td>加积分器</td><td>动作改名为状态、新动作是它的导数；\(k\) 个积分器 ⇒ 原动作 \(C^{k-1}\) 且 Lipschitz。(13.45)–(13.49)。</td></tr>
+    <tr><td>质点 / 着陆器 / 摆</td><td>\(\ddot q = f/m\)；(13.60) 有 \(2^3 = 8\) 个动作；摆 (13.62)–(13.65)。动量 \(d = m\dot q\)、力矩 \(q\times f\)、\(de/dt = n\)、\(T = \frac12m\dot q\cdot\dot q\)。</td></tr>
+    <tr><td>刚体</td><td>平移 \(F = m\ddot p\)；转动 \(N = I\dot\omega + \omega\times(I\omega)\) (13.98)，主轴下 Euler 方程 (13.102)；姿态用 \(\dot h = \frac12h\otimes(0,\omega)\)。2D：\(\dot\omega = N/I\) (13.109)。</td></tr>
+    <tr><td>Euler–Lagrange</td><td>\(\frac{d}{dt}\frac{\partial L}{\partial\dot q} - \frac{\partial L}{\partial q} = u\)，\(L = K - V\)，\(K = \frac12\dot q^TM(q)\dot q\)；\(M\ddot q + C\dot q + g = u\) (13.142)，Christoffel (13.147)；\(\ddot q = M^{-1}(u - C\dot q - g)\)。</td></tr>
+    <tr><td>约束与非保守力</td><td>Lagrange 乘子 (13.166)–(13.173)；\(+G^T\lambda\) (13.179)；摩擦 \(B(\dot q,q)\)、\(N(q,\dot q)\) (13.181)–(13.184)。</td></tr>
+    <tr><td>Hamilton</td><td>\(p = \partial L/\partial\dot q\)，\(H = p\cdot\dot q - L\)；\(\dot q = \partial H/\partial p\)、\(\dot p = -\partial H/\partial q\)；Liouville：相体积守恒 ⇒ 不可能渐近稳定。</td></tr>
+    <tr><td>多决策者</td><td>\(\dot x = f(x,u,\theta)\) (13.199) ⇔ 微分包含 (13.200)；\(\dot x = f(x,u,v)\) (13.203)；线性微分对策 (13.204)；杀人司机 (13.205)(13.206)。</td></tr>
+  </tbody>
+</table>
+</div>
+</section>
+
+<section id="pitfalls">
+<h2>常见陷阱</h2>
+<ol>
+  <li><b>把「动作」和「速度」混为一谈</b>：参数表示中 \(u\) 是抽象的动作，速度是 \(f(q,u)\)。同一组速度可以有很多种参数化（差速驱动的 (13.16)、(13.17)、独轮车 (13.18)）。</li>
+  <li><b>以为速度约束一定让问题更难</b>：如果 \(U(q)\) 含 0 的开邻域（例如只限最大速度），可行性完全不受影响。真正棘手的是限制<b>方向</b>的约束。</li>
+  <li><b>以为「每点只有 m 维的允许速度」就意味着被困在 m 维曲面上</b>：简单车每点只有二维的允许速度，\(\mathcal{C}\) 却是三维，它并没有被困在任何二维曲面上（非完整）。只有约束可积时才会被困，如 (13.7)、(13.22)。是否被困要看可积性，而不是看 \(U(q)\) 的维数。</li>
+  <li><b>简单车的转向角取到 ±π/2</b>：后轴中心不动、原地转圈——那是三轮车，不是普通汽车；简单车要求 \(|\phi|\le\phi_{max}&lt;\pi/2\)。</li>
+  <li><b>把 \(0\le u_s\le1\) 当作无害的速度界</b>：它禁止了倒车，会改变可达集（Dubins 车），不再小时间局部可控。</li>
+  <li><b>相空间只写 \(\dot x_2 = h(\cdot)\)、忘了 \(\dot x_1 = x_2\)</b>：两个一阶方程合起来才等价于原来的二阶方程（13.2.1 节）。</li>
+  <li><b>以为动力系统也能「急停」</b>：相空间中存在漂移，任何动作都无法让 \(\dot x = 0\)（双积分器在 \(x_2\ne0\) 处）。规划时必须提前减速。</li>
+  <li><b>用欧拉角积分刚体转动</b>：(13.85) 在 \(\cos\beta = 0\) 处奇异；用四元数时要用完整的 \(\dot h = \frac12h\otimes(0,\omega)\)（不要照抄 (13.103)），并定期归一化。</li>
+  <li><b>Hamilton 方程漏掉负号、Lagrange 方程弄错 \(V\) 的符号</b>：检验方法是看保守系统（\(u = 0\)、无阻尼）的总能量是否守恒——本章三个笔误（(13.128)、(13.159)、(13.198)）都能这样查出来。</li>
+  <li><b>把「最小作用量」当作一定是最小</b>：Hamilton 原理只保证驻值（极值曲线），也可能是极大或鞍点。</li>
+  <li><b>把系统误差当成噪声处理</b>：常值干扰会累积，噪声会部分抵消（例 13.16 的互动图）；不确定性模型要区分这两种来源。</li>
+</ol>
+</section>
+
+<section id="exercises">
+<h2>习题导引</h2>
+<p class="small muted">只给思路，不给完整解答。标「互动」的可以先在本页对应的图里做实验；参考代码第 20 项核对了习题 1–3 的答案。</p>
+<ol>
+  <li><b>两个 Pfaffian 约束</b>（\(\mathcal{C} = \mathbb{R}^4\)，\(\dot q_1+\dot q_2+\dot q_3+\dot q_4 = 0\)、\(\dot q_2 - \dot q_4 = 0\)）：两个约束线性无关，所以有 \(4 - 2 = 2\) 个动作。令 \(\dot q_1 = u_1\)、\(\dot q_2 = u_2\)，解出 \(\dot q_4 = u_2\)、\(\dot q_3 = -u_1 - 2u_2\)。</li>
+  <li><b>\(2\ddot y - 10\dot y^2 + 5y = 0\)</b>：令 \(x_1 = y\)、\(x_2 = \dot y\)，得 \(\dot x_1 = x_2\)、\(\dot x_2 = 5x_2^2 - \frac52x_1\)。</li>
+  <li><b>\(y^{(4)} + y = 0\)</b>：四维相空间，\(\dot x_1 = x_2\)、\(\dot x_2 = x_3\)、\(\dot x_3 = x_4\)、\(\dot x_4 = -x_1\)（积分器链的变体）。</li>
+  <li><b>推导 (13.19)</b>：第 \(i\) 节拖车的轴中心 \(p_i = p_{i-1} - d_i(\cos\theta_i,\sin\theta_i)\)；对时间求导，要求它的速度垂直于车轴的分量为 0（不侧滑），再用归纳法得到连乘积。本页 13.1.2 节的补充说明给出了关键一步。（互动：「拉拖车的简单车」）</li>
+  <li><b>平滑转向的拖车</b>：按 13.2.4 节，给 \(\phi\) 加一个积分器：状态加一维 \(\phi\)，动作换成 \(u_\omega = \dot\phi\)（参考 (13.47)）。</li>
+  <li><b>两台用刚性杆相连的差速驱动机器人</b>：先数自由度——每台在 \(SE(2)\) 中，但中心距固定为 \(d\)（一个完整约束），每台还有一个不侧滑的 Pfaffian 约束。四个轮速里只有满足这些约束的组合才不打滑；选出独立的动作，写成 \(\dot q = f(q,u)\)。</li>
+  <li><b>带转动的着陆器</b>：用 2D 刚体 (13.109)，推进器不过质心时用 \(N = r\times f\) 算力矩。（互动：「平面刚体与推进器」的 T₂）</li>
+  <li><b>炮弹射出的 3D 刚体</b>：(13.105) 中令 \(F(u)\) 含重力 \(-mg\) 和推进器力，\(N(u)\) 来自推进器的偏心；注意姿态方程要用完整的四元数关系。</li>
+  <li><b>例 13.12 加重力</b>：\(V(q) = mgq_2\)，Euler–Lagrange 方程第二行多出 \(+mg\)，即 \(m\ddot q_2 + mg = u_2\)。</li>
+  <li><b>用带约束的 Lagrange 量推导摆</b>：把质点放在 \(\mathbb{R}^2\) 中，加约束 \(q_1^2 + q_2^2 - L^2 = 0\)，仿照例 13.14；乘子对应绳子的张力。</li>
+  <li><b>双摆（图 13.14）</b>：与例 13.13 同构——两个质点、\(\theta_1\)、\(\theta_2\) 都相对竖直方向（注意图中 \(\theta_2\) 是绝对角，和例 13.13 的相对角不同），写出 \(K\)、\(V\)，用 (13.140) 或直接用 Euler–Lagrange 方程。相空间四维。</li>
+  <li><b>三连杆机械臂</b>：按例 13.13 的方法，第三节质心 \(p_3 = (\text{肘 2 位置}) + \ell_3(\cos(\theta_1+\theta_2+\theta_3),\ \sin(\cdot))\)；建议先在参考代码里用数值方法求 \(M(q)\)（\(\partial^2K/\partial\dot q^2\)）再核对手推结果。</li>
+  <li><b>球面坐标解例 13.14</b>：用 \((\phi,\psi)\) 参数化球面，\(L = \frac m2(\dot\phi^2 + \sin^2\phi\,\dot\psi^2)\)，得到球面上的测地线方程；验证解是大圆。（互动：「球面上的质点」）</li>
+  <li><b>把 (13.161) 化成相空间形式</b>：解 \(2\times2\) 线性方程组 \(M(q)\ddot q = u - C\dot q - g\)（本页互动图的 <code>f(x)</code> 就是这样写的），注意用改正后的 (13.152)–(13.161)。</li>
+  <li><b>2D 自由刚体在重力下的 Hamilton 量</b>：\(p = (m\dot x, m\dot y, I\dot\theta)\)，\(H = \frac{p_x^2+p_y^2}{2m} + \frac{p_\theta^2}{2I} + mgy\)；Hamilton 方程（带负号！）给出 \(\dot p_y = -mg\)。</li>
+  <li>–17. <b>实现题</b>：16 → 本页「自由刚体的转动」（姿态积分）+「平面刚体与推进器」（二值推进器的合力与力矩）推广到 3D；17 → 本页「两连杆机械臂」就是一个模拟器（注意用改正后的 C 矩阵）。</li>
+</ol>
+</section>
+
+<section id="notes">
+<h2>脚注</h2>
+<div class="box small">
+  <p id="fn-1" style="margin:0 0 6px"><sup>1</sup> 第 741 页 (13.39)：原书印作 \(y = h(x) = Cy\)，右边应为 \(Cx\)（线性感知模型）。<a href="#fn-1-ref">↩</a></p>
+  <p id="fn-2" style="margin:0 0 6px"><sup>2</sup> 第 744 页 (13.47) 之后：原书说「there are two action variables, \(u_s\) and \(u_\omega\)」。但上文已经把速度固定为 \(s = 1\)，(13.47) 中不出现 \(u_s\)，只有一个动作 \(u_\omega\)。<a href="#fn-2-ref">↩</a></p>
+  <p id="fn-3" style="margin:0 0 6px"><sup>3</sup> 第 750 页 (13.60)：第三式印作 \(\dot x_3 = \frac{f_s}{m}(u_lf_l - u_rf_r)\)，\(f_s\) 在别处没有定义，与刚推出的 (13.58) \(\dot x_3 = \frac1m(u_lf_l - u_rf_r)\) 不符，应去掉 \(f_s\)（参考代码第 11 项）。<a href="#fn-3-ref">↩</a></p>
+  <p id="fn-4" style="margin:0 0 6px"><sup>4</sup> 第 757 页 (13.85)：矩阵右下角原书为 \(-\cos\beta\)。参考代码第 12 项对 20 组随机的 \((\alpha,\beta,\gamma)\) 与角速率，用 (3.42) 数值求 \(\dot R\)、再由 (13.84) 得 \(\omega\)：按原书公式反算的角速率最大误差约 3.1，把该元素改为 \(+\cos\beta\) 后误差约 \(10^{-10}\)。即第三行应为 \(\dot\alpha = \omega_3 + \tan\beta(\omega_1\cos\alpha + \omega_2\sin\alpha)\)。<a href="#fn-4-ref">↩</a></p>
+  <p id="fn-5" style="margin:0 0 6px"><sup>5</sup> 第 760 页 (13.103)、(13.105)：给出的 \(\dot b, \dot c, \dot d\) 只是 \((b,c,d)\times\omega\)，缺了含 \(a\) 的项和系数 \(\frac12\)，也没有 \(\dot a\)。从单位四元数出发它永远给出零导数（参考代码第 13 项：按 (13.103) 积分 1 秒转了 0 rad，按正确关系转了 1 rad）。与机体系角速度 \(\omega\)（Euler 方程 (13.102) 用的就是它）配套的关系是 \(\dot h = \frac12h\otimes(0,\omega)\)，分量见正文；它对应 \(\dot R = R[\omega]_\times\)。若 \(\omega\) 是空间系角速度（如 (13.84)），则为 \(\dot h = \frac12(0,\omega)\otimes h\)。<a href="#fn-5-ref">↩</a></p>
+  <p id="fn-6" style="margin:0 0 6px"><sup>6</sup> 第 762 页 (13.111)–(13.113)：这是符号约定上的疑点，不一定是印刷错误。按字面并用书中给的正的 \(c_f, c_r\)，\((v,\omega)\) 的线性化矩阵特征值约为 \(+3.18\) 与 \(-1.05\)（不稳定）；把侧偏刚度按 SAE 约定取负、或让轮胎力取恢复方向，特征值为 \(-1.06\pm2.09i\)（稳定），稳态横摆角速度在 φ = 2° 时为 0.068 rad/s，符合不足转向 \(\omega_{ss} = s\phi/(L+Ks^2)\)（参考代码第 14 项）。同页还把转动惯量单位写成 kg/m²（应为 kg·m²），并说 2D 刚体力学「将在 13.3.3 节介绍」，而这段本身就在 13.3.3 节。<a href="#fn-6-ref">↩</a></p>
+  <p id="fn-7" style="margin:0 0 6px"><sup>7</sup> 第 767 页 (13.128)：原书为 \(\frac{d}{dt}(m\dot q) - \frac{\partial V}{\partial q} = 0\)。由 \(m\ddot q = F = -\partial V/\partial q\)，应为加号；(13.130) 与例 13.11 的 \(m\ddot q_3 + mg = 0\) 都与加号一致（参考代码第 15 项）。<a href="#fn-7-ref">↩</a></p>
+  <p id="fn-8" style="margin:0 0 6px"><sup>8</sup> 第 768 页 (13.132)：原书在 \(\frac12m(\dot q_1^2+\dot q_2^2+\dot q_3^2) - mgq_3\) 之后还写了「\(= 0\)」，Lagrange 量并不恒为零。<a href="#fn-8-ref">↩</a></p>
+  <p id="fn-9" style="margin:0 0 6px"><sup>9</sup> 第 772–774 页例 13.13：原书印的是 (13.149) \(K_1 = \frac12m_1\ell_1\dot\theta_1^2 + \frac12I_1\dot\theta_1^2\)（应为 \(\ell_1^2\)）；(13.151) \(K_2 = \frac12p\cdot p + \ldots\)（应为 \(\frac12m_2\dot p\cdot\dot p\)）；(13.152) 说 \(p\) 是「\(\mathcal{A}_1\) 的质心」并写 \(p_1 = d_1\cos\theta_1 + \ell_2\cos\theta_2\)（应为 \(\mathcal{A}_2\) 的质心，且图 13.13 中 \(\theta_2\) 是相对角，应为 \(\cos(\theta_1+\theta_2)\)，(13.153) 同理）；(13.157)、(13.159)、(13.160) 中的「\(m_2\ell_1\ell_2p_2\)」应为 \(m_2d_1\ell_2\sin\theta_2\)；(13.158) 印作 \(g_1 = (m_1\ell_1+m_2d_1)gp_1 + m_1\ell_2p_2\)、\(g_2 = m_2\ell_2gp_2\)（应为正文所示的余弦形式，第二项是 \(m_2\) 而非 \(m_1\)）；(13.159) 矩阵的 (2,1) 元印作 \(\dot\theta_1\)（乘上前面的负号后符号反了，应为 \(-\dot\theta_1\)）；(13.161) 第二行印作 \(m_{22}\ddot\theta_1 + m_{21}\ddot\theta_2\)（下标互换，应为 \(m_{21}\ddot\theta_1 + m_{22}\ddot\theta_2\)）。(13.156) 与 (13.161) 的速度项是对的。参考代码第 16 项从 Lagrange 量数值求出 \(M\)、\(C\)、\(g\) 逐项核对；用原书 (13.159) 的 C 积分 5 秒，能量漂移约 19，用改正后的 C 漂移约 \(2\times10^{-7}\)。<a href="#fn-9-ref">↩</a></p>
+  <p id="fn-10" style="margin:0 0 6px"><sup>10</sup> 第 777 页 (13.179)、(13.180)：原书说 \(G\) 是「\(n\times k\) 矩阵」，但 \(G^T\lambda\) 要是 \(n\) 维、\(GM^{-1}G^T\) 要是 \(k\times k\)，\(G\) 应为 \(k\times n\)；(13.180) 括号内印作 \(u - C(q,\dot q)\dot q\)，漏了 \(-g(q)\)（对照形式相同的 (13.184)）。<a href="#fn-10-ref">↩</a></p>
+  <p id="fn-11" style="margin:0 0 6px"><sup>11</sup> 第 780 页 (13.198)：原书第二式为 \(\dot p_i = \partial H/\partial q_i\)。比较 (13.197) 与 (13.193) 中 \(dq_i\) 的系数得 \(\partial H/\partial q_i = -\dot p_i\)。用摆核对：带负号时 \(H\) 守恒，按原书积分 1 秒 \(H\) 从 −5.30 变成 7.89（参考代码第 18 项）。<a href="#fn-11-ref">↩</a></p>
+  <p id="fn-typo" style="margin:0"><sup>注</sup> 其它小问题：第 717 页「becasue」（应为 because）；第 718 页「drops the dimension of \(U(x)\)」应为 \(U(q)\)；第 739 页例 13.4 维数为 \(k\) 却写 \(1\le i\le n-1\)、\(\dot x_n = u\)；第 765 页 \(x(t)+\epsilon h(t)\)「for all \(t\in[0,1]\)」与 \(T = [t_0,t_1]\) 不一致；第 776 页 (13.173) 求和下标 \(l\) 与求和项中的 \(j\) 不一致；第 781 页「Louisville's theorem」应为 Liouville；第 782 页「Weiner process」应为 Wiener。</p>
+</div>
+</section>
+
+<nav class="pager">
+  <a href="../part2/ch8-feedback-motion-planning.html"><span class="dir">← 前置章节</span>第 8 章 反馈运动规划（8.3 节切空间与向量场）</a>
+  <a class="next" href="../index.html"><span class="dir">回到首页 →</span>全书路线图与进度</a>
+</nav>
+
+<footer class="page-foot">
+  内容依据 Steven M. LaValle《Planning Algorithms》（Cambridge University Press, 2006）Part IV 第 13 章整理与讲解，原书可在 <a href="https://lavalle.pl/planning/" target="_blank" rel="noopener">lavalle.pl/planning</a> 免费阅读，本章 PDF：<a href="https://lavalle.pl/planning/ch13.pdf" target="_blank" rel="noopener">ch13.pdf ↗</a>。互动图为学习辅助，标「补充」的内容不是书中原文；数值例子由 <a href="code/ch13_differential_models.py">part4/code/ch13_differential_models.py</a> 核对。
+</footer>
+
+</main>
+</div>
+</body>
+</html>
