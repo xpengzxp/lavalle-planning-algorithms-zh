@@ -1,0 +1,822 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>基本运动规划的扩展 · 第 7 章</title>
+<meta name="description" content="LaValle《Planning Algorithms》第 7 章的中文互动教程：时变问题与速度调节、多机器人与协调空间、混合系统与操作规划、闭运动链、折叠问题、覆盖规划、最优运动规划与 Pareto 最优。">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<link rel="stylesheet" href="../assets/style.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+<script src="../assets/common.js"></script>
+<script defer src="js/ch7-lib.js"></script>
+<script defer src="js/ch7-time.js"></script>
+<script defer src="js/ch7-multi.js"></script>
+<script defer src="js/ch7-hybrid.js"></script>
+<script defer src="js/ch7-closed.js"></script>
+<script defer src="js/ch7-folding.js"></script>
+<script defer src="js/ch7-coverage.js"></script>
+<script defer src="js/ch7-optimal.js"></script>
+<style>
+  .ch7-stage { width: 100%; }
+  .ch7-stage canvas { margin: 0 auto; border-radius: 6px; }
+  .box.intuition ul { margin: 0; padding-left: 1.2em; }
+  .fig { max-width: 640px; margin: 0 auto; display: block; }
+  .fn { font-size: .8em; }
+  .formulation .box-title { color: var(--accent-text); }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <a class="brand" href="../index.html">Planning Algorithms 学习站</a>
+  <span class="crumbs"><a href="../index.html">首页</a> › Part II › 第 7 章 基本运动规划的扩展</span>
+  <button class="icon-btn" id="theme-toggle" type="button" aria-label="切换深浅色">☾</button>
+</header>
+
+<div class="layout">
+<nav class="toc" aria-label="目录">
+  <p class="toc-title">本章目录</p>
+  <ol>
+    <li><a href="#overview">本章导读</a></li>
+    <li><a href="#s7-1">7.1 时变问题</a>
+      <ol>
+        <li><a href="#s7-1-1">问题表述</a></li>
+        <li><a href="#s7-1-2">直接求解</a></li>
+        <li><a href="#s7-1-3">速度调节法</a></li>
+      </ol>
+    </li>
+    <li><a href="#s7-2">7.2 多个机器人</a>
+      <ol>
+        <li><a href="#s7-2-1">问题表述</a></li>
+        <li><a href="#s7-2-2">解耦规划</a></li>
+      </ol>
+    </li>
+    <li><a href="#s7-3">7.3 离散与连续混合</a>
+      <ol>
+        <li><a href="#s7-3-1">混合系统框架</a></li>
+        <li><a href="#s7-3-2">操作规划</a></li>
+      </ol>
+    </li>
+    <li><a href="#s7-4">7.4 闭运动链的规划</a>
+      <ol>
+        <li><a href="#s7-4-1">改造运动规划算法</a></li>
+        <li><a href="#s7-4-2">主动–被动分解</a></li>
+      </ol>
+    </li>
+    <li><a href="#s7-5">7.5 机器人学与生物学中的折叠</a></li>
+    <li><a href="#s7-6">7.6 覆盖规划</a></li>
+    <li><a href="#s7-7">7.7 最优运动规划</a>
+      <ol>
+        <li><a href="#s7-7-1">单个机器人的最优性</a></li>
+        <li><a href="#s7-7-2">多机器人的最优性</a></li>
+      </ol>
+    </li>
+    <li><a href="#further">延伸阅读</a></li>
+    <li><a href="#cheatsheet">本章速查表</a></li>
+    <li><a href="#pitfalls">常见陷阱</a></li>
+    <li><a href="#exercises">习题导引</a></li>
+    <li><a href="#notes">脚注与原书笔误</a></li>
+  </ol>
+</nav>
+
+<main class="content">
+
+<p class="kicker">Part II · 第 7 章</p>
+<h1>基本运动规划的扩展 <span class="en">Extensions of Basic Motion Planning</span></h1>
+<p class="lede">第 3–6 章解决的是「一个机器人、静止的障碍、找一条无碰撞路径」。这一章把这个基本问题朝七个方向推开：障碍会动、机器人不止一个、有离散的模式、连杆连成了环、要折叠、要扫遍整个区域、要最优。每一个都是基本问题的一个「分支（spin-off）」，用前几章的概念和算法就能相当直接地描述出来。</p>
+
+<section id="overview">
+<h2 style="border-top:0;margin-top:1em">本章导读</h2>
+
+<svg class="fig" viewBox="0 0 640 300" role="img" aria-label="本章七个扩展一览">
+  <rect x="230" y="122" width="180" height="56" rx="12" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="320" y="146" text-anchor="middle" font-size="14" font-weight="650" fill="var(--accent-text)">基本运动规划</text>
+  <text x="320" y="165" text-anchor="middle" font-size="11.5" fill="var(--muted)">Formulation 4.1：在 C_free 中找路径</text>
+  <g font-size="12.5" fill="var(--text)">
+    <rect x="12" y="14" width="190" height="52" rx="9" fill="var(--surface)" stroke="var(--border-strong)"/>
+    <text x="107" y="36" text-anchor="middle">7.1 时变问题</text><text x="107" y="55" text-anchor="middle" font-size="11" fill="var(--muted)">X = C × T，时间只能向前</text>
+    <rect x="225" y="14" width="190" height="52" rx="9" fill="var(--surface)" stroke="var(--border-strong)"/>
+    <text x="320" y="36" text-anchor="middle">7.2 多个机器人</text><text x="320" y="55" text-anchor="middle" font-size="11" fill="var(--muted)">X = C¹ × … × Cᵐ，协调空间</text>
+    <rect x="438" y="14" width="190" height="52" rx="9" fill="var(--surface)" stroke="var(--border-strong)"/>
+    <text x="533" y="36" text-anchor="middle">7.3 离散与连续混合</text><text x="533" y="55" text-anchor="middle" font-size="11" fill="var(--muted)">X = C × M，操作规划</text>
+    <rect x="12" y="124" width="190" height="52" rx="9" fill="var(--surface)" stroke="var(--border-strong)"/>
+    <text x="107" y="146" text-anchor="middle">7.4 闭运动链</text><text x="107" y="165" text-anchor="middle" font-size="11" fill="var(--muted)">在没有参数化的 C_clo 上规划</text>
+    <rect x="438" y="124" width="190" height="52" rx="9" fill="var(--surface)" stroke="var(--border-strong)"/>
+    <text x="533" y="146" text-anchor="middle">7.5 折叠</text><text x="533" y="165" text-anchor="middle" font-size="11" fill="var(--muted)">能量函数 = 「软」障碍</text>
+    <rect x="118" y="234" width="190" height="52" rx="9" fill="var(--surface)" stroke="var(--border-strong)"/>
+    <text x="213" y="256" text-anchor="middle">7.6 覆盖规划</text><text x="213" y="275" text-anchor="middle" font-size="11" fill="var(--muted)">走遍整片区域，而不是到达一点</text>
+    <rect x="332" y="234" width="190" height="52" rx="9" fill="var(--surface)" stroke="var(--border-strong)"/>
+    <text x="427" y="256" text-anchor="middle">7.7 最优运动规划</text><text x="427" y="275" text-anchor="middle" font-size="11" fill="var(--muted)">代价泛函，Pareto 最优</text>
+  </g>
+  <g stroke="var(--muted)" stroke-width="1.4" fill="none">
+    <path d="M140 66 L260 122"/><path d="M320 66 L320 122"/><path d="M500 66 L380 122"/>
+    <path d="M202 150 L230 150"/><path d="M438 150 L410 150"/><path d="M240 234 L290 178"/><path d="M400 234 L350 178"/>
+  </g>
+</svg>
+<p class="small muted" style="text-align:center">七个扩展各自独立。书中特别说明：这一章不像前几章那样环环相扣，可以只挑感兴趣的小节读，不必担心漏掉重要细节。</p>
+
+<p>贯穿全章的一个记号变化是<b>状态空间 state space</b> \(X\)。第 4 章引入的 C-space \(\mathcal{C}\) 可以看作一种特殊的状态空间——它编码了能施加在一组物体上的所有变换，所以第 5、6 章是在 \(X = \mathcal{C}\) 里规划。这一章的很多问题光有 \(\mathcal{C}\) 不够：要加上时间、加上离散模式、把好几个 C-space 乘起来……所以统一写成 \(X\)，它看起来更一般。不过大多数情况下 \(X\) 仍然由一个或多个 C-space 派生而来，所以 C-space 和状态空间这两套术语会混着用。</p>
+
+<div class="box">
+  <div class="box-title">本章地图与读法</div>
+  <ul style="margin:0">
+    <li><b>7.1 时变问题</b>：障碍和目标会动（但运动可以预测）。状态空间多了时间这一维，路径必须<b>时间单调</b>；还可以先定路径、再定时间（速度调节）。</li>
+    <li><b>7.2 多个机器人</b>：把所有机器人的 C-space 乘起来就又是一个普通的规划问题，但维数随机器人个数线性增长。解耦方法（优先级规划、协调空间）更实用，却会丢掉完备性。</li>
+    <li><b>7.3 离散与连续混合</b>：状态 = (构型, 模式)。门和钥匙、会变形的机器人、搬零件的机械手（transit / transfer 交替）。</li>
+    <li><b>7.4 闭运动链</b>：接着 4.4 节。闭合约束把规划限制在一个没有参数化的低维簇 \(\mathcal{C}_{clo}\) 上，采样时落在上面的概率是 0——要么沿切平面「步进」，要么用主动–被动分解直接在上面取样。</li>
+    <li><b>7.5 折叠</b>：纸箱、结、药物分子、蛋白质。能量函数代替了「是 / 否」的障碍。</li>
+    <li><b>7.6 覆盖</b>：割草、吸尘、扫雷——要扫遍区域，而不是到达一点。</li>
+    <li><b>7.7 最优</b>：过渡到后面各章。动作、代价泛函、近似最优规划；多机器人时代价是向量，自然的最优概念是 Pareto 最优。</li>
+  </ul>
+  <p style="margin:.6em 0 0">前置知识：第 4 章的 C-space 与 C-space 障碍（7.4 节需要 4.4 节，见 <a href="ch4-configuration-space.html#s4-4">第 4 章教程</a>）、第 5 章的采样规划（RDT、PRM、网格搜索，见 <a href="ch5-sampling-based-planning.html">第 5 章教程</a>）、第 6 章的组合方法（竖直单元分解、柱形代数分解，见 <a href="ch6-combinatorial-motion-planning.html">第 6 章教程</a>）。7.7 节会用到 2.3 节的代价与动态规划（<a href="../part1/ch2-discrete-planning.html">第 2 章教程</a>）。</p>
+</div>
+<p class="small muted">本页互动图的颜色约定：灰 = 障碍 \(\mathcal{O}\) 或 \(X_{obs}\)，绿 = 解路径；多个机器人时 \(\mathcal{A}^1\) 蓝、\(\mathcal{A}^2\) 粉、\(\mathcal{A}^3\) 琥珀；操作规划里 transit 蓝、transfer 琥珀。所有互动图都直接用参考代码 <a href="code/ch7_extensions.py"><code>part2/code/ch7_extensions.py</code></a> 独立核对过页面上出现的数值。</p>
+</section>
+
+<!-- ============================================================ 7.1 -->
+<section id="s7-1">
+<h2>7.1 时变问题 <span class="en">Time-Varying Problems</span></h2>
+<p>这一节把<b>时间</b>放进运动规划。以前虽然机器人在动，但一直假设障碍区域 \(\mathcal{O}\) 和目标 \(q_G\in\mathcal{C}_{free}\) 永远不变；现在它们可以随时间变化，不过变化是<b>可预测的</b>。如果运动不可预测，就需要某种反馈来响应执行时的观测——那要难得多，放到第 8 章和整个 Part IV 去讲。</p>
+
+<h3 id="s7-1-1">7.1.1 问题表述</h3>
+<p>设计目标是让学过的工具能直接用上。设 \(T\subset\mathbb{R}\) 是<b>时间区间 time interval</b>，可以<b>有界</b>：\(T=[0,t_f]\)，0 是初始时刻、\(t_f\) 是<b>终止时刻 final time</b>；也可以<b>无界</b>：\(T=[0,\infty)\)。状态空间取 \(X = \mathcal{C}\times T\)，状态写成 \(x=(q,t)\)。规划直接在 \(X\) 里进行，在很多方面它和以前的 C-space 没什么两样，只有一个关键区别：<b>时间只能向前走 time marches forward</b>。想象一条在 \(X\) 里的路径先经过 \((q_1,5)\)、后经过 \((q_2,3)\)——这需要时间倒流。数学上没问题，但对大多数应用不现实，所以 \(X\) 里的路径被约束为只能沿时间向前。</p>
+
+<div class="box def formulation">
+  <div class="box-title">Formulation 7.1（时变运动规划问题 The Time-Varying Motion Planning Problem）</div>
+  <ol>
+    <li>世界 \(\mathcal{W}=\mathbb{R}^2\) 或 \(\mathbb{R}^3\)，同 Formulation 4.1。</li>
+    <li>时间区间 \(T\subset\mathbb{R}\)：有界时 \(T=[0,t_f]\)（某个终止时刻 \(t_f>0\)），无界时 \(T=[0,\infty)\)。</li>
+    <li>半代数的时变障碍区域 \(\mathcal{O}(t)\subset\mathcal{W}\)，对每个 \(t\in T\)。假设障碍区域是有限个刚体，做连续的、随时间变化的刚体变换。</li>
+    <li>机器人 \(\mathcal{A}\)（或连杆 \(\mathcal{A}_1,\ldots,\mathcal{A}_m\)）与 C-space \(\mathcal{C}\) 的定义同 Formulation 4.1。</li>
+    <li>状态空间 \(X=\mathcal{C}\times T\)，\(x=(q,t)\)。状态空间中的障碍区域
+      <div class="eq">$$X_{obs}=\{(q,t)\in X \mid \mathcal{A}(q)\cap\mathcal{O}(t)\neq\emptyset\}, \tag{7.1}$$</div>
+      \(X_{free}=X\setminus X_{obs}\)。对给定的 \(t\)，\(X_{obs}\)、\(X_{free}\) 的切片记作 \(\mathcal{C}_{obs}(t)\)、\(\mathcal{C}_{free}(t)\)（设 \(\mathcal{A}\) 是一个物体）：
+      <div class="eq">$$\mathcal{C}_{obs}(t)=\{q\in\mathcal{C}\mid \mathcal{A}(q)\cap\mathcal{O}(t)\neq\emptyset\}, \tag{7.2}$$</div>
+      \(\mathcal{C}_{free}(t)=\mathcal{C}\setminus\mathcal{C}_{obs}(t)\)。</li>
+    <li>初始状态 \(x_I\in X_{free}\)，要求 \(x_I=(q_I,0)\)、\(q_I\in\mathcal{C}_{free}(0)\)：初始时刻机器人不能处在碰撞中。</li>
+    <li>目标区域 \(X_G\subset X_{free}\)。典型的定义是取 \(q_G\in\mathcal{C}\)，令 \(X_G=\{(q_G,t)\in X_{free}\mid t\in T\}\)，即目标<b>静止 stationary</b>不动。</li>
+    <li>完备算法必须计算一条连续的、<b>时间单调 time-monotonic</b>的路径 \(\tau:[0,1]\to X_{free}\)，使 \(\tau(0)=x_I\)、\(\tau(1)\in X_G\)，或者正确报告这样的路径不存在。时间单调是指：对任何 \(s_1&lt;s_2\)，都有 \(t_1&lt;t_2\)，其中 \((q_1,t_1)=\tau(s_1)\)、\((q_2,t_2)=\tau(s_2)\)。</li>
+  </ol>
+</div>
+
+<p><b>例 7.1（分段线性的障碍运动）</b>：图 7.1 里一个凸多边形机器人 \(\mathcal{A}\) 在 \(\mathcal{W}=\mathbb{R}^2\) 中平移，有一个凸多边形障碍 \(\mathcal{O}\)。两者合起来给出一个凸多边形的 C-space 障碍 \(\mathcal{C}_{obs}(t)\)。障碍按<b>分段线性运动模型 piecewise-linear motion model</b> 运动：施加在 \(\mathcal{O}\) 上的变换是时间的分段线性函数。例如障碍上一个固定点 \((x,y)\)，在线性运动模型下要变成 \((x+c_1t,\ y+c_2t)\)，\(c_1,c_2\in\mathbb{R}\)；分段线性则允许在有限个<b>临界时刻 critical times</b> 换成另一个线性运动，临界时刻之间保持线性。图中有两个临界时刻。若 \(\mathcal{C}_{obs}(t)\) 是多边形、运动分段线性，则 \(X_{obs}\) 是<b>多面体</b>；静止的目标在图里是一条平行于 \(T\) 轴的直线。</p>
+
+<div class="widget wide" data-widget="tv-xspace"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>旋转左边的三维图：\(X_{obs}\) 由三段凸多面体拼成，接缝正好在两个临界时刻 \(t=0.3\)、\(0.65\)。拖动「时刻 t」，右边就是那一刻的切片 \(\mathcal{C}_{free}(t)\)。</li>
+  <li>换「上下扫过」并把速度上限 b 调到最小：路径会在障碍前停几步（「原地等待的步数」不再是 0），等它扫过去再走——在 \(X\) 里那就是一段平行于 \(T\) 轴的线。路径的每一步都向右（时间增大），从不回头。</li>
+  <li>把 qI 拖进 \(t=0\) 时的六边形里：Formulation 7.1 第 6 条不满足。</li>
+</ul></div>
+
+<p>这一般形式对路径 \(\tau\) <b>没有额外约束</b>，等于说机器人的运动模型允许<b>无限加速度、无界速度</b>：速度可以瞬间改变，但 \(\mathcal{C}\) 里的路径仍必须连续。第 4 章不需要提这件事，因为那里没有时间；现在必须提了<sup class="fn"><a href="#fn-accel" id="fn-accel-ref">1</a></sup>。</p>
+
+<h3 id="s7-1-2">7.1.2 直接求解 <span class="en">Direct Solutions</span></h3>
+<h4>基于采样的方法</h4>
+<p>很多采样方法不费什么事就能从 \(\mathcal{C}\) 搬到 \(X\)。检查路径段是否无碰撞时要考虑障碍模型的时间相关性，5.3.4 节的技术可以推广。一个重要的问题是 \(X\) 上的度量：对某些算法，可能需要允许<b>伪度量 pseudometric</b>，因为时间打破了对称性（倒着走时间不像正着走那么容易）。设 \((\mathcal{C},\rho)\) 是度量空间，可以把度量沿时间扩展成伪度量 \(\rho_X\)：对 \(x=(q,t)\)、\(x'=(q',t')\)，</p>
+<div class="eq">$$\rho_X(x,x')=\begin{cases}0 & \text{若 } q=q'\\ \infty & \text{若 } q\neq q' \text{ 且 } t'\le t\\ \rho(q,q') & \text{其它情形.}\end{cases} \tag{7.3}$$</div>
+<p>用 \(\rho_X\)，很多采样方法自然就能工作。例如 5.5 节的 RDT：单棵树时，\(\rho_X\) 保证所有路径段都沿时间向前（「过去」的顶点到未来样本的距离是有限的，反过来是 ∞）。<b>双向</b>方法对时变问题更难，因为 \(X_G\) 通常不是一个点，不清楚目标树该从哪个 \((q,t)\) 长起——一种可能是把目标树初始化成一整段时间不变的线段。5.6 节的采样路线图也许是最容易改的：需要一个<b>有向路线图 directed roadmap</b>，每条边都有方向，从而得到时间单调的路径。对每对 \(t\neq t'\) 的状态 \((q,t)\)、\((q',t')\)，恰有一个方向可以尝试连边；\(t=t'\) 时不能连边，否则机器人要瞬间从 \(\mathcal{W}\) 的一处「传送」到另一处。既然有向边已经照顾了时间向前，路线图方法里不必用 (7.3)，用一个对称的度量反而更好。</p>
+
+<h4>组合方法</h4>
+<p>有时可以用组合方法。如果运动模型是<b>代数的</b>（用多项式表示），\(X_{obs}\) 就是半代数集，可以用 6.4 节基于计算实代数几何的一般规划器。关键问题依然是得到的路线图必须有向、所有边都时间单调。对 Canny 的路线图算法，这一点似乎很难保证；<b>柱形代数分解 cylindrical algebraic decomposition</b> 则容易改：只要在投影序列里把时间选为<b>最后</b>考虑的变量，就得到 \(\mathbb{Q}[t]\) 中的多项式，\(\mathbb{R}\) 被很好地划分成时间区间和时刻；然后可以从一个柱体里的单元连到<b>之后</b>某个柱体里相邻的单元。</p>
+<p>若 \(X_{obs}\) 像图 7.1 那样是多面体，可以用竖直分解：最好先沿时间轴扫描平面，在线性运动改变的临界时刻停下，得到一片片切片，再按 6.3.3 节递归分解；这也便于连接相邻单元、得到时间单调的路径段。不难想象这种做法对 \(\mathcal{C}_{obs}(t)\) 是多面体（6.3.3 节）、时间是第四维的四维 \(X\) 也行——同样，最好先沿时间轴扫描。</p>
+<p>如果 \(X\) <b>没有</b>按每个非临界时间区间分解成柱形切片，单元分解仍可以用，但连接单元时要小心：图 7.2 展示了相邻单元之间的<b>传递性被打破</b>。这也让单元里采样点的选择变得复杂。</p>
+
+<div class="widget wide" data-widget="tv-transitivity"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>默认布局就是图 7.2：C₁ 能到 C₂、C₂ 能到 C₃，按传递性推断「C₁ 能到 C₃」，但真实答案是不能——C₁ 最早的时刻都晚于 C₃ 最晚的时刻，时间单调的路径进不去。</li>
+  <li>勾上「按 T 切成柱体」：每个单元在所有端点处被竖直切开，小单元之间只有「同一时间片里上下穿过」和「沿时间前进一片」两种边，可达关系就可以放心地传递了。</li>
+  <li>把 C₃ 向右拖到和 C₁ 时间上重叠：这时从 C₁ 也能到 C₃ 了。</li>
+</ul></div>
+
+<h4>速度上限 <span class="en">Bounded speed</span></h4>
+<p>到目前为止完全没考虑机器人必须多快才能躲开障碍。如果解要求机器人任意快地运动，在很多应用里显然不现实。迈向更现实的模型的一步是给机器人的速度加一个上限（第 13 章会走得更远）。简单起见设 \(\mathcal{C}=\mathbb{R}^2\)，对应 \(\mathcal{W}=\mathbb{R}^2\) 中平移的刚体 \(\mathcal{A}\)；位形写成 \(q=(y,z)\)（因为 \(x\) 已经用来表示整个状态向量了）。<b>机器人速度 robot velocity</b> 是 \(v=(\dot y,\dot z)\in\mathbb{R}^2\)，\(\dot y=dy/dt\)、\(\dot z=dz/dt\)；<b>机器人速率 robot speed</b> 是 \(\|v\|=\sqrt{\dot y^2+\dot z^2}\)。<b>速度上限 speed bound</b> \(b\in(0,\infty)\) 要求 \(\|v\|\le b\)。</p>
+<p>回到图 7.1，这意味着解路径 \(\tau\) 的<b>斜率</b>有界。设 \(\tau\) 的定义域是 \(T=[0,t_f]\) 而不是 \([0,1]\)，于是 \(\tau:T\to X\)、\(\tau(t)=(y,z,t)\)，\(d\tau_1/dt=\dot y\)、\(d\tau_2/dt=\dot z\)（\(\tau_i\) 表示向量值函数 \(\tau\) 的第 \(i\) 个分量）。可见 \(b\) 约束的是 \(\tau(t)\) 在 \(X\) 里的斜率。设只在 \(y\) 方向运动、\(b=1\)：机器人不动，速率为 0，满足任何上限；以速率 1 运动时 \(d\tau_1/dt=1\)、\(d\tau_2/dt=0\)，满足上限，在图 7.1 里它在 \(yt\) 平面上斜率为 1、在 \(zt\) 平面上是水平的；若 \(d\tau_1/dt=d\tau_2/dt=1\)，速率是 \(\sqrt2\)，超过上限。一般地，任意状态 \((y,z,t)\) 处的速度向量指向一个以 \((y,z)\) 为顶点、朝正 \(t\) 方向张开的<b>锥</b>（图 7.3）。在 \(t+\Delta t\) 时刻状态必须留在锥里：</p>
+<div class="eq">$$\big(y(t+\Delta t)-y(t)\big)^2+\big(z(t+\Delta t)-z(t)\big)^2\le b^2(\Delta t)^2. \tag{7.4}$$</div>
+<p>这个约束让第 5、6 章的算法难改得多。即使障碍做分段线性运动，这个问题也已被证明是 <b>PSPACE-hard</b> 的；有一个完备算法，与 6.2.4 节的最短路路线图算法相似。5.6 节的采样路线图也许是最容易适配的采样算法之一：为点 \(q\) 尝试连接的邻居必须落在表示速度上限的锥里。若强制这个约束，就得到分辨率完备或概率完备的规划算法。</p>
+
+<div class="widget" data-widget="tv-rdt"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>选「对称的欧氏距离」点运行：很快就「找到解」，但树里有大量红色虚线——时间倒流的边，解也不合法。换回 ρ_X：红边一条也没有。</li>
+  <li>鼠标在图上移动时会显示那一点的速度锥（图 7.3 的投影）。把 b 调大，锥变宽；调到 1 左右，「过马路」就过不去了（要在两辆车之间穿过一条车道，至少要 b ≈ 2）。</li>
+  <li>换到「走廊里的行人」：纯 ρ_X 常常跑满 2000 个顶点也到不了——(7.3) 只看 |q − q'|、不管早了多久，总挑中一些很久以前、早已被堵死的顶点。<span class="muted">（补充：「ρ_X + 时间差」是我们加的对照，它仍只连过去的顶点，但成功率高得多。）</span></li>
+</ul></div>
+
+<h3 id="s7-1-3">7.1.3 速度调节法 <span class="en">The Velocity-Tuning Method</span></h3>
+<p>另一种思路是不在 \(\mathcal{C}\times T\) 里规划，而把问题<b>解耦</b>成<b>路径规划 path planning</b> 和<b>运动定时 motion timing</b> 两部分。基于这种方法的算法不完备，但「速度调节」是一个可以用到别处的重要思想。设既有<b>静止障碍</b>又有<b>移动障碍</b>。对静止障碍，先用第 5、6 章的任何技术算出一条路径 \(\tau:[0,1]\to\mathcal{C}_{free}\)。</p>
+<p>第二阶段处理定时。设计一个<b>时间函数 timing function</b>（或称 time scaling）\(\sigma:T\to[0,1]\)，表示时刻 \(t\) 时机器人在路径 \(\tau\) 上的位置。这由复合 \(\phi=\tau\circ\sigma\) 实现：它经由 \([0,1]\) 把 \(T\) 映到 \(\mathcal{C}_{free}\)，\(\phi:T\to\mathcal{C}_{free}\)，时刻 \(t\) 的位形是 \(\phi(t)=\tau(\sigma(t))\)。</p>
+<p>可以定义一个二维状态空间（图 7.4），把 \(\sigma\)（从而 \(\phi\)）的设计变成熟悉的规划问题。机器人要沿路径从 \(\tau(0)\) 走到 \(\tau(1)\)，同时障碍 \(\mathcal{O}(t)\) 在时间区间 \(T\) 上沿它自己的路径运动。令 \(S=[0,1]\) 表示 \(\tau\) 的定义域，状态空间 \(X=T\times S\)，每个点 \((t,s)\) 表示时刻 \(t\in T\) 与路径上的位置 \(s\in[0,1]\)。\(X\) 中的障碍区域是</p>
+<div class="eq">$$X_{obs}=\{(t,s)\in X\mid \mathcal{A}(\tau(s))\cap\mathcal{O}(t)\neq\emptyset\}. \tag{7.5}$$</div>
+<p>同样 \(X_{free}=X\setminus X_{obs}\)，任务是找一条连续路径 \(g:[0,1]\to X_{free}\)。若 \(g\) 时间单调，那么每个时刻 \(t\in T\) 都被指定了一个位置 \(s\in S\)，这些指定组织起来就是时间函数 \(\sigma:T\to S\)，再由 \(\phi=\tau\circ\sigma\) 得到机器人在每个时刻的位置。在这里「时间单调」意味着路径在图 7.4b 里必须一直从左往右走；但在正的 \(s\) 方向上<b>可以不单调</b>——对应沿 \(\tau\) 来回移动，有些位形会被重访。</p>
+<p>Formulation 7.1 里的任何方法都能用在这里。此时 \(X\) 的维数是 2。若 \(\mathcal{A}\) 和 \(\mathcal{O}\) 都是多边形、它们的路径都是分段线性的，\(X_{obs}\) 就是多边形区域，可以沿时间轴扫描、应用 6.2.2 节的竖直分解，得到一个完备算法——在<b>已经承诺了 \(\tau\)</b> 之后完备，对 Formulation 7.1 并不完备。结果如图 7.5：单元之间只有能沿时间正向从一个到达另一个时才相连。作为采样方法的例子（当 \(X_{obs}\) 不是多边形时也许更好），可以在 \(X\) 上放一张网格，用 5.4.2 节的经典搜索算法；同样只允许 \(X\) 里沿时间向前的路径段。</p>
+
+<div class="widget wide" data-widget="velocity-tuning"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>「无速度上限：竖直单元分解」：7 个 2-单元，蓝色路线图只连沿时间向前的相邻单元（与图 7.5 一样，因为矩形有竖直边，这个例子「不在一般位置」）。每个挨着顶边的单元都能直接冲上 s = 1，包括第一个——这就是图 7.5 图题最后一句。</li>
+  <li>「有速度上限」、b = 2：机器人先在起点等一会儿，再以全速前进，恰好在第二个障碍穿过之前溜过去（参考代码第 2 项：最早 t ≈ 0.704）；b ≥ 3 就能抢在第一个障碍下来之前冲过去。</li>
+  <li>换「进退两难」、b = 2 或 3：路径会<b>沿 τ 倒退</b>一段，躲开从下面升上来的第三个障碍；b ≥ 4 时又能一口气冲过去。</li>
+</ul></div>
+</section>
+
+<!-- ============================================================ 7.2 -->
+<section id="s7-2">
+<h2>7.2 多个机器人 <span class="en">Multiple Robots</span></h2>
+<p>设多个机器人共享同一个世界 \(\mathcal{W}\)，要为每个机器人算出既避开障碍、又避开其它机器人的路径。第 4 章里每个机器人可以是一个刚体，也可以由 \(k\) 个相连的物体组成；为了不混淆，这一节用<b>上标</b>区分不同的机器人：第 \(i\) 个机器人记作 \(\mathcal{A}^i\)。设共有 \(m\) 个机器人 \(\mathcal{A}^1,\ldots,\mathcal{A}^m\)，每个有自己的 C-space \(\mathcal{C}^i\)、初始与目标位形 \(q^i_{init}\)、\(q^i_{goal}\)。</p>
+
+<h3 id="s7-2-1">7.2.1 问题表述</h3>
+<p>定义一个同时考虑所有机器人位形的状态空间</p>
+<div class="eq">$$X=\mathcal{C}^1\times\mathcal{C}^2\times\cdots\times\mathcal{C}^m. \tag{7.6}$$</div>
+<p>状态 \(x\in X\) 指定了所有机器人的位形，可以写成 \(x=(q^1,q^2,\ldots,q^m)\)，\(X\) 的维数是 \(N=\sum_{i=1}^m\dim(\mathcal{C}^i)\)。状态空间中的障碍有两个来源：1）<b>机器人–障碍</b>碰撞；2）<b>机器人–机器人</b>碰撞。对每个 \(i\)，\(X\) 中对应 \(\mathcal{A}^i\) 碰到障碍区域的子集是</p>
+<div class="eq">$$X^i_{obs}=\{x\in X\mid \mathcal{A}^i(q^i)\cap\mathcal{O}\neq\emptyset\}, \tag{7.7}$$</div>
+<p>它只刻画机器人与障碍的碰撞。对每对机器人 \(\mathcal{A}^i\)、\(\mathcal{A}^j\)，\(X\) 中对应两者相碰的子集是</p>
+<div class="eq">$$X^{ij}_{obs}=\{x\in X\mid \mathcal{A}^i(q^i)\cap\mathcal{A}^j(q^j)\neq\emptyset\}. \tag{7.8}$$</div>
+
+<div class="box def formulation">
+  <div class="box-title">Formulation 7.2（多机器人运动规划 Multiple-Robot Motion Planning）</div>
+  <ol>
+    <li>世界 \(\mathcal{W}\) 与障碍区域 \(\mathcal{O}\) 同 Formulation 4.1。</li>
+    <li>\(m\) 个机器人 \(\mathcal{A}^1,\ldots,\mathcal{A}^m\)，每个可以由一个或多个物体组成。</li>
+    <li>每个机器人 \(\mathcal{A}^i\)（\(i\) 从 1 到 \(m\)）有一个 C-space \(\mathcal{C}^i\)。</li>
+    <li>状态空间是笛卡儿积 \(X=\mathcal{C}^1\times\mathcal{C}^2\times\cdots\times\mathcal{C}^m\) <span class="eqno">(7.9)</span>，障碍区域
+      <div class="eq">$$X_{obs}=\Big(\bigcup_{i=1}^m X^i_{obs}\Big)\ \bigcup\ \Big(\bigcup_{ij,\ i\neq j}X^{ij}_{obs}\Big), \tag{7.10}$$</div>
+      其中 \(X^i_{obs}\)、\(X^{ij}_{obs}\) 分别来自 (7.7)、(7.8)。</li>
+    <li>初始状态 \(x_I\in X_{free}\)，\(x_I=(q^1_I,\ldots,q^m_I)\)：每个 \(i\) 的 \(q^i_I\) 是 \(\mathcal{A}^i\) 的初始位形。</li>
+    <li>目标状态 \(x_G\in X_{free}\)，\(x_G=(q^1_G,\ldots,q^m_G)\)。</li>
+    <li>任务是计算一条连续路径 \(\tau:[0,1]\to X_{free}\)，使 \(\tau(0)=x_{init}\)、\(\tau(1)\in x_{goal}\)<sup class="fn"><a href="#fn-f72" id="fn-f72-ref">2</a></sup>。</li>
+  </ol>
+</div>
+
+<h4>一个普通的运动规划问题？</h4>
+<p>表面上看多机器人问题没什么特别：第 4 章的表述已经涵盖了机器人由多个物体组成的情况，这些物体并不需要连在一起，所以 \(X\) 完全可以当作一个普通的 C-space，第 5、6 章的算法可以原样使用。主要的担忧是 \(X\) 的维数随机器人个数<b>线性增长</b>。例如 12 个刚体、每个 \(\mathcal{C}^i=SE(3)\)，\(X\) 的维数就是 \(6\cdot12=72\)。完备算法的时间至少是维数的指数，不太可能用在这种问题上；当机器人很多时，采样算法在实践中更可能扩展得好，但 \(X\) 的维数可能仍然太高。</p>
+<h4>为什么还要单独研究多机器人</h4>
+<ol>
+  <li>机器人的运动可以用很多有趣的方式<b>解耦</b>：先为各个机器人分别做出部分计划，再考虑计划之间的相互作用来得到解。这叫<b>解耦规划 decoupled planning</b>。</li>
+  <li>\(X_{obs}\) 中机器人–机器人碰撞的部分有<b>柱形结构</b>（图 7.6），可以用来设计更高效的算法：(7.8) 定义的每个 \(X^{ij}_{obs}\) 只依赖两个机器人——只要存在 \(i,j\) 使 \(\mathcal{A}^i(q^i)\cap\mathcal{A}^j(q^j)\neq\emptyset\)，点 \(x=(q^1,\ldots,q^m)\) 就在 \(X_{obs}\) 里，<b>不管其余 \(m-2\) 个机器人在哪</b>。对某些解耦方法，这甚至意味着 \(X_{obs}\) 能完全由二维投影刻画（图 7.9）。</li>
+  <li>如果关心最优性，会出现一组独特的问题：每个机器人的表现都要优化，这不是一个标准的优化问题，也没有一种不丢失关键信息的方法能把这些目标合成一个。7.7.2 节会解释，<b>Pareto 最优</b>是多机器人运动规划里自然的最优概念。</li>
+</ol>
+
+<h4>装配规划 <span class="en">Assembly planning</span></h4>
+<p>多机器人运动规划的一个重要变体是<b>装配规划</b>（1.2 节提过它在应用中的重要性）。在自动化制造中，很多复杂物体由零件一步步装配而成；用机器人把零件一个个操纵到正确位置插进去很方便（见 7.3.2 节）。想象图 7.7a 那样的一组零件，每个都被看作一个机器人，目标是把它们装成图 7.7b 那样的整体。这类问题一般从目标位形（约束很紧）出发、往外倒推。问题表述可以允许零件相互接触，但内部不能重叠。一般地，零件个数任意的装配规划问题是 <b>NP-hard</b> 的；在几种特殊情况下有多项式时间算法——例如零件能用<b>一串直线路径</b>依次移走的情况。</p>
+
+<div class="widget" data-widget="assembly"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>「七块」：每次找一块能沿一条直线平移出包围盒的零件拿走。拿走零件只会让别的零件更容易拿走，所以这种贪心是完备的（在「每块单独、沿直线移走」这一类动作里）。点「播放装配」看倒过来的装配顺序。</li>
+  <li>「零件得先右移再上移」：每块只能走一条直线时谁也拿不出来；允许多段直线（对单块零件做网格 BFS）就行了——零件 A¹ 沿 L 形通道 →→→↑↑↑↑ 出来。</li>
+  <li>「互锁的一对」：两种模式都报告无解。只允许一块一块平移时，这个物体根本装不起来。<span class="muted">（补充：本图的算法与「一块一块平移」的限制是我们为演示选的，书中只给了结论。）</span></li>
+</ul></div>
+
+<h3 id="s7-2-2">7.2.2 解耦规划 <span class="en">Decoupled planning</span></h3>
+<p>解耦方法先<b>忽略</b>机器人之间的相互作用来设计各自的运动；等到考虑这些相互作用时，每个机器人能做的选择已经被设计好的运动约束住了。出了问题时，这些方法通常没法撤回之前的承诺，因此<b>失去了完备性</b>。尽管如此，解耦方法相当实用，某些情况下还能恢复完备性。</p>
+
+<h4>优先级规划 <span class="en">Prioritized planning</span></h4>
+<p>一种直接的解耦方法是把机器人按<b>优先级</b>排序，先为优先级高的机器人规划；优先级低的机器人把优先级高的看作<b>移动障碍</b>。设排序为 \(\mathcal{A}^1,\ldots,\mathcal{A}^m\)，\(\mathcal{A}^1\) 的优先级最高；并设已为每个 \(i\) 算出无碰撞路径 \(\tau_i:[0,1]\to\mathcal{C}^i_{free}\)<sup class="fn"><a href="#fn-n" id="fn-n-ref">3</a></sup>。优先级规划按归纳进行：</p>
+<div class="box">
+  <p style="margin:0"><b>基础步</b>：用第 5、6 章任何运动规划算法为 \(\mathcal{A}^1\) 算一条无碰撞路径 \(\tau_1:[0,1]\to\mathcal{C}^1_{free}\)，再为 \(\tau_1\) 算一个时间函数 \(\sigma_1\)，得到 \(\phi_1=\tau_1\circ\sigma_1:T\to\mathcal{C}^1_{free}\)。</p>
+  <p style="margin:.5em 0 0"><b>归纳步</b>：设已为 \(\mathcal{A}^1,\ldots,\mathcal{A}^{i-1}\) 设计好 \(\phi_1,\ldots,\phi_{i-1}\)，而且它们彼此之间没有机器人–机器人碰撞。把前 \(i-1\) 个机器人表述为 \(\mathcal{W}\) 中的移动障碍：对每个 \(t\in T\) 和 \(j\in\{1,\ldots,i-1\}\)，\(\mathcal{A}^j\) 的位形 \(q^j\) 是 \(\phi_j(t)\)，于是 \(\mathcal{A}^j(\phi_j(t))\subset\mathcal{W}\) 可以看作障碍 \(\mathcal{O}(t)\) 的一部分。用 7.1 节任何时变运动规划方法设计路径 \(\tau_i\) 和时间函数 \(\sigma_i\)，令 \(\phi_i=\tau_i\circ\sigma_i\)。</p>
+</div>
+<p>它在很多情况下很实用，但图 7.8 说明了完备性是怎样丢掉的。优先级规划的一个特例是：先设计好所有路径 \(\tau_1,\ldots,\tau_m\)，再把每个归纳步表述成一个<b>速度调节</b>问题，于是得到一串容易解的二维规划问题。代价是选择更受限了。为所有机器人各自<b>预先</b>规划路径、甚至路线图，如果更仔细地协调机器人，就能得到一个强大的方法——这是下面的主题。</p>
+
+<div class="widget" data-widget="prioritized"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>「A¹ 优先」：A¹ 只顾自己，直接左移到终点并永远停在那里；A² 在（位置, 时刻）空间里怎么搜都没有解。这正是图 7.8 的情形。</li>
+  <li>「A² 优先」：A² 直奔终点，A¹ 把它当作移动障碍，先躲进凹口再出来——<b>换个优先级顺序就成功了</b>，可事先并不知道该怎么排。</li>
+  <li>「集中式」：在 \(X=\mathcal{C}^1\times\mathcal{C}^2\)（11² = 121 个状态）上直接搜索，最短的联合计划 9 步（参考代码第 3 项）。集中式搜索完备，但维数是两个 C-space 之和。</li>
+</ul></div>
+
+<h4>固定路径协调 <span class="en">Fixed-path coordination</span></h4>
+<p>设每个机器人 \(\mathcal{A}^i\) 被限制只能沿一条路径 \(\tau_i:[0,1]\to\mathcal{C}^i_{free}\) 运动（这条路径可以用任何普通的运动规划技术算出）。对 \(m\) 个机器人，定义一个称为<b>协调空间 coordination space</b> 的 \(m\) 维状态空间，用来安排机器人沿各自路径的运动，使它们互不相撞。一个重要特点是：时间只<b>隐式地</b>出现在协调空间里；算法要算的是协调空间里的一条路径，具体的时间安排很容易从中提取出来。</p>
+<p>对 \(m\) 个机器人，协调空间 \(X\) 是 \(m\) 维单位立方体 \(X=[0,1]^m\)，图 7.9 是 \(m=3\) 的例子。\(X\) 的第 \(i\) 个坐标表示路径 \(\tau_i\) 的定义域 \(S_i=[0,1]\)。令 \(s_i\) 表示 \(S_i\) 中的一点（它也是 \(x\) 的第 \(i\) 个分量）。状态 \(x\in X\) 给出每个机器人的位形：对每个 \(i\)，\(q^i\in\mathcal{C}^i\) 由 \(q^i=\tau_i(s_i)\) 给出。在 \((0,\ldots,0)\) 处，每个机器人都在初始位形 \(q^i_I=\tau_i(0)\)；在 \((1,\ldots,1)\) 处，每个都在目标位形 \(q^i_G=\tau_i(1)\)。任何满足 \(h(0)=(0,\ldots,0)\)、\(h(1)=(1,\ldots,1)\) 的连续路径 \(h:[0,1]\to X\) 都把机器人带到目标；与优先级规划不同，\(h\) <b>甚至不必单调</b>。</p>
+<p>有一件重要的事还没考虑：什么阻止我们把 \(h\) 设计成 \([0,1]^m\) 两个对角之间的直线？——还没考虑机器人之间的碰撞。它们在 \(X\) 中形成障碍区域 \(X_{obs}\)，设计 \(h:[0,1]\to X_{free}\) 时必须避开，\(X_{free}=X\setminus X_{obs}\)。\(X_{obs}\) 的定义与 (7.8)、(7.10) 很像，只是状态空间的维数小得多：每个 \(q^i\) 被换成了一个参数。柱形结构仍然保留（图 7.9），每个柱体是</p>
+<div class="eq">$$X^{ij}_{obs}=\{(s_1,\ldots,s_m)\in X\mid \mathcal{A}^i(\tau_i(s_i))\cap\mathcal{A}^j(\tau_j(s_j))\neq\emptyset\}, \tag{7.11}$$</div>
+<p>合起来得到</p>
+<div class="eq">$$X_{obs}=\bigcup_{ij,\ i\neq j}X^{ij}_{obs}. \tag{7.12}$$</div>
+<p>因为对 \(h\) 没有单调性要求，标准的运动规划算法都能用在协调空间上。若 1）\(\mathcal{W}=\mathbb{R}^2\)，2）\(m=2\)（两个机器人），3）障碍和机器人都是多边形，4）路径 \(\tau_i\) 是分段线性的，那么 \(X_{obs}\) 是 \(X\) 中的多边形区域，显式构造出 \(X_{obs}\) 之后就可以直接用 6.2 节针对多边形 \(\mathcal{C}_{obs}\) 的方法。\(m>2\) 时可以用 6.3.3 节 \(m=3\) 时给出的竖直单元分解的多维版本；一般的协调问题可以用柱形代数分解或 Canny 的路线图算法。对在 \(\mathcal{W}=\mathbb{R}^2\) 中平移或沿圆周路径运动的机器人，有一个基于精确计算 \(X_{obs}\)（用专门的碰撞检测方法）的分辨率完备规划方法。</p>
+<p>对很有挑战的协调问题，采样方案可能给出实用的解。也许最简单的是在 \(X\) 上放一张网格，改用 5.4.2 节的经典搜索算法；也可以用 5.5 节的 RDT，或者若适合多查询框架，用 5.6 节的采样路线图。5.3.4 节验证路径段的方法可以毫无困难地用到协调空间上。</p>
+<p>到目前为止忽略了机器人的具体速度。为了便于说明，考虑 \(m=2\)：在 \(X\) 中<b>竖直或水平</b>移动，是一个机器人不动、另一个以某个最大速度运动；<b>斜着</b>移动则两个都动，它们的相对速度取决于路径的斜率。为了仔细地调节速度，可能需要按<b>距离</b>重新参数化路径，这时 \(X\) 的每个轴表示走过的距离而不是 \([0,1]\)。</p>
+
+<div class="widget wide" data-widget="coord2"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>「十字路口」：\(X_{obs}\) 是正中的一块圆斑，对角线正好穿过它（两个机器人同时全速就会在路口相撞）。A* 找到的 h 从斑点右下方绕过：头一段斜率小于 1，也就是 A² 走得比 A¹ 慢，让 A¹ 先过路口。拖动路径顶点，看 \(X_{obs}\) 怎样变形。</li>
+  <li>「迎面相遇」：两条路径重合、方向相反，\(X_{obs}\) 是一条从左上到右下的带，把 \(X\) 切成两半——沿固定路径怎么安排时间都不行。换「迎面相遇，但有一个让路的小弯」：\(X_{obs}\) 裂成两块，h 从两块之间穿过——A¹ 从下面经过时，A² 正好待在小弯里。</li>
+  <li>「图 7.43（习题 4）」：先自己画一画这个协调空间再看答案——A¹ 的之字形路线四次横穿 A² 的两条竖直腿，所以 \(X_{obs}\) 是 8 个小斑点。</li>
+</ul></div>
+
+<div class="widget wide" data-widget="coord3"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>旋转三维图：三个柱体分别沿 s₃、s₂、s₁ 方向拉伸，这就是图 7.9 说的「协调 m 个机器人时障碍总是柱形的」。下面三张小图就是它们的轴对齐投影——判断一个格点是否在 \(X_{obs}\) 里，只要查这三张表。</li>
+  <li>三条路径几乎交于一点：三维的对角线穿过三个柱体，绿色的协调路径从它们之间绕过去。拖动工作空间里路径的端点，看柱体怎样移动。</li>
+</ul></div>
+
+<h4>固定路线图协调 <span class="en">Fixed-roadmap coordination</span></h4>
+<p>如果路径是各自独立设计的，固定路径协调可能仍然解不了图 7.8 那样的问题。幸运的是，它可以推广为让每个机器人在一张<b>路线图</b>或<b>拓扑图</b>上移动。这样得到的协调空间仍然每个机器人只有一维，而且只要每个机器人用的路线图有很多可选路径，得到的规划方法就更接近完备。研究这个问题本身也有动机：自动导引车（AGV）常在工厂里一张预先确定的路径网络上移动，这时协调机器人<b>就是</b>规划问题本身，而不是对 Formulation 7.2 的简化。</p>
+<p>让 Formulation 7.2 恢复完备性的一个办法，是把独立的路线图设计成每个机器人都有自己的<b>车库 garage</b> 位形。\(q^i\) 是 \(\mathcal{A}^i\) 的车库，需要两个条件：1）\(\mathcal{A}^i\) 处在 \(q^i\) 时，其它机器人不可能和它相撞（即在所有协调状态中，只要第 \(i\) 个坐标是 \(q^i\)，就不会有碰撞）；2）\(\mathcal{A}^i\) 总能从 \(x_I\) 到达 \(q^i\)。如果每个机器人都有一张路线图和一个车库，且 \(X\) 中的规划方法是完备的，那么整个规划算法就是完备的。如果 \(X\) 中的规划方法用的是较弱的完备性，这种完备性也会保持——例如 \(X\) 上分辨率完备的规划器给出 Formulation 7.2 的分辨率完备方法。</p>
+
+<h4>立方复形 <span class="en">Cube complex</span></h4>
+<p>每个机器人有多条固定路径时，协调空间怎么表示？结果是一个<b>立方复形 cube complex</b>，它是一种特殊的奇异复形（回忆 6.3.1 节）。\(m\) 条固定路径的协调空间可以看作一个奇异 \(m\)-单形，例如图 7.9 的问题可以看作奇异 3-单形 \([0,1]^3\to X\)。6.3.1 节里 \(k\)-单形的定义域是 \(k\) 维球 \(B^k\)；用立方体 \([0,1]^k\) 也一样，因为 \(B^k\) 与 \([0,1]^k\) 同胚。</p>
+<p>对拓扑空间 \(X\)，令 <b>\(k\)-立方体</b>（它也是奇异 \(k\)-单形）\(\square_k\) 是一个连续映射 \(\sigma:[0,1]^k\to X\)。立方复形由不同维数的 \(k\)-立方体连接而成。每个 \(k\ge1\) 的 \(k\)-立方体有 \(2k\) 个<b>面</b>，它们是 \((k-1)\)-立方体：令 \((s_1,\ldots,s_k)\) 表示 \([0,1]^k\) 中的点，对每个 \(i\in\{1,\ldots,k\}\)，令 \(s_i=0\) 得到一个面，令 \(s_i=1\) 得到另一个。这些立方体必须拼得很好，就像单纯复形里的单形那样。要成为立方复形，\(\mathcal{K}\) 必须满足：</p>
+<ol>
+  <li>\(\mathcal{K}\) 中任何立方体 \(\square_k\) 的任何面 \(\square_{k-1}\) 也在 \(\mathcal{K}\) 中。</li>
+  <li>\(\mathcal{K}\) 中任何两个 \(k\)-立方体 \(\square_k\)、\(\square'_k\) 的像的交，要么为空，要么存在某个立方体 \(\square_i\in\mathcal{K}\)（\(i&lt;k\)）是两者的公共面。</li>
+</ol>
+<p>令 \(\mathcal{G}_i\) 表示机器人 \(\mathcal{A}^i\) 的拓扑图（也可以是路线图），图的边是形如 \(\tau:[0,1]\to\mathcal{C}^i_{free}\) 的路径。先看图 7.10a：\(\mathcal{A}^1\) 沿三条在 T 形路口相连的路径运动，\(\mathcal{A}^2\) 沿一条路径运动。这时三个二维的固定路径协调空间沿一条公共边粘在一起，如图 7.10b。</p>
+<p>更一般地，设两个机器人 \(\mathcal{A}^1\)、\(\mathcal{A}^2\) 的拓扑图是 \(\mathcal{G}_1(V_1,E_1)\)、\(\mathcal{G}_2(V_2,E_2)\)，分别有 \(n_1\)、\(n_2\) 条边。二维立方复形 \(\mathcal{K}\) 这样得到：令 \(\tau_i\) 表示 \(\mathcal{G}_1\) 的第 \(i\) 条路径、\(\sigma_j\) 表示 \(\mathcal{G}_2\) 的第 \(j\) 条路径<sup class="fn"><a href="#fn-g1" id="fn-g1-ref">4</a></sup>。每从两张图里各选一条边，\(\mathcal{K}\) 里就有一个 2-立方体（正方形），所以共有 \(n_1n_2\) 个 2-立方体，每对 \((\tau_i,\sigma_j)\)（\(\tau_i\in E_1\)、\(\sigma_j\in E_2\)）一个。1-立方体来自形如 \((v_i,\sigma_j)\)（\(v_i\in V_1\)、\(\sigma_j\in E_2\)）或 \((\tau_i,v_j)\)（\(\tau_i\in E_1\)、\(v_j\in V_2\)）的对；0-立方体（角点）对应每一对 \((v_i,v_j)\in V_1\times V_2\)。按这个规则，图 7.10 的复形有 3 个正方形、\(4\cdot1+3\cdot2=10\) 条棱、\(4\cdot2=8\) 个角点<sup class="fn"><a href="#fn-cube" id="fn-cube-ref">5</a></sup>。有 \(m\) 个机器人时得到 \(m\) 维立方复形：每个 \(m\)-立方体对应每个机器人各选一条路径的一种组合，\((m-1)\)-立方体是 \(m\)-立方体的面，如此下去直到 0-立方体。</p>
+
+<svg class="fig" viewBox="0 0 640 190" role="img" aria-label="图 7.10b 的示意：三个正方形沿一条公共边粘在一起">
+  <g stroke="var(--text-2)" stroke-width="1.4">
+    <path d="M300 40 L300 150" stroke="var(--bad)" stroke-width="3"/>
+    <path d="M300 40 L180 20 L180 130 L300 150 Z" fill="var(--accent-soft)" fill-opacity=".8"/>
+    <path d="M300 40 L190 75 L190 185 L300 150 Z" fill="var(--ok-soft)" fill-opacity=".8"/>
+    <path d="M300 40 L430 55 L430 165 L300 150 Z" fill="var(--warn-soft)" fill-opacity=".8"/>
+  </g>
+  <g font-size="12" fill="var(--text)">
+    <text x="232" y="70" text-anchor="middle">(τ₁, σ₁)</text><text x="238" y="150" text-anchor="middle">(τ₂, σ₁)</text><text x="370" y="110" text-anchor="middle">(τ₃, σ₁)</text>
+    <text x="312" y="100" fill="var(--bad)" font-weight="650">(v, σ₁)</text>
+  </g>
+  <text x="470" y="80" font-size="11.5" fill="var(--muted)">三个正方形共用红色的书脊</text>
+  <text x="470" y="98" font-size="11.5" fill="var(--muted)">(v, σ₁)：v 是 T 形路口</text>
+  <text x="470" y="116" font-size="11.5" fill="var(--muted)">——「三页书」，不是流形</text>
+</svg>
+
+<div class="widget wide" data-widget="cube-complex"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>默认就是图 7.10：G₁ 是 T 形、G₂ 是一条路径。把鼠标移到标「2!」的棱上——它被三个正方形共用（三页书的书脊）；其余 9 条棱只属于一个正方形。数一数：8 个角点、10 条棱、3 个正方形。</li>
+  <li>两个都选「三角形」（习题 5a）：9 个正方形、每条棱恰好被两个正方形共用、χ = 0——这是环面 \(S^1\times S^1\)。习题 7 是「三角形 × T/Y 形」。</li>
+  <li><span class="muted">（补充）</span>换各种组合会发现 χ 总等于 χ(G₁)·χ(G₂)：这个立方复形就是两张图的乘积空间 \(\mathcal{G}_1\times\mathcal{G}_2\)；n 个机器人都在三角形路线图上时（习题 5b），协调空间是 n 维环面 \(T^n\)。</li>
+</ul></div>
+
+<h4>在立方复形上规划</h4>
+<p>第 5、6 章的规划方法同样可以改过来用，只是因为 \(X\) 是一个复形而稍微复杂一些。用采样方法时，要在 \(X\) 上生成稠密序列；例如用随机采样时，可以先随机选一个 \(m\)-立方体，再在里面随机取一点。局部规划方法（LPM）必须考虑立方复形的连通性，这要求识别拓扑图在哪里出现分支。组合方法也必须考虑这种连通性：例如可以用扫描技术做竖直单元分解，但扫描线（或扫描平面）必须扫过复形的各个 \(m\)-单元。</p>
+</section>
+
+<!-- ============================================================ 7.3 -->
+<section id="s7-3">
+<h2>7.3 离散与连续空间的混合 <span class="en">Mixing Discrete and Continuous Spaces</span></h2>
+<p>很多重要应用同时涉及离散变量和连续变量，得到的状态空间是 C-space 与一个有限集——<b>模式空间 mode space</b>——的笛卡儿积。可以把它想象成由模式索引的一层层 C-space（图 7.11）。这一节主要的应用是<b>操作规划 manipulation planning</b>；还有很多别的，尤其是再加上动力学和不确定性的时候。这一节的框架主要受控制理论中<b>混合系统 hybrid systems</b> 的启发，那里通常建模的是依赖模式的动力学；这里关心的则是允许的机器人位形和/或障碍依赖于模式。</p>
+
+<h3 id="s7-3-1">7.3.1 混合系统框架 <span class="en">Hybrid Systems Framework</span></h3>
+<p>下面的表述可以看作离散可行规划（Formulation 2.1）和基本运动规划（Formulation 4.1）各部分的组合。</p>
+<div class="box def formulation">
+  <div class="box-title">Formulation 7.3（混合系统运动规划 Hybrid-System Motion Planning）</div>
+  <ol>
+    <li>包含 Formulation 4.1 的 \(\mathcal{W}\) 与 \(\mathcal{C}\)。</li>
+    <li>非空的<b>模式空间</b> \(M\)，是一个有限或可数无限的<b>模式</b>集合。</li>
+    <li>对每个 \(m\in M\)，有一个半代数的障碍区域 \(\mathcal{O}(m)\)。</li>
+    <li>对每个 \(m\in M\)，有一个半代数的机器人 \(\mathcal{A}(m)\)，可以是刚体也可以是连杆。假设 C-space 不依赖于模式，只有机器人的几何形状可以依赖模式。变换到位形 \(q\) 的机器人记作 \(\mathcal{A}(q,m)\)。</li>
+    <li>状态空间是笛卡儿积 \(X=\mathcal{C}\times M\)，状态写成 \(x=(q,m)\)，\(q\in\mathcal{C}\)、\(m\in M\)。令
+      <div class="eq">$$X_{obs}=\{(q,m)\in X\mid \mathcal{A}(q,m)\cap\mathcal{O}(m)\neq\emptyset\}, \tag{7.13}$$</div>
+      \(X_{free}=X\setminus X_{obs}\)。</li>
+    <li>每个状态 \(x\in X\) 有一个有限的<b>动作空间</b> \(U(x)\)；\(U\) 表示所有可能动作的集合（所有 \(U(x)\) 的并）。</li>
+    <li><b>模式转移函数 mode transition function</b> \(f_m\)：对每个 \(x\in X\)、\(u\in U(x)\) 给出一个模式 \(f_m(x,u)\in M\)。假设 \(f_m\) 的定义不会产生<b>竞争条件 race conditions</b>（同一时刻里模式来回振荡）：\(q\) 固定时模式至多改变一次，之后保持不变，只有 \(q\) 改变后才可能再变。</li>
+    <li><b>状态转移函数</b> \(f\) 由 \(f_m\) 导出：改变模式、保持位形不变，即 \(f(x,u)=(q,f_m(x,u))\)。</li>
+    <li>初始状态 \(x_I\in X_{free}\)。</li>
+    <li>目标区域 \(X_G\subset X_{free}\)<sup class="fn"><a href="#fn-f73" id="fn-f73-ref">6</a></sup>。用区域而不是一个点，是为了方便地指定一个与最终模式无关的目标位形。</li>
+    <li>算法必须计算一条（连续的）<b>路径</b> \(\tau:[0,1]\to X_{free}\) 和一条<b>动作轨迹</b> \(\sigma:[0,1]\to U\)，使 \(\tau(0)=x_I\)、\(\tau(1)\in X_G\)；或者正确报告这样的路径与动作轨迹的组合不存在。</li>
+  </ol>
+</div>
+<p>障碍区域和机器人是否依赖模式要看具体问题，下面各举一例。模式的改变取决于机器人选的动作。在大多数状态，通常假设存在一个「什么也不做」的动作，它让模式保持不变；在某些状态，机器人可以选一个按需改变模式的动作。一个有趣的退化情形是只有<b>一个</b>动作可用：机器人从那个状态起对模式毫无控制，如果机器人走到这样的状态，模式改变就会无可避免地发生。</p>
+<p>解的要求稍微复杂一些，因为路径和动作轨迹都要给出。只给路径不够，因为必须知道施加了什么动作才引起了正确的模式转移；所以 \(\sigma\) 指出这些转移何时发生。注意 \(\tau\) 与 \(\sigma\) 紧密耦合：不能随便给路径 \(\tau\) 配上一个 \(\sigma\)，它必须对应生成 \(\tau\) 所需的那些动作。</p>
+
+<p><b>例 7.2（门卫室的力量 The Power of the Portiernia）</b>：机器人 \(\mathcal{A}\) 建模成在 \(\mathcal{W}=\mathbb{R}^2\) 中平移的方块，所以 \(\mathcal{C}=\mathbb{R}^2\)。障碍区域依赖于模式，因为有两扇门，编号「1」「2」（图 7.12a）。左上角坐着门卫（portiernia<sup class="fn"><a href="#fn-port" id="fn-port-ref">7</a></sup>），机器人处在图 7.12b 那样的位形时，门卫可以给它一把钥匙。门卫一次只信任机器人拿一把钥匙，要么是门 1 的、要么是门 2 的；机器人可以回到门卫室还钥匙。机器人只要拿着正确的钥匙碰到门，就能打开它（图 7.12c、d）。</p>
+<p>模式集合 \(M\) 要编码机器人手里拿着哪把钥匙（如果有的话），还要编码门的状态。机器人可能拿着：1）门 1 的钥匙；2）门 2 的钥匙；3）没有钥匙。门可能：1）都开；2）门 1 开、门 2 关；3）门 1 关、门 2 开；4）都关。钥匙和门组合起来共 <b>12 个模式</b>。机器人处在门卫室位形时，它可用的动作对应拿取和归还钥匙的不同方式——例如拿着门 1 的钥匙时，可以还掉它、领门 2 的钥匙。这改变模式，但门的状态和机器人的位形在 \(f\) 作用时保持不变。机器人能改变模式的其它位置是碰到门 1 或门 2 时，而且只有拿着对的钥匙才会改变。在所有其它位形，机器人只有一个动作（没有选择），模式保持不变。任务是到达右下角虚线所示的位形。问题这样解：1）在门卫室领门 1 的钥匙；2）打开门 1；3）回门卫室把钥匙换成门 2 的；4）进入最里面的房间到达目标。作为最后的条件，还可以要求机器人把钥匙还给门卫室。</p>
+
+<div class="widget wide" data-widget="portiernia"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>点播放：机器人先去左上角领钥匙 1、开门 1，又折回门卫室换钥匙 2，再去开门 2。右边的模式图里，琥珀色箭头就是走过的模式转移——在 12 个模式里只用到了 5 个。</li>
+  <li>勾上「最后还要把钥匙还回门卫室」：计划从 46 步变成 83 步，多了一次「还钥匙」（参考代码第 5 项）。</li>
+  <li>注意绝大多数步骤都是「移动、模式不变」：只有在门卫室里和门旁边，机器人才有改变模式的动作可选。</li>
+</ul></div>
+
+<p>例 7.2 让机器人能改变障碍 \(\mathcal{O}\)。下一个例子里机器人能改变自己的形状，这是<b>可重构机器人 reconfigurable robot</b> 的一个说明性例子；这类机器人已经成为热门研究课题，那里的重构方式比下面的简单例子复杂得多。</p>
+<p><b>例 7.3（可重构机器人）</b>：要解图 7.13 的问题，机器人必须改变形状。有两种可能的形状，直接对应两个模式：<b>长条 elongated</b> 和<b>方块 compressed</b>，各自的例子见图。图 7.14 给出两个模式下 \(\mathcal{C}_{free}(m)\) 的样子。设机器人一开始在左边、处于长条模式，要走到最右边的房间。问题这样解：1）变成方块；2）穿过走廊进入中间房间；3）变回长条；4）穿过走廊进入最右边的房间。机器人有直接改变模式（重构自身）的动作。为了让问题更有意思，可以要求机器人只在特定位置重构（例如那里有足够的间隙，或者那里有另一个机器人能协助它）。</p>
+
+<div class="widget wide" data-widget="reconfig"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>下面两张小图就是图 7.14：同一个世界，在两个模式下锚点能放的位置（白色）完全不同。长条在左边的弯道里转不过来，方块钻不过右边那道一格高的缝。</li>
+  <li>点播放，看机器人在左边房间门口变成方块、钻过弯道后又变回长条。勾上「只能在两个圆圈处变形」：路线要先绕到圆圈处，计划变长一点。</li>
+</ul></div>
+
+<p>以上例子只是可定义的混合运动规划问题的冰山一角。例如在制作自动化的电子游戏角色或数字演员时，就会出现很多这样的问题。要解它们，只要给标准运动规划算法提供<b>如何改变模式</b>的信息，就可以改过来用：\(X\) 中能改变模式的位置可以表示成<b>子目标</b>，大部分规划精力应该花在尝试改变模式上，而不只是直接冲向目标。用采样方法时，需要在 \(X\) 上定义一个同时考虑模式变化和位形的度量。可以写出各种各样的混合问题，从实践中不可能解的、到标准运动规划的直接推广都有。一般地，混合运动规划模型有助于表述 1.4 节说的<b>层次化方法</b>。有一类特别有趣、而且已经有成功算法的问题符合这个模型，下面就讲它。</p>
+
+<h3 id="s7-3-2">7.3.2 操作规划 <span class="en">Manipulation Planning</span></h3>
+<p>这一节概述操作规划，概念主要来自 Alami、Laumond、Siméon 等人的工作。回到例 7.2，想象机器人必须搬一把<b>大到改变了 \(\mathcal{C}_{free}\) 连通性</b>的钥匙。在操作规划问题里，机器人称为<b>机械手 manipulator</b>，它和一个<b>零件 part</b> 相互作用：在某些位形它能<b>抓住</b>零件并把它搬到环境中的其它地方。<b>操作任务</b>通常要求把零件移到 \(\mathcal{W}\) 中的指定位置，而不特别在意机械手怎样完成。这里的模型大大简化了抓取、稳定性、摩擦、力学和不确定性等问题，而专注于几何方面（12.5 节会讨论其中一些问题，另见 13.1.3 节）。</p>
+
+<h4>可容许位形 <span class="en">Admissible configurations</span></h4>
+<p>沿用 Formulation 4.1 的 \(\mathcal{W}\)、\(\mathcal{O}\)、\(\mathcal{A}\)。在操作规划中 \(\mathcal{A}\) 称为机械手，令 \(\mathcal{C}^a\) 表示<b>机械手位形空间</b>。令 \(\mathcal{P}\) 表示零件，它是用几何图元建模的刚体（3.1 节）。假设 \(\mathcal{P}\) 可以做刚体变换，所以有自己的<b>零件位形空间</b> \(\mathcal{C}^p=SE(2)\) 或 \(SE(3)\)。令 \(q^p\in\mathcal{C}^p\) 表示零件位形，变换后的零件模型记作 \(\mathcal{P}(q^p)\)。合起来的位形空间是笛卡儿积</p>
+<div class="eq">$$\mathcal{C}=\mathcal{C}^a\times\mathcal{C}^p, \tag{7.14}$$</div>
+<p>每个位形 \(q\in\mathcal{C}\) 形如 \(q=(q^a,q^p)\)。第一步是去掉所有必须避免的位形（图 7.15 的几个子图给出了这些集合的例子）。机械手碰到障碍的位形是</p>
+<div class="eq">$$\mathcal{C}^a_{obs}=\{(q^a,q^p)\in\mathcal{C}\mid \mathcal{A}(q^a)\cap\mathcal{O}\neq\emptyset\}. \tag{7.15}$$</div>
+<p>下一步自然是去掉零件碰到障碍的位形。允许零件「接触」障碍是合理的——例如这可以建模一个放在桌上的零件。所以令</p>
+<div class="eq">$$\mathcal{C}^p_{obs}=\{(q^a,q^p)\in\mathcal{C}\mid \operatorname{int}(\mathcal{P}(q^p))\cap\mathcal{O}\neq\emptyset\} \tag{7.16}$$</div>
+<p>表示零件内部与 \(\mathcal{O}\) 相交的开集。显然，零件穿进 \(\mathcal{O}\) 的位形应当避免。考虑 \(\mathcal{C}\setminus(\mathcal{C}^a_{obs}\cup\mathcal{C}^p_{obs})\)：剩下的位形保证机器人和零件都不会不恰当地碰到 \(\mathcal{O}\)。接着考虑 \(\mathcal{A}\) 与 \(\mathcal{P}\) 的相互作用：机械手必须被允许<b>碰到</b>零件，但同样不能穿透，所以令</p>
+<div class="eq">$$\mathcal{C}^{ap}_{obs}=\{(q^a,q^p)\in\mathcal{C}\mid \mathcal{A}(q^a)\cap\operatorname{int}(\mathcal{P}(q^p))\neq\emptyset\}. \tag{7.17}$$</div>
+<p>去掉所有这些坏位形，得到</p>
+<div class="eq">$$\mathcal{C}_{adm}=\mathcal{C}\setminus(\mathcal{C}^a_{obs}\cup\mathcal{C}^p_{obs}\cup\mathcal{C}^{ap}_{obs}), \tag{7.18}$$</div>
+<p>称为<b>可容许位形 admissible configurations</b> 的集合。</p>
+
+<h4>稳定位形与抓取位形</h4>
+<p>操作规划问题用到 \(\mathcal{C}_{adm}\) 的两个重要子集。令 \(\mathcal{C}^p_{sta}\) 表示<b>稳定的零件位形</b>：零件不受机械手施力也能安全停放的位形。这意味着零件不能（比如）悬在空中，也不能处于会掉下来的位形。具体的稳定位形取决于零件的几何、摩擦、质量分布等，这里不考虑这些问题。由此令 \(\mathcal{C}_{sta}\subseteq\mathcal{C}_{adm}\) 为相应的<b>稳定位形</b>：</p>
+<div class="eq">$$\mathcal{C}_{sta}=\{(q^a,q^p)\in\mathcal{C}_{adm}\mid q^p\in\mathcal{C}^p_{sta}\}. \tag{7.19}$$</div>
+<p>\(\mathcal{C}_{adm}\) 的另一个重要子集是机器人正在<b>抓着</b>零件（并且必要时能搬动它）的所有位形，记作<b>抓取位形 grasped configurations</b> \(\mathcal{C}_{gr}\subseteq\mathcal{C}_{adm}\)。对每个 \((q^a,q^p)\in\mathcal{C}_{gr}\)，机械手都碰到零件，即 \(\mathcal{A}(q^a)\cap\mathcal{P}(q^p)\neq\emptyset\)（仍不允许穿透，因为 \(\mathcal{C}_{gr}\subseteq\mathcal{C}_{adm}\)）。一般地，很多 \(\mathcal{A}(q^a)\) 碰到 \(\mathcal{P}(q^p)\) 的位形并不在 \(\mathcal{C}_{gr}\) 里：一个点是否在 \(\mathcal{C}_{gr}\) 里取决于机械手、零件和它们之间接触面的具体特性。例如一个典型的机械手只碰到方块的一个角，是拿不起方块的。这一层细节这里不定义。</p>
+<p>必须始终保证 \(x\in\mathcal{C}_{sta}\) 或 \(x\in\mathcal{C}_{gr}\)，所以令 \(\mathcal{C}_{free}=\mathcal{C}_{sta}\cup\mathcal{C}_{gr}\)，表示 \(\mathcal{C}_{adm}\) 中操作规划允许的子集。模式空间 \(M\) 有两个模式：<b>transit 模式</b>（机械手不带零件，要求 \(q\in\mathcal{C}_{sta}\)）和 <b>transfer 模式</b>（机械手带着零件，要求 \(q\in\mathcal{C}_{gr}\)）。由这两个简单条件，模式只能在 \(q\in\mathcal{C}_{sta}\cap\mathcal{C}_{gr}\) 时改变，所以只有在这些位形里机械手才有两个动作可选；在所有其它位形模式保持不变。方便起见，令 \(\mathcal{C}_{tra}=\mathcal{C}_{sta}\cap\mathcal{C}_{gr}\) 表示<b>转换位形 transition configurations</b>，即模式可以改变的地方。</p>
+
+<div class="widget wide" data-widget="manip-sets"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>依次点上面六个按钮，它们复现图 7.15 的六个子图。注意 (7.15) 里机械手「碰到」障碍就算碰撞，而 (7.16)、(7.17) 只看零件的<b>内部</b>：零件可以贴着桌面放，夹爪可以贴着零件。</li>
+  <li>把零件拖到斜坡上：它不在任何支撑面上，所以 q ∉ C_sta——零件会掉下去；再把夹爪拖到它上方夹住：q ∈ C_gr，这时它是「被拿着」的。</li>
+  <li>只有零件放稳<b>并且</b>被夹住（C_tra）时，才能在 transit 和 transfer 之间切换。</li>
+</ul></div>
+
+<p>沿用 7.3.1 节的框架，把模式空间 \(M\) 和 C-space \(\mathcal{C}\) 合起来得到状态空间 \(X=\mathcal{C}\times M\)。因为只有两个模式，\(\mathcal{C}\) 只有两份拷贝，每个模式一份。基于状态的集合 \(X_{free}\)、\(X_{tra}\)、\(X_{sta}\)、\(X_{gr}\) 直接由 \(\mathcal{C}_{free}\)、\(\mathcal{C}_{tra}\)、\(\mathcal{C}_{sta}\)、\(\mathcal{C}_{gr}\) 得到（忽略模式），例如</p>
+<div class="eq">$$X_{tra}=\{(q,m)\in X\mid q\in\mathcal{C}_{tra}\}. \tag{7.20}$$</div>
+<p>其余几个集合类似定义。现在可以定义任务了：给定<b>初始零件位形</b> \(q^p_{init}\in\mathcal{C}_{sta}\) 和<b>目标零件位形</b> \(q^p_{goal}\in\mathcal{C}_{sta}\)，计算路径 \(\tau:[0,1]\to X_{free}\) 使 \(\tau(0)=q^p_{init}\)、\(\tau(1)=q^p_{goal}\)<sup class="fn"><a href="#fn-qp" id="fn-qp-ref">8</a></sup>。此外，必须给出动作轨迹 \(\sigma:[0,1]\to U\)，在 \(\tau(s)\in X_{tra}\) 时指出恰当的模式变化。解可以看作 <b>transit 路径</b>与 <b>transfer 路径</b>交替的序列（名字来自模式），如图 7.16 所示。</p>
+
+<h4>操作图 <span class="en">Manipulation graph</span></h4>
+<p>操作规划问题一般可以通过构造<b>操作图</b> \(\mathcal{G}_m\) 来解。令 \(X_{tra}\) 的<b>连通分量</b>指 \(\mathcal{C}_{tra}\) 的任意一个连通分量提升到状态空间后得到的东西（忽略模式）；每个连通分量有两份拷贝，每个模式一份。\(X_{tra}\) 的每个连通分量对应 \(\mathcal{G}_m\) 的一个顶点；每条连接 \(X_{tra}\) 两个连通分量的 transfer 路径或 transit 路径对应一条边。操作规划的一般方法是：</p>
+<ol>
+  <li>计算 \(X_{tra}\) 的连通分量，得到 \(\mathcal{G}_m\) 的顶点。</li>
+  <li>对每对顶点应用普通的运动规划方法，得到 \(\mathcal{G}_m\) 的边。</li>
+  <li>用运动规划方法把初始状态和目标状态连到所有不经模式转换就能到达的 \(X_{tra}\) 顶点。</li>
+  <li>在 \(\mathcal{G}_m\) 中搜索连接初始与目标状态的路径。若存在，就取出对应的 transit 与 transfer 路径序列（这也给出了 \(\sigma\)，即引起所需模式变化的动作）。</li>
+</ol>
+<p>这可以看作 1.4 节所说的层次化规划的一个例子。</p>
+
+<div class="widget wide" data-widget="manip-plan"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>点播放：夹爪先 transit 到坑边，从上面夹住零件把它提出来——竖着两格高过不了隧道，于是把它放在地上，transit 绕到左侧<b>重新夹住</b>（regrasp），再横着 transfer 穿过隧道，送上右边的桌子。下面的双层图就是图 7.16：上下两层是两个模式，竖线只出现在 C_tra 里。</li>
+  <li>绿色的数字圈是 \(X_{tra}\) 的连通分量（操作图的顶点）：同一个支撑面、同一种抓法的转换位形连成一片（可以夹着零件沿桌面平移而不离开 C_tra）。淡线是它们之间的 transit（虚线）和 transfer（实线）边。</li>
+  <li>本图的网格世界与动作是我们为演示设计的（补充）；书中图 7.17 的真实例子里，同一个零件要在很多地方重新抓取。</li>
+</ul></div>
+
+<h4>多个零件</h4>
+<p>操作规划框架可以很好地推广到多个零件 \(\mathcal{P}_1,\ldots,\mathcal{P}_k\)。每个零件有自己的 C-space，\(\mathcal{C}\) 取所有零件 C-space 与机械手 C-space 的笛卡儿积。\(\mathcal{C}_{adm}\) 的定义类似，只是现在除了零件–机械手、机械手–障碍、零件–障碍碰撞外，还要去掉零件–零件碰撞。\(\mathcal{C}_{sta}\) 的定义要求所有零件都在稳定位形（零件甚至可以叠起来）；\(\mathcal{C}_{gr}\) 要求一个零件被抓住、其它零件都稳定。仍然只有两个模式，取决于机械手是否抓着一个零件；转换同样只发生在 \(\mathcal{C}_{tra}=\mathcal{C}_{sta}\cap\mathcal{C}_{gr}\) 中。任务是把每个零件从一个位形移到另一个位形，同样靠定义操作图、得到一串 transit 路径（没有零件移动）和 transfer 路径（一个零件被搬、其它零件固定）来完成。图 7.17、7.18 是用操作规划算法解出的有挑战的例子（图 7.18 有 90 件可移动的家具，有些必须被拖开才能解题）。</p>
+<p>还可以有别的推广：推广到 \(k\) 个机器人会得到 \(2^k\) 个模式，每个模式表示每个机器人是否在抓着零件；多个机器人可以抓同一个物体；也可以让一个机器人同时抓不止一个物体。</p>
+</section>
+
+<!-- ============================================================ 7.4 -->
+<section id="s7-4">
+<h2>7.4 闭运动链的规划 <span class="en">Planning for Closed Kinematic Chains</span></h2>
+<p>这一节接着 4.4 节讲。保持运动学闭合得到的 \(\mathcal{C}\) 的子空间，在那里已经定义并用例子说明过（见 <a href="ch4-configuration-space.html#s4-4">第 4 章教程 4.4 节</a>）。在这种情况下规划，要求路径始终留在一个<b>没有参数化</b>的低维簇上。很多重要应用需要在保持这些约束的同时做运动规划：例如多个机械手抓着同一个物体（图 7.19），会形成闭环——环之所以存在，是因为两个机械手都固定在地上，而地面本身可以看作一根连杆。为电影和电子游戏开发虚拟演员也涉及相关的操作规划问题；当人的不止一个肢体碰到固定表面（例如两只脚着地）时也会出现环。有一类叫<b>并联机械手 parallel manipulators</b> 的机器人，故意设计成带内部闭环。例如 Stewart–Gough 平台（图 7.20）：六条腿 \(\mathcal{A}_1,\ldots,\mathcal{A}_6\) 的长度可以独立改变，同时它们通过球铰连在地面和<b>平台</b> \(\mathcal{A}_7\) 上；每条腿其实可以看作由一个移动副相连的两根连杆。可变长度一共带来 6 个自由度，所以平台实际上获得了完整的 6 个自由度（\(\mathcal{A}_7\) 得到 \(SE(3)\) 中某个 6 维区域）。规划 Stewart–Gough 平台的运动，或者规划基于这种平台的机器人（图 7.27 的机器人堆叠了好几个这样的机构），需要同时维持很多闭合约束。另一个应用是计算生物学：要搜索分子的 C-space，其中很多来自闭合的柔性键链。</p>
+
+<h3 id="s7-4-1">7.4.1 改造运动规划算法</h3>
+<p>Formulation 4.1 一般运动规划问题的所有组成部分都在：\(\mathcal{W}\)、\(\mathcal{O}\)、\(\mathcal{A}_1,\ldots,\mathcal{A}_m\)、\(\mathcal{C}\)、\(q_I\)、\(q_G\)。假设机器人是 \(r\) 根连杆的集合，它们可能连成环。</p>
+<p>这一节假设 \(\mathcal{C}=\mathbb{R}^n\)。如果不满足，有两种办法：一是把 \(SO(2)\)、\(SO(3)\) 分别表示成 \(\mathbb{S}^1\)、\(\mathbb{S}^3\)，把圆或球的方程也作为这里考虑的约束之一，从而避开拓扑问题；二是放弃 \(\mathbb{R}^n\) 的限制，改用维数合适的 \(\mathcal{C}\) 的参数化——要在这样的流形上做微积分，需要<b>光滑结构</b>（8.3.2 节）。这里的讲法只用 \(\mathbb{R}^n\) 上的向量微积分就够了，有意避开了这些额外的技术细节。</p>
+
+<h4>闭合约束 <span class="en">Closure constraints</span></h4>
+<p>4.4 节引入的闭合约束可以这样概括：有一个属于 \(\mathbb{Q}[q_1,\ldots,q_n]\) 的多项式集合 \(\mathcal{P}=\{f_1,\ldots,f_k\}\)，表达连杆上特定点的约束（具体怎样确定见 4.4.3 节）。如前所述，在旋转的情况下把点约束在圆或球上的多项式也可以放进 \(\mathcal{P}\)。令 \(n\) 表示 \(\mathcal{C}\) 的维数，<b>闭合空间 closure space</b> 定义为</p>
+<div class="eq">$$\mathcal{C}_{clo}=\{q\in\mathcal{C}\mid \forall f_i\in\mathcal{P},\ f_i(q_1,\ldots,q_n)=0\}, \tag{7.21}$$</div>
+<p>它是 \(\mathcal{C}\) 的一个 \(m\) 维子空间，对应满足闭合约束的所有位形。障碍集也必须考虑：同样用 (4.34) 定义 \(\mathcal{C}_{obs}\) 和 \(\mathcal{C}_{free}\)。<b>可行空间 feasible space</b> 定义为 \(\mathcal{C}_{fea}=\mathcal{C}_{clo}\cap\mathcal{C}_{free}\)，即既满足闭合约束又避开碰撞的位形。运动规划问题是找一条路径 \(\tau:[0,1]\to\mathcal{C}_{fea}\)，使 \(\tau(0)=q_I\)、\(\tau(1)=q_G\)。新的挑战在于 \(\mathcal{C}_{fea}\) <b>没有显式的参数化</b>，而且 \(m&lt;n\)（\(m\) 是 \(\mathcal{C}_{clo}\) 的维数）让事情更复杂。</p>
+
+<h4>组合方法</h4>
+<p>既然约束是用多项式表达的，6.4 节的计算代数几何方法能解一般的闭运动链运动规划问题也就不奇怪了：可以用柱形代数分解或 Canny 的路线图算法。6.5.3 节提到过，有一个针对 \(m&lt;n\) 的问题优化过的路线图算法改进版。</p>
+
+<h4>基于采样的方法</h4>
+<p>第 5 章的大多数方法都不容易改，因为它们要求在 \(\mathcal{C}_{fea}\) 里采样，而它没有参数化。如果在 \(\mathbb{R}^n\) 的有界区域里随机取点，得到 \(\mathcal{C}_{fea}\) 上一点的概率是 <b>0</b>。不过，通过构造一个适合闭合约束的局部规划方法（LPM），一些增量采样与搜索方法可以改过来用。采样路线图方法则要求直接在 \(\mathcal{C}_{fea}\) 上生成大量样本；7.4.2 节给出对某些问题类可以这样做的技术，从而得到高效的采样规划器，也能提高增量搜索规划器的效率。在讲这些技术之前，先介绍一种得到更一般的采样规划器、也更容易实现的方法；不过如果设计得好，基于 7.4.2 节技术的规划器更高效。</p>
+<p>现在考虑改造 5.5 节的 RDT，让它能处理闭合约束（类似的改造对 5.4 节其它增量采样搜索方法也可能可行，例如随机势场规划器）。在 \(\mathbb{R}^n\) 的一个有界 \(n\) 维子集（如矩形或球）上生成稠密采样序列 \(\alpha\)（图 7.21）。这些样本<b>不必</b>落在 \(\mathcal{C}_{clo}\) 上，因为它们不一定成为拓扑图 \(\mathcal{G}\) 的一部分，主要用来把搜索树往不同方向「拉」。选择包围区域的一个考虑是：它必须包含 \(\mathcal{C}_{clo}\)（至少包含 \(q_I\) 所在的连通分量），但又不能不必要地大。这样的界可以通过分析特定连杆的运动极限得到。</p>
+
+<h4>沿 \(\mathcal{C}_{clo}\) 步进 <span class="en">Stepping along C_clo</span></h4>
+<p>图 5.21 的 RDT 算法可以直接用，但第 4 行的 STOPPING-CONFIGURATION 函数必须同时考虑障碍和定义 \(\mathcal{C}_{clo}\) 的约束。图 7.22 给出一种基于<b>数值延拓 numerical continuation</b> 的一般做法；另一种是用逆运动学（7.4.2 节方法的一部分）。先算出离样本 \(\alpha(i)\) 最近的 RDT 顶点 \(q\in\mathcal{C}\)。令 \(v=\alpha(i)-q\)，它表示若没有约束时边的方向。局部运动这样算：把 \(v\) 投影到 \(\mathcal{C}_{clo}\) 在点 \(q\) 处的<b>切平面</b>上（切平面在 8.3 节严格定义）。因为 \(\mathcal{C}_{clo}\) 一般是非线性的，局部运动得到的点并不精确在 \(\mathcal{C}_{clo}\) 上；一般接受一定的数值容差，并取足够小的步长来保持容差。过程迭代进行：在新点处重新计算 \(v\)，沿 \(v\) 在新切平面上的投影方向移动。若超出误差阈值，就必须沿<b>法向</b>运动回到 \(\mathcal{C}_{clo}\)。这种切向与法向运动交替进行的过程，在无法再前进时终止——要么因为切平面与 \(v\) 几乎垂直，要么碰到障碍。最终得到 \(q_s\)，即 stopping configuration。在 \(\mathcal{C}_{fea}\) 中走过的新路径不再像 5.5 节的某些问题那样是「直线」，所以应该用 5.5.2 节的近似方法沿路径创建中间顶点。</p>
+<p>每次迭代中，在某个 \(q\in\mathcal{C}_{clo}\) 处这样计算切平面：微分位形向量 \(dq\) 落在约束 \(f_i(q)=0\) 的切空间里，当且仅当</p>
+<div class="eq">$$\frac{\partial f_i(q)}{\partial q_1}dq_1+\frac{\partial f_i(q)}{\partial q_2}dq_2+\cdots+\frac{\partial f_i(q)}{\partial q_n}dq_n=0. \tag{7.22}$$</div>
+<p>对定义闭合约束的 \(\mathcal{P}\) 中所有 \(k\) 个多项式，得到齐次线性方程组</p>
+<div class="eq">$$\begin{pmatrix}\frac{\partial f_1(q)}{\partial q_1} & \frac{\partial f_1(q)}{\partial q_2} & \cdots & \frac{\partial f_1(q)}{\partial q_n}\\[2pt] \frac{\partial f_2(q)}{\partial q_1} & \frac{\partial f_2(q)}{\partial q_2} & \cdots & \frac{\partial f_2(q)}{\partial q_n}\\ \vdots & \vdots & & \vdots\\ \frac{\partial f_k(q)}{\partial q_1} & \frac{\partial f_k(q)}{\partial q_2} & \cdots & \frac{\partial f_k(q)}{\partial q_n}\end{pmatrix}\begin{pmatrix}dq_1\\ dq_2\\ \vdots\\ dq_n\end{pmatrix}=\mathbf{0}. \tag{7.23}$$</div>
+<p>若这个矩阵的秩是 \(n-m\)，就可以独立地选 \(m\) 个位形位移，其余 \(n-m\) 个参数必须满足 (7.23)<sup class="fn"><a href="#fn-rank" id="fn-rank-ref">9</a></sup>。这可以用奇异值分解（SVD）等线性代数技术求解，算出 \(q\) 处切空间的一组标准正交基 \(e_1,\ldots,e_m\)（\(n\) 维向量）。运动方向的各分量由 \(v=\alpha(i)-q_n\) 得到：先算内积 \(a_1=v\cdot e_1,\ a_2=v\cdot e_2,\ \ldots,\ a_m=v\cdot e_m\)，于是 \(v\) 在切平面上的投影是 \(n\) 维向量</p>
+<div class="eq">$$w=\sum_{i=1}^m a_ie_i, \tag{7.24}$$</div>
+<p>用它作为运动方向。步长必须适当缩放以取足够小的步子。因为 \(\mathcal{C}_{clo}\) 一般是弯的，线性运动会离开 \(\mathcal{C}_{clo}\)，接着要沿向内的法向运动回到 \(\mathcal{C}_{clo}\) 上。</p>
+<p>因为 \(\mathcal{C}_{clo}\) 的维数 \(m\) 小于 \(n\)，上面的过程只能得到 \(\mathcal{C}_{clo}\) 中路径的数值近似（图形学与几何建模中的隐式曲线追踪也有这个问题）。因此，每个约束 \(f_i(q_1,\ldots,q_n)=0\) 实际上被稍稍放宽为 \(|f_i(q_1,\ldots,q_n)|&lt;\epsilon\)，\(\epsilon>0\) 是固定的容差。这本质上是把 \(\mathcal{C}_{clo}\) 「<b>加厚</b>」，使它的维数变成 \(n\)。作为计算切平面的替代，也可以不算切平面，直接在加厚的区域里采样运动方向——实现更容易，但效率更低。</p>
+
+<div class="widget wide" data-widget="clo-rdt"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>点「单个样本」几次：琥珀色虚线是 v = α(i) − q，琥珀色箭头是它投影到切线上的方向（n = 2、m = 1 时切平面就是切线，(7.24) 只剩一项）。树上的点都严格在曲线上（每一步之后都沿法向拉回）。</li>
+  <li>「恰好落在 C_clo 上的样本」永远是 0：在矩形里随机撒点，落在一条曲线上的概率是 0——这就是为什么样本只用来「拉」树。打开「加厚的带」，看 |f| &lt; ε 的区域有面积。</li>
+  <li>选「两个分开的环」：C_clo 有两个连通分量，树永远长不到另一个环上的 qG。选「8 字形」：交叉点处 ∇f = 0，切线没有定义，这相当于下面要讲的运动学奇点。</li>
+</ul></div>
+
+<h3 id="s7-4-2">7.4.2 主动–被动连杆分解 <span class="en">Active-Passive Link Decompositions</span></h3>
+<p>另一种采样方法是做<b>主动–被动分解</b>：直接对<b>主动变量 active variables</b> 采样，再用逆运动学方法算出<b>被动变量 passive variables</b> 的闭合值，从而在 \(\mathcal{C}_{clo}\) 中生成样本。这个方法最早提出后，又通过<b>随机环生成器 random loop generator</b> 得到改进。它是一个通用框架，几乎能让第 5 章所有方法都处理闭运动链，实验表明性能比 7.4.1 节的方法好。一个缺点是需要仔细分析连杆，以确定最好的分解以及它的运动能力的界；对很一般的连杆类已经有这种分析。</p>
+
+<h4>主动变量与被动变量</h4>
+<p>这一节令 \(\mathcal{C}\) 表示由所有关节变量得到的 C-space，而不像 7.4.1 节那样要求 \(\mathcal{C}=\mathbb{R}^n\)。这意味着 \(\mathcal{P}\) 只包含编码闭合约束的多项式，不再包含表示旋转的约束。用 4.4.3 节的树表示，\(\mathcal{C}\) 的维数是 \(n\)：在没有约束时，连杆的每个转动关节对应一个变量。令 \(q\in\mathcal{C}\) 表示这个位形变量向量。<b>主动–被动分解</b>把 \(q\) 的变量分成两个向量：\(q^a\) 称为主动变量，\(q^p\) 称为被动变量。被动变量的值总是通过施加闭合约束、用逆运动学由主动变量确定。若 \(m\) 是 \(\mathcal{C}_{clo}\) 的维数，那么总有 \(m\) 个主动变量和 \(n-m\) 个被动变量。</p>
+<p>暂时设连杆像图 7.23 那样只构成一个环。图 7.24 给出一种把它分成主动变量 \(q^a\) 和被动变量 \(q^p\) 的分解。若底部的连杆固定在地上，构成环的连杆有<b>四个</b>自由度：可以为四个主动关节角 \(q^a\) 选值，剩下三个 \(q^p\) 解逆运动学得到。要确定 \(q^p\)，有三个方程、三个未知数。可惜这些方程是非线性的，相当复杂；不过这种情况及其三维推广都有高效解法。对由转动关节构成的三维环，有 6 个被动变量。\(\mathbb{R}^2\) 中被动连杆数 3、\(\mathbb{R}^3\) 中的 6，分别来自 \(SE(2)\)、\(SE(3)\) 的维数——这正是施加闭合约束从系统中剥夺的自由度。二维和三维中高效计算逆运动学的方法也可以用在 7.4.1 节的 RDT 步进方法里，代替数值延拓。</p>
+<p>若用的被动变量个数达到最大，逆运动学问题至多有有限个解，这意味着被动变量的取值常常有好几种选择。也可能对某些主动变量的取值，逆运动学根本无解（图 7.25）。设我们想通过随机选 \(q^a\)、再用逆运动学求 \(q^p\) 来在 \(\mathcal{C}_{clo}\) 中生成样本：逆运动学有解的概率是多少？对图中的例子，看起来大多数尝试都不会有解。</p>
+
+<h4>环生成器 <span class="en">Loop generator</span></h4>
+<p>随机环生成器通过<b>迭代地限制每个主动变量的取值范围</b>，大大提高得到闭合的机会。这个方法要求主动变量沿链<b>依次</b>出现（主动变量与被动变量不交错）。\(q^a\) 的 \(m\) 个坐标依次这样得到：先算出 \(q^a_1\) 的允许值区间 \(I_1\)。这个区间是一个宽松的界：对任何 \(q^a_1\notin I_1\)，都能确定闭合不可能——这由对连杆的仔细几何分析保证（下面会讲）。下一步在 \(q^a_1\in I_1\) 中生成样本，即在 \(I_1\) 中随机取一点。用这个 \(q^a_1\)，算出 \(q^a_2\) 允许值的区间 \(I_2\)，在 \(I_2\) 中采样得到 \(q^a_2\)。如此迭代，直到得到 \(I_m\) 和 \(q^a_m\)——除非因为某个 \(I_i=\emptyset\)（\(i&lt;m\)）而提前终止。若成功终止，就用主动变量 \(q^a\) 求被动变量 \(q^p\)。这一步仍可能失败，但成功的概率高多了。这个方法也可以用于有多个公共环的连杆（如 Stewart–Gough 平台）：把连杆拆成一棵树，用环生成器一次闭合一个环。性能取决于连杆的分解方式。</p>
+
+<div class="widget wide" data-widget="loop-generator"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>点「朴素随机取一次」几次：大多数时候红色虚线太长（图 7.25 的情形），三个被动关节无论取什么都闭合不了。点「各试 1000 次」：朴素随机只有约 4% 能闭合（参考代码第 6 项：4.1%），环生成器 100%。</li>
+  <li>点「环生成器取一次」：每个主动关节处的绿色扇形就是区间 Iᵢ——它由「剩下的连杆从 B₁ 出发能到的圆环」算出来，在区间里取值，后面就总有办法闭合。</li>
+  <li>拖动四个主动关节的滑块：C_clo 是 4 维的，这四个数就是它的局部坐标；切换「被动解 1 / 2」，同一组主动变量对应两种闭合方式（两连杆逆运动学的两个解）。<span class="muted">（补充：这里忽略了连杆之间的自碰撞。）</span></li>
+</ul></div>
+
+<h4>计算关节角的界</h4>
+<p>成功应用这个方法的主要要求，是能在某个关节变量范围内，计算一串连杆在 \(\mathcal{W}\) 中能走多远的界。例如平面链的转动关节若没有限位，链在极限情况下扫出一个圆（图 7.26a）。若已知相邻连杆之间的夹角必须保持在 \(-\pi/6\) 到 \(\pi/6\) 之间，就能得到更紧的包围区域（图 7.26b）。这些界随后用来在采样算法的每次迭代中计算 \(I_i\)。</p>
+
+<div class="widget" data-widget="reach-bound"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>默认 α = 15°、β = 20°：蓝点是随机关节角下末端的位置，挤在一个窄窄的扇环里；灰色大圆是无限位时的界。用扇环算环生成器的区间，能筛掉多得多的角度。</li>
+  <li>把 α 调到 180°：限位等于没有，扇环的界失效，只剩整个圆（图 7.26a）。<span class="muted">（补充：扇环的推导——第 j 根连杆相对第 1 根至多偏 (j−1)α，偏角不超过 90° 时所有连杆方向都在一个凸锥里，末端也在锥里；沿第 1 根方向的投影至少 Σ cos(jα)。）</span></li>
+</ul></div>
+
+<p>有了直接在 \(\mathcal{C}_{clo}\) 中生成样本的高效方法，就可以直接改造第 5 章任何采样规划方法。用 RDT 和 5.6.2 节的可见性采样路线图得到了很多令人印象深刻的结果：C-space 维数达 97、\(\mathcal{C}_{clo}\) 维数达 25（图 7.27 的 Logabex LX4 机器人，不到一分钟算出）。这些算法里，局部规划方法作用在主动变量上，路径验证时用逆运动学算被动变量；也就是说，逆运动学和碰撞检测一起做，而不只是像 5.3.4 节那样只做碰撞检测。</p>
+<p>这一节忽略了一个重要问题：<b>运动学奇点 kinematic singularities</b>，它们使 \(\mathcal{C}_{clo}\) 的维数在某些点附近下降。上面的方法都假设解运动规划问题不需要穿过奇点。对有很多冗余自由度的机器人系统，这个假设是合理的，但要明白，一般来说这会<b>失去完备性</b>，因为采样方法并不显式地处理这些退化情况。某种意义上，它们发生在比采样分辨率更细的层次上。</p>
+</section>
+
+<!-- ============================================================ 7.5 -->
+<section id="s7-5">
+<h2>7.5 机器人学与生物学中的折叠问题 <span class="en">Folding Problems in Robotics and Biology</span></h2>
+<p>越来越多的运动规划应用涉及某种形式的<b>折叠</b>：自动折纸箱、计算机辅助药物设计、蛋白质折叠、模块化可重构机器人，甚至机器人折纸。这些问题一般建模成所有物体都由转动关节相连的连杆。在机器人学中，通常必须避免物体两两之间的自碰撞。在生物应用中，<b>能量函数取代了障碍</b>：不再是清晰的障碍边界，能量函数可以看作「软」障碍——对每个 \(q\in\mathcal{C}\) 定义一个实数值，而不是定义一个集合 \(\mathcal{C}_{obs}\subset\mathcal{C}\)。给定阈值时，可以把能量高于阈值的位形定义为 \(\mathcal{C}_{obs}\)，从而把能量函数转成障碍区域；但能量函数包含更多信息，因为这样的阈值是任意的。这一节简要介绍近期运动规划文献中的几个折叠问题和技术。</p>
+
+<h4>纸箱折叠 <span class="en">Carton folding</span></h4>
+<p>运动规划在自动折盒子上有一个有趣的应用。图 7.28 是一个纸箱的原始平板形态和折好的形态。如图 7.29 所示，这个问题可以建模成<b>由转动关节相连的物体组成的树</b>。建好这个模型后，第 5、6 章的很多方法都能改过来用。有人针对折盒子优化了一个规划算法，它改编自为运动链开发的近似单元分解算法；复杂度对纸箱的自由度是指数的，但在实际例子上表现很好。图 7.30 是运动规划找到的一个折叠序列。要在工厂里用这些解，还得考虑操作问题：可以把机械臂和一组精心设计的夹具结合起来，夹具把纸箱固定住，机械手在正确的位置施压，就得到所需的折叠。因为用夹具是否可行取决于具体的折叠路径，规划算法会生成从初始位形（盒子完全展开）出发的<b>所有</b>可能的不同路径。</p>
+
+<div class="widget wide" data-widget="carton"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>点「播放」按顺序折：左右两片 → 前 → 后 → 盖，每次动一组关节，和图 7.30 一样。盖子挂在后侧板上（树的深度为 2），所以它随后侧板一起转，再绕自己的折痕转。</li>
+  <li>先把盖子折到 90°、后侧板留在 0°：盖子会扎进「地面」——真实的规划器要排除这种自碰撞的折叠路径。<span class="muted">（补充：本图是我们简化的 5 关节纸箱，图 7.29 有 7 个关节。）</span></li>
+</ul></div>
+
+<h4>结的化简 <span class="en">Simplifying knots</span></h4>
+<p><b>结 knot</b> 是一条嵌在 \(\mathbb{R}^3\) 中、不自交的闭曲线，它不能被解开成简单的环（比如圆）。如果允许结自交，任何结都能解开，所以需要仔细定义「解开一个结」是什么意思。对嵌入 \(\mathbb{R}^3\) 的闭曲线 \(\tau:[0,1]\to\mathbb{R}^3\)（它不能自交），令 \(\mathbb{R}^3\setminus\tau([0,1])\) 为曲线没有经过的点的集合，称为 \(\tau\) 的<b>环绕空间 ambient space</b>。在结理论中，两条闭曲线 \(\tau_1\)、\(\tau_2\) 之间的<b>环绕同痕 ambient isotopy</b> 是它们环绕空间之间的同胚。直观上，这意味着 \(\tau_1\) 能在不允许自交的情况下被扭成 \(\tau_2\)。所以判断两个环是否等价看起来和运动规划密切相关。这种等价产生刻画结空间的群，与 4.1.3 节的基本群密切相关。</p>
+<p>有人开发了一种运动规划方法，来判断一条闭曲线是否等价于<b>平凡结 unknot</b>——完全解开的结，可以表示成映到 \(\mathbb{S}^1\)、嵌入 \(\mathbb{R}^3\) 的曲线。算法的输入是嵌在 \(\mathbb{R}^3\) 中的一串首尾相连的线段；此时平凡结可以表示成一个<b>三角形</b>。图 7.31 是这个规划器解出的最有挑战的例子之一（著名的 Ochiai unknot，在普通 PC 上几分钟）。这个规划器基于采样，和 5.5 节的 RDT 以及 5.4.4 节的 Ariadne's clew、扩展空间规划器有很多相似之处。因为任务不是产生无碰撞路径，它和运动规划相比有几个独特之处：在线段集合上定义了一个能量函数，引导搜索走向更简单的位形；规划器执行两种局部操作：1）尝试把一个顶点移向环绕空间中选定的子目标（用随机采样生长搜索树）；2）尝试删掉一个顶点，用直线连接相邻的两个顶点——如果中间位形没有碰撞，结就被化简了。无法再化简时算法终止。</p>
+
+<div class="widget" data-widget="knot"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>「乱成一团的平凡结」点化简：36 个顶点的线团最终缩成一个三角形——它是平凡结。（这个线团是从平面上的圆出发、只做「不穿过」的随机挪动得到的，所以一定是平凡结。）</li>
+  <li>换「三叶结」：同样的两种操作做到 6 个顶点就再也删不掉了——三叶结至少要 6 根线段，它不等价于平凡结。</li>
+  <li><span class="muted">（补充：本图的局部操作是书中描述的简化实现：删掉顶点 v 当且仅当三角形 (前一点, v, 后一点) 没有被别的线段穿过；挪动顶点时检查两条边扫过的三角形。能量函数取总长度。）</span></li>
+</ul></div>
+
+<h4>药物设计 <span class="en">Drug design</span></h4>
+<p>有人用基于采样的运动规划方法做药物设计。药物开发是一个漫长的渐进过程，通常需要多年的研究和实验。目标是找一个相对小的分子，叫<b>配体 ligand</b>（通常由几十个原子组成），它能与某个蛋白质的受体空腔对接（图 1.14、1.2 节）。蛋白质–配体对接可以刺激或抑制某些生物活性，最终产生期望的药理效果。找到合适的配体之所以复杂，既因为能量方面的考虑，也因为配体是柔性的。除了满足结构上的考虑，合成的难易、药理和毒理等因素也让寻找最有效药物分子的工作更复杂、更漫长。</p>
+<p>化学家在药物设计中常用的一个模型是<b>药效团 pharmacophore</b>，它充当所需配体的模板。药效团表达为有效配体应具备的一组<b>特征 features</b>，以及特征之间的一组<b>空间约束</b>。特征的例子有特定原子、苯环中心、正电荷或负电荷、疏水或亲水中心、氢键供体或受体。特征一般要求分子的某些部分在 \(\mathbb{R}^3\) 中保持固定，这就诱导出<b>运动学闭合约束</b>。这些特征是化学家为了概括这样一个假设而总结出来的：配体的结合主要取决于配体某些特征与受体「互补」特征的相互作用。参与相互作用的特征放在药效团里，药效团是筛选候选药物的模板；配体的其余原子只是一个支架，把药效团特征保持在它们的空间位置上（图 7.32）。</p>
+<p>候选药物分子（配体）可以像图 7.33 那样建模成物体的树。有些化学键可以旋转，在模型中就是转动关节；另一些键必须保持固定。药物设计问题就是搜索构型空间（称为<b>构象 conformations</b>），试图找到一个低能量、同时把某些原子放在 \(\mathbb{R}^3\) 指定位置的构型。这个额外约束来自药效团，它使规划在 7.4 节的 \(\mathcal{C}_{clo}\) 上进行，因为药效团可以表示成闭合约束。</p>
+<p>能量函数的作用类似于碰撞检测器。评价一个用于药物设计的配体，需要判断它能否达到满足药效团约束的低能量构象。所以任务与标准运动规划不同，<b>没有预先给定的目标构型</b>。最大的困难之一是能量函数极其复杂、非线性且是经验性的。下面是一个典型的例子：</p>
+<div class="eq">$$\begin{aligned}e(q)={}&\sum_{bonds}\tfrac12K_b(R-R')^2+\sum_{ang}\tfrac12K_a(\alpha-\alpha')^2+\sum_{torsions}K_d\big[1+\cos(p\theta-\theta')\big]\\&+\sum_{i,j}\Big\{4\epsilon_{ij}\Big[\Big(\frac{\sigma_{ij}}{r_{ij}}\Big)^{12}-\Big(\frac{\sigma_{ij}}{r_{ij}}\Big)^{6}\Big]+\frac{c_ic_j}{\epsilon r_{ij}}\Big\}.\end{aligned} \tag{7.25}$$</div>
+<p>这个能量考虑了扭转角的形变、van der Waals 势和 Coulomb 势。(7.25) 中第一个和遍历所有化学键，第二个遍历所有键角，第三个遍历所有可旋转的键，最后一个遍历所有原子对。各变量是：力常数 \(K_b\)、\(K_a\)、\(K_d\)；介电常数 \(\epsilon\)；周期常数 \(p\)；Lennard-Jones 半径 \(\sigma_{ij}\)；阱深 \(\epsilon_{ij}\)；部分电荷 \(c_i\)；测得的键长 \(R\)；平衡键长 \(R'\)；测得的键角 \(\alpha\)；平衡键角 \(\alpha'\)；测得的扭转角 \(\theta\)；平衡扭转角 \(\theta'\)；原子中心之间的距离 \(r_{ij}\)。能量表达式虽然很复杂，但它只依赖于构型变量，其余都是事先估计好的常数。</p>
+
+<div class="widget wide" data-widget="energy"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>这是 (7.25) 的二维缩小版（补充）：键长、键角固定，只留两个可旋转键的扭转项（p = 3，所以每个方向有三个低谷）和非键原子对的 Lennard-Jones、Coulomb 项。在右边的能量图上点一点，左边的分子跟着变。</li>
+  <li>拖动阈值：灰色是「被当作 C_obs」的高能量区。阈值越低 C_free 越小；阈值是人为挑的，能量图本身告诉你的比「是 / 否」多得多。</li>
+  <li>点「走到最近的局部极小」：沿能量下降方向走，停在附近的一个谷底——不一定是全局最低（黑圈）。勾上药效团约束：可行构象被压到绿色的窄带里（7.4 节的 C_clo，这里为了可见做了加厚）。</li>
+</ul></div>
+
+<h4>蛋白质折叠 <span class="en">Protein folding</span></h4>
+<p>在计算生物学中，蛋白质折叠问题和药物设计有很多相似之处：分子都有可旋转的键，都用能量函数来表达好的构型。不过问题复杂得多，因为蛋白质分子一般比药物分子大得多：药物分子典型的自由度是十几个，蛋白质有<b>成百上千</b>个。蛋白质在自然界中通常处于折叠的低能量构型。<b>结构问题 structure problem</b> 要精确确定蛋白质是怎么折叠的，以便完全理解它的生物活性。有些研究中，生物学家甚至关心蛋白质到达折叠态的<b>路径</b>。这直接引出运动规划的一个扩展：要到达分子已折叠的目标状态。有人用采样规划算法计算蛋白质的折叠路径：蛋白质从展开的构型出发，必须到达一个指定的折叠构型，途中不违反能量约束（图 7.34）。这项工作还揭示了蛋白质折叠与前面讲的折盒子之间有趣的联系。</p>
+</section>
+
+<!-- ============================================================ 7.6 -->
+<section id="s7-6">
+<h2>7.6 覆盖规划 <span class="en">Coverage Planning</span></h2>
+<p>想象为一座庄园的割草机自动规划运动：那里有房子、树、车库和复杂的地界。割草机最好的之字形运动是什么？能不能让多余的重复经过最少？能不能让割草机停下来转向的次数最少？这是<b>覆盖规划 coverage planning</b> 的一个例子，它的动机来自割草、自动耕作、喷漆、吸尘和扫雷等应用。即使是 \(\mathcal{W}=\mathbb{R}^2\) 中的一块区域，求最优长度的覆盖解也是 <b>NP-hard</b> 的——可以归约到与之密切相关的旅行商问题。所以即使在 \(\mathbb{R}^2\) 中，我们也愿意容忍一般覆盖问题的近似解甚至启发式解。</p>
+
+<h4>牛耕式分解 <span class="en">Boustrophedon decomposition</span></h4>
+<p>一种做法是把 \(\mathcal{C}_{free}\) 分解成单元，在每个单元里做 <b>boustrophedon</b>（希腊语「牛耕地时的转弯」）运动（图 7.35）。假设机器人是 \(\mathcal{W}=\mathbb{R}^2\) 中的一个点，但带着一个厚度为 \(\epsilon\) 的<b>工具</b>，均匀地挂在机器人两侧。于是它向前走时，能喷涂或割掉机器人两侧各 \(\epsilon/2\) 距离以内的 \(\mathcal{C}_{free}\)。打印机常用这种运动来减少回车的次数。</p>
+<p>若 \(\mathcal{C}_{obs}\) 是多边形，改编 6.2.2 节的竖直分解方法就能得到一个合理的分解。在那个算法里，临界事件分好几种情况，其中一些对牛耕式运动没有意义：只需要处理图 7.36a 那样的事件——从顶点同时向上和向下延伸（图 6.2 的第一种情况），其余情况都忽略。这样得到的分解单元更少（图 7.36b，比图 6.3 的竖直分解少）。单元虽然不一定是凸的，但总能被很好地切成竖条，所以适合牛耕式运动。原来的竖直分解也能用，但多出来的单元边界会让机器人做不必要的重新定位。还有一种类似的方法，进一步优化了机器人转弯的次数。</p>
+
+<div class="widget wide" data-widget="boustrophedon"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>默认是牛耕式分解：8 个单元，每条虚线都是一次「分叉、合并、出现或消失」（参考代码第 8 项）。勾上「对比：竖直分解」，在每个顶点处都切开，变成 13 个单元——那些并不改变连通性的「拐角」顶点也各自多切出一条边界。</li>
+  <li>把工具宽度 ε 调小：车道变多、覆盖率提高、路线变长；没覆盖到的主要是斜边与尖角处的小三角。</li>
+</ul></div>
+
+<h4>生成树覆盖 <span class="en">Spanning tree covering</span></h4>
+<p>Gabriely 和 Rimon 提出了一种有趣的近似方法：在 \(\mathcal{C}_{free}\) 里铺满方格，再计算得到的连通图的<b>生成树</b>。同样设 \(\mathcal{C}_{free}\) 是多边形，看图 7.37a 的例子。第一步是用方格铺满 \(\mathcal{C}_{free}\) 的内部（图 7.37b），每个方格的宽度为 \(\epsilon\)（某个常数 \(\epsilon>0\)）。接着构造路线图 \(\mathcal{G}\)：在每个方格中心放一个顶点，每对相邻方格的中心之间连一条边<sup class="fn"><a href="#fn-cubes" id="fn-cubes-ref">10</a></sup>。下一步计算 \(\mathcal{G}\) 的<b>生成树</b>：一个连通、无环、覆盖 \(\mathcal{G}\) 所有顶点的子图；若 \(\mathcal{G}\) 有 \(n\) 条边，可以在 \(O(n)\) 时间内算出。生成树有很多，可以定义一个准则来优化、表达偏好。图 7.37c 是一种可能的生成树。</p>
+<p>生成树做好之后，机器人路径这样得到：从生成树旁边的一点出发，沿着它的<b>外围</b>走。这条路径可以精确地描述（图 7.38）：把铺砖的分辨率加倍，构成对应的路线图。路线图的一部分对应生成树，另外还包括一条环绕生成树的环路；这条路径经过新方格的中心。图 7.37a 例子得到的路径见图 7.37d。一般来说，一旦给定了这个近似，这个方法就给出<b>最优</b>的路线。由近似导致的未覆盖面积有一个界；还有不需要初始地图的版本，它涉及第 11 章讲的信息空间推理。</p>
+
+<div class="widget wide" data-widget="stc"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>红线是生成树，绿线是沿它外围的路线：71 个方格、284 个小格，每个小格<b>恰好</b>经过一次，没有重复（参考代码第 8 项）。</li>
+  <li>切换 DFS / BFS / 随机树：路线完全不同，长度却一样——所以可以按「转弯少」之类的准则挑树。点几个方格切换障碍，看路线怎样绕过它们；把某块区域隔断，那块就覆盖不到了。</li>
+</ul></div>
+</section>
+
+<!-- ============================================================ 7.7 -->
+<section id="s7-7">
+<h2>7.7 最优运动规划 <span class="en">Optimal Motion Planning</span></h2>
+<p>这一节在很多方面都是过渡性的。到目前为止，运动规划主要关心的是<b>可行性 feasibility</b> 而不是<b>最优性 optimality</b>：重点是找到<b>任何</b>解，而不再要求解是最优的。在本书后面的部分，尤其是引入不确定性之后，最优性会受到更多关注；即使最基本形式的决策论（第 9 章的主题）也以做出最优选择为中心。在非常一般的情形下要求最优，通常需要在状态空间上做<b>穷举搜索</b>，相当于计算连续的代价到达函数（cost-to-go）。一旦知道了这样的函数，就得到一个<b>反馈计划</b>，它比只有一条路径强大得多（见 <a href="ch8-feedback-motion-planning.html">第 8 章教程</a>）。所以最优性也常出现在反馈计划的设计中，因为有时它不需要额外代价，这在第 8 章会更清楚。对最优解的追求还引出了怎样用离散问题近似连续问题的有趣问题：在联系连续与离散规划问题时，时间离散化与空间离散化之间的相互作用变得非常重要。</p>
+
+<h3 id="s7-7-1">7.7.1 单个机器人的最优性</h3>
+<h4>欧氏最短路径</h4>
+<p>最直接的最优性概念之一，是 \(\mathbb{R}^2\) 或 \(\mathbb{R}^3\) 中的欧氏最短路径。设 \(\mathcal{A}\) 是只在 \(\mathcal{W}=\mathbb{R}^2\) 或 \(\mathbb{R}^3\) 中平移的刚体，\(\mathcal{W}\) 中有障碍区域 \(\mathcal{O}\subset\mathcal{W}\)。回忆一般情况下 \(\mathcal{C}_{free}\) 是开集，这意味着任何路径 \(\tau:[0,1]\to\mathcal{C}_{free}\) 都还能再缩短。所以运动规划中的最短路径必须定义在<b>闭包</b> \(\operatorname{cl}(\mathcal{C}_{free})\) 上：允许机器人碰到障碍，但它们的内部不能相交。</p>
+<p>\(\mathcal{C}_{obs}\) 是多边形区域时，6.2.4 节已经给出了最短路路线图方法。它可以看作一种多查询方法，因为路线图完整地刻画了构造任何查询的最短路所需的结构。也可以用<b>连续 Dijkstra 范式 continuous Dijkstra paradigm</b> 做单查询算法：从 \(q_I\) 传播一个<b>波前</b>，并跟踪维护波前时发生的临界事件。随着事件发生，波前变成由一段段<b>小波 wavelets</b> 组成，它们是以障碍顶点为圆心的圆弧。可能发生的事件有：1）一个小波消失；2）一个小波碰到障碍顶点；3）一个小波碰到另一个小波；4）一个小波碰到障碍边内部的一点。这个方法可以做到 \(O(n\lg n)\) 时间、\(O(n\lg n)\) 空间，构造出的路线图用 \(O(n)\) 空间。8.4.3 节有一个相关的方法。</p>
+<p>这些优雅的方法让人觉得找最短路径并不太难，可惜它们不能很好地推广到 \(\mathbb{R}^3\) 和多面体的 \(\mathcal{C}_{obs}\)。图 7.39 给出一个简单例子：最短路径不必经过 \(\mathcal{C}_{obs}\) 的顶点，它可以从一条边内部的任何地方越过；所以不清楚构成最短路路线图的双切线该画在哪里。这个问题的下界也令人沮丧：多面体环境中的三维最短路问题已被证明是 <b>NP-hard</b> 的。大部分困难来自表示三维最短路所需的<b>精度</b>。因此人们给出了高效的多项式时间<b>近似</b>算法。</p>
+
+<svg class="fig" viewBox="0 0 640 170" role="img" aria-label="图 7.39 的示意：三维中最短路径越过棱的内部">
+  <polygon points="250,40 470,95 420,150 200,95" fill="var(--c-wall)" fill-opacity=".75"/>
+  <polygon points="420,150 470,95 500,150" fill="var(--c-wall)" fill-opacity=".55"/>
+  <line x1="200" y1="95" x2="420" y2="150" stroke="var(--surface)" stroke-width="1"/>
+  <line x1="250" y1="40" x2="470" y2="95" stroke="var(--surface)" stroke-width="1"/>
+  <line x1="470" y1="95" x2="420" y2="150" stroke="var(--warn)" stroke-width="2.5"/>
+  <polyline points="90,30 444,124 560,118" fill="none" stroke="var(--c-path)" stroke-width="2.4"/>
+  <circle cx="90" cy="30" r="5" fill="var(--c-start)"/><circle cx="560" cy="118" r="5" fill="var(--c-goal)"/>
+  <circle cx="444" cy="124" r="4" fill="var(--surface)" stroke="var(--c-path)" stroke-width="2"/>
+  <text x="452" y="164" font-size="11.5" fill="var(--warn)">越过棱的内部一点，而不是顶点</text>
+</svg>
+
+<h4>一般的最优性准则</h4>
+<p>对更一般的 C-space，连定义最优都很难。\(SE(2)\) 或 \(SE(3)\) 中的最短路径是什么意思？考虑一个能平移和旋转的平面刚体：一条路径可能让旋转量最小，另一条让平移量最小，没有更多信息就没有明确的偏好。<b>Ulam 距离</b>是一种可能，即最小化 \(k\) 个固定点走过的距离。第 13 章会引入微分模型，它们导出有意义的最优性定义，例如 15.3 节给出慢速汽车的最短路径——这需要精确说明汽车运动的约束（让车横着走比向前走代价更高）。</p>
+<p>这一节给出一些最优运动规划问题的表述，以便平滑过渡到后面的概念。到目前为止，动作曾在第 2 章用于离散规划问题，但在基本运动规划中通过直接描述映到 \(\mathcal{C}_{free}\) 的路径而被成功地回避了。现在再用它们会很方便——回忆它们在 2.3 节定义代价和最优规划时很方便。</p>
+<p>为了暂时回避微分方程的复杂性，考虑运动规划的一个近似模型：每条路径都必须由 \(\mathcal{C}_{free}\) 中一串最短路段组成。大多数时候它们是线段；不过对 \(SO(3)\)，用球面线性插值得到的圆弧可能更好。考虑把 2.3.2 节的 Formulation 2.3 推广到运动规划问题。设 C-space \(\mathcal{C}\) 嵌在 \(\mathbb{R}^m\) 中（即 \(\mathcal{C}\subset\mathbb{R}^m\)）。动作稍后定义为一个 \(m\) 维向量。给定缩放常数 \(\epsilon\) 和位形 \(q\)，动作 \(u\) 产生新位形 \(q'=q+\epsilon u\)。这可以看作<b>位形转移方程</b> \(q'=f(q,u)\)。动作 \(u\) 代表的路径段是 \(q\) 与 \(q'\) 之间的最短路（通常是线段）。仿照 2.3 节，令 \(\pi_K\) 表示一个 <b>\(K\) 步计划</b>，即 \(K\) 个动作的序列 \((u_1,u_2,\ldots,u_K)\)。注意若给定 \(\pi_K\) 和 \(q_I\)，就能用 \(f\) 推出状态序列 \(q_1,q_2,\ldots,q_{K+1}\)：起初 \(q_1=q_I\)，之后每个状态由 \(q_{k+1}=f(q_k,u_k)\) 得到。由此可以得到路径 \(\tau:[0,1]\to\mathcal{C}\)。近似最优规划问题形式化如下<sup class="fn"><a href="#fn-mn" id="fn-mn-ref">11</a></sup>：</p>
+
+<div class="box def formulation">
+  <div class="box-title">Formulation 7.4（近似最优运动规划 Approximate Optimal Motion Planning）</div>
+  <ol>
+    <li>以下组成部分定义同 Formulation 4.1：\(\mathcal{W}\)、\(\mathcal{O}\)、\(\mathcal{A}\)、\(\mathcal{C}\)、\(\mathcal{C}_{obs}\)、\(\mathcal{C}_{free}\)、\(q_I\)。假设 \(\mathcal{C}\) 是 \(n\) 维流形。</li>
+    <li>对每个 \(q\in\mathcal{C}\)，有一个可能无限的<b>动作空间</b> \(U(q)\)。每个 \(u\in U\) 是一个 \(n\) 维向量。</li>
+    <li>一个正常数 \(\epsilon>0\)，称为<b>步长 step size</b>。</li>
+    <li>一个<b>阶段 stages</b> 的集合，每个阶段记作 \(k\)，从 \(k=1\) 开始无限延续。每个阶段用下标表示，得到 \(q_k\) 和 \(u_k\)。</li>
+    <li><b>位形转移函数</b> \(f(q,u)=q+\epsilon u\)，其中 \(q+\epsilon u\) 由 \(\mathbb{R}^m\) 上的向量加法算出。</li>
+    <li>不是一个目标状态，而是定义一个目标区域 \(X_G\)。</li>
+    <li>令 \(L\) 表示作用在 \(K\) 步计划 \(\pi_K\) 上的实值代价泛函。这意味着动作序列 \((u_1,\ldots,u_K)\) 和位形序列 \((q_1,\ldots,q_{K+1})\) 都可以出现在 \(L\) 的表达式中。令 \(F=K+1\)。<b>代价泛函</b>是
+      <div class="eq">$$L(\pi_K)=\sum_{k=1}^K l(q_k,u_k)+l_F(q_F). \tag{7.26}$$</div>
+      最后一项 \(l_F(q_F)\) 在求和之外，定义为：若 \(q_F\in X_G\) 则 \(l_F(q_F)=0\)，否则 \(l_F(q_F)=\infty\)。和 Formulation 2.3 一样，\(K\) 不一定是常数。</li>
+    <li>每个 \(U(q)\) 都包含特殊的<b>终止动作</b> \(u_T\)，行为与 Formulation 2.3 相同：若在阶段 \(k\) 对 \(q_k\) 施加 \(u_T\)，那么此后一直施加这个动作，位形永远停在 \(q_k\)，不再累积代价。</li>
+  </ol>
+</div>
+<p>任务是计算一个优化 (7.26) 的动作序列。Formulation 7.4 可以定义各种各样的最优规划问题。参数 \(\epsilon\) 可以看作近似的<b>分辨率</b>；在很多表述里它可以解释为<b>时间步长</b> \(\epsilon=\Delta t\)，不过注意并不需要显式的时间，因为问题只要求在 \(\mathcal{C}_{free}\) 中构造一条路径。当 \(\epsilon\) 趋于 0 时，这个表述趋于一个精确的最优规划问题；要恰当地表达精确问题需要微分方程，这留到 Part IV。</p>
+
+<p><b>例 7.4（Manhattan 运动模型）</b>：设动作集 \(U(q)\) 除了 \(u_T\) 之外还包含 \(2n\) 个向量，每个向量只有一个分量非零，取值 1 或 −1。例如若 \(\mathcal{C}=\mathbb{R}^2\)，则</p>
+<div class="eq">$$U(q)=\{(1,0),(-1,0),(0,-1),(0,1),u_T\}. \tag{7.27}$$</div>
+<p>用在位形转移方程里，这组动作产生「上」「下」「左」「右」运动和一个「终止」命令。按 5.4.2 节的 1-邻域模型 (5.37)，它产生一张拓扑图。这个例子和后两个例子的动作集画在图 7.41 里对比。代价项 \(l(q_k,u_k)\) 对所有 \(q_k\in\mathcal{C}_{free}\) 和 \(u_k\) 都定义为 1；若 \(q_k\in\mathcal{C}_{obs}\)，则 \(l(q_k,u_k)=\infty\)。注意这些动作能到达的位形落在一张网格上，1-邻居之间的间距是 \(\epsilon\)。这对应一个方便的特例：时间离散化（由 \(\epsilon\) 实现）导致了规则的空间离散化。看图 7.40：不可能沿对角线走一条更短的路，因为动作不允许；所以所有沿网格方向的单调路径代价都相同。</p>
+<p>直接用第 2 章的动态规划算法就能得到最优路径。这个例子把 2.2 节（引入网格搜索）和 5.4.2 节（解释怎样把搜索方法用到运动规划上）的概念很好地统一起来。在现在的设定里，只有能在对应的图上给出最优解的算法才是可以接受的。这种优化可能看起来没什么用，因为它并不表示 \(\mathbb{R}^2\) 中的欧氏最短路问题；下一个模型增加了动作，并对应机器人学中一类重要的优化问题。</p>
+<p><b>例 7.5（独立关节运动模型 Independent-Joint Motion Model）</b>：现在设 \(U(q)\) 包含 \(u_T\) 和所有 \(3^n\) 个每个分量都取 −1、0 或 1 的向量。在这个模型下可以沿任何对角线走，但这仍不改变「所有可达位形都在网格上」这一事实，所以标准网格算法又能用了。区别在于现在每个顶点发出 \(3^n-1\) 条边，而例 7.4 是 \(2n\) 条。这个模型适合由转动关节相连的连杆组成的机器人：如果每个关节独立操作，那么每个关节可以向前、向后转或保持不动，正好对应这些动作。不过这个模型不能很好地近似欧氏最短路，这引出下一个例子。</p>
+
+<div class="widget wide" data-widget="motion-models"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>三条路径同时画出：蓝色 Manhattan 只能横竖走，最长；琥珀色 independent-joint 能斜走；绿色是欧氏最短路（ε → 0 的极限，用可见性图算）。看「最优路径条数」：Manhattan 有上亿条一样长的最优路径——图 7.40 说的就是这件事（参考代码第 7 项核对了空旷网格上的条数 C(a+b, a)）。</li>
+  <li>independent-joint 按书上「每阶段代价都是 1」时，斜走和直走一样贵（L∞ 度量），最优路径也多得数不清；切到「按欧氏长度计」（补充），它就更接近绿线，但仍被限制在 8 个方向上。</li>
+  <li>把 1/ε 调大：Manhattan 的长度并不会收敛到欧氏最短路——方向受限造成的误差不随分辨率消失。</li>
+</ul></div>
+
+<p><b>例 7.6（欧氏运动模型 Euclidean Motion Model）</b>：为了近似欧氏最短路径，令 \(U(q)=\mathbb{S}^{n-1}\cup\{u_T\}\)，其中 \(\mathbb{S}^{n-1}\) 是以 \(\mathbb{R}^n\) 原点为中心的 \((n-1)\) 维单位球面<sup class="fn"><a href="#fn-sphere" id="fn-sphere-ref">12</a></sup>。这意味着在 \(k\) 个阶段里，任何每段长度为 \(\epsilon\) 的分段线性路径都能由一串输入形成。因此可达状态集合不再局限于网格。取 \(\epsilon=1\)，任选一点，比如 \((\pi,\pi)\in\mathbb{R}^2\)，你能离它多近？结果是：若忽略障碍，用这个模型可达的点集在 \(\mathbb{R}^n\) 中<b>稠密</b>，也就是说可以任意接近 \(\mathbb{R}^n\) 中的任何点。所以不能用有限网格来表示这个问题。仍可以通过数值计算 \(\mathcal{C}\) 上的最优代价到达函数来得到近似解，这种方法在 8.5.2 节介绍。这个问题的另一个问题是为目标定义的精度：若目标区域相对 \(\epsilon\) 很小，可能必须选很复杂的路径才能精确地到达目标。</p>
+
+<div class="widget wide" data-widget="euclid-reach"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>默认 k = 5：五个单位步——三步直走，再用两步「人字形」补上剩下的 1.443——<b>恰好</b>落在 (π, π)（参考代码第 7 项：误差在 10⁻¹² 以内）。把 k 调成 4：π√2 ≈ 4.443 &gt; 4，到不了。</li>
+  <li>把目标拖到圆盘里任何地方都能恰好到达（k ≥ 2）。<span class="muted">（补充：书里说可达点「稠密、可以任意接近」，这没错，只是保守；更麻烦的是可达点不在任何固定网格上。）</span></li>
+</ul></div>
+
+<p><b>例 7.7（加权区域问题 Weighted-Region Problem）</b>：在户外和行星导航应用中，像目前这样清晰地定义障碍并不合理。对每块地形，更方便的是关联一个代价，表示通过它的估计难度。这有时被看作障碍的「<b>灰度</b>」模型。这个模型可以很容易地放进代价项 \(l(q_k,u_k)\) 里，动作空间可以借用例 7.4 或 7.5。12.3.2 节介绍的 Stentz 算法即使在地形最初未知时，也能为这个问题生成最优导航计划；最优加权区域规划问题也有理论界和近似算法。</p>
+
+<div class="widget" data-widget="weighted-region"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>最优路线绕到下面的「路」上过河，而不是直接蹚过泥地。选「刷：泥地 ×5」把桥抹掉，路线就改道。</li>
+  <li>选「设起点」在图上随便点：路线瞬间就出来了，不用重新搜索——代价到达函数 G 已经算好（蓝色越深 G 越小），从任何格子出发每步走向 G 更小的邻居即可。这就是第 8 章的反馈计划。</li>
+</ul></div>
+
+<h3 id="s7-7-2">7.7.2 多机器人的最优性</h3>
+<p>设有两个机器人，如图 7.42 所示。空间刚好够机器人沿走廊平移。每个机器人都想到达底部（箭头所示），可是中间的水平走廊一次只能过一个。设任一时刻每个机器人要么<b>开 on</b>、要么<b>关 off</b>：开时以最大速度运动，关时停下<sup class="fn"><a href="#fn-onoff" id="fn-onoff-ref">13</a></sup>。再设每个机器人都想尽快到达目标，即最小化它处于关的总时间。在这个例子里似乎只有两个合理的选择：1）\(\mathcal{A}^1\) 一直开，径直走向目标，\(\mathcal{A}^2\) 关一段刚好够 \(\mathcal{A}^1\) 通过的时间，然后走向目标；2）反过来，\(\mathcal{A}^2\) 一直开、\(\mathcal{A}^1\) 等待。注意机器人等待的地点可以有很多处，到达目标的时间都一样，唯一重要的信息是它关了多久。</p>
+<p>所以两个有意思的计划是：要么 \(\mathcal{A}^2\) 关一段时间 \(t_{off}>0\)，要么 \(\mathcal{A}^1\) 关 \(t_{off}\)。考虑形如 \((L_1,L_2)\) 的代价向量，每个分量表示一个机器人的代价。若用等待浪费的时间衡量计划的代价，两个计划的代价向量就是 \((0,t_{off})\) 和 \((t_{off},0)\)（也可以等价地把代价定义为每个机器人的总行进时间：开的时间对两个机器人相同，在这个简单例子里可以从各自的代价中减掉）。这两个计划优于或等价于任何其它计划，具有这种性质的计划称为 <b>Pareto 最优</b>（或<b>非劣 nondominated</b>）。例如若 \(\mathcal{A}^2\) 为了让 \(\mathcal{A}^1\) 通过多等了 1 秒，代价就是 \((0,t_{off}+1)\)，显然比 \((0,t_{off})\) 差，这个计划不是 Pareto 最优的。9.1.1 节会更详细地讨论 Pareto 最优。</p>
+<p>解这个问题的另一种办法是把代价<b>标量化</b>，映射成单个值。例如可以找使平均浪费时间最优的计划；这时会得到两个最好计划之一<sup class="fn"><a href="#fn-avg" id="fn-avg-ref">14</a></sup>，但关于「哪个机器人做了牺牲」的信息一点也没有保留。标量化通常会在机器人之间强加某种人为的偏好或优先级。最终只能选一个计划，所以维护多个解似乎不太合适。不过，找出并呈现另外的 Pareto 最优解可能提供有价值的信息，例如这些机器人参与了一个涉及很多其它时变过程的复杂应用时。呈现 Pareto 最优解，等于丢弃所有更差的计划、只展示最好的几个备选。在某些应用中机器人之间的优先级可能变化，如果机器人调度器能拿到 Pareto 最优解，就能很容易地在它们之间切换来改变优先级，不必每次都重新生成计划。</p>
+<p>下面把 Pareto 最优的概念说得更精确、更一般。设有 \(m\) 个机器人 \(\mathcal{A}^1,\ldots,\mathcal{A}^m\)，令 \(\gamma\) 表示一个给出所有机器人路径和时间函数的运动计划。对每个 \(\mathcal{A}^i\)，令 \(L_i\) 表示它的代价泛函，对给定计划 \(\gamma\) 取值 \(L_i(\gamma)\in[0,\infty]\)。定义 \(m\) 维向量</p>
+<div class="eq">$$L(\gamma)=(L_1(\gamma),L_2(\gamma),\ldots,L_m(\gamma)). \tag{7.28}$$</div>
+<p>若 \(L(\gamma)=L(\gamma')\)，称两个计划 \(\gamma\)、\(\gamma'\) <b>等价</b>。若 \(\gamma\) 与 \(\gamma'\) 不等价、且对所有 \(1\le i\le m\) 都有 \(L_i(\gamma)\le L_i(\gamma')\)，称 \(\gamma\) <b>支配</b> \(\gamma'\)。一个计划若不被任何其它计划支配，就称为 <b>Pareto 最优</b>。因为很多 Pareto 最优计划可能是等价的，任务是从每个等价类中确定一个代表，这称为找出 <b>unique</b> 的 Pareto 最优计划。图 7.42 的例子有两个 unique Pareto 最优计划，前面已经给出。</p>
+
+<h4>标量化 <span class="en">Scalarization</span></h4>
+<p>对运动规划问题，Pareto 最优解也是由各代价的线性组合构造出的某个标量代价泛函的最优解<sup class="fn"><a href="#fn-scal" id="fn-scal-ref">15</a></sup>。令 \(\alpha_1,\ldots,\alpha_m\) 为正实常数，令</p>
+<div class="eq">$$l(\gamma)=\sum_{i=1}^m\alpha_iL_i(\gamma). \tag{7.29}$$</div>
+<p>很容易证明：任何对 (7.29) 最优的计划也是 Pareto 最优解。但如果用这种方式生成一个 Pareto 最优解，就没有简便的办法确定还有哪些备选。</p>
+
+<div class="widget wide" data-widget="pareto"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>「H 形走廊」：代价平面上只有两个 Pareto 最优点 (0, 7) 和 (7, 0)——就是图 7.42 的「谁等 t_off」（这里 t_off = 7，参考代码第 9 项）。灰点是随机的其它计划，全在它们的右上方（被支配）。点一个蓝点，看对应的协调计划。</li>
+  <li>拖动 α₁：加权和的等值线（琥珀色虚线）在两个点之间跳，标量化相当于人为定了谁优先。</li>
+  <li>换「之字形三次穿越」（补充）：有三个 Pareto 最优点，红色的 (4, 2.5) 高高地在另外两点连线的上方——无论 α 怎么取，(7.29) 都选不中它。所以「用加权和找 Pareto 解」只能找到前沿凸包上的那些。</li>
+</ul></div>
+
+<h4>计算 Pareto 最优计划</h4>
+<p>既然单个机器人的优化已经很难，计算 Pareto 最优计划更难也就不奇怪了。对某些问题，甚至可能存在 Pareto 最优解的<b>连续统</b>（见例 9.3），这非常令人沮丧。幸运的是，对 7.2.2 节考虑的「在拓扑图上协调机器人」问题，解的个数是<b>有限的</b>。有一个基于动态规划、计算所有 unique Pareto 最优协调计划的网格算法；对两个多边形机器人在一棵分段线性路径树上运动的特殊情况，有一个完备算法。</p>
+<p class="small muted">（本页 Pareto 图用的就是这种网格动态规划：在协调空间的网格上只允许 → ↑ ↗ 三种移动（开 / 关模型），每个格点保存一组互不支配的代价向量；这也是习题 13 的思路。）</p>
+</section>
+
+<!-- ============================================================ 延伸阅读 -->
+<section id="further">
+<h2>延伸阅读 <span class="en">Further Reading</span></h2>
+<p>本章覆盖了基本运动规划问题最直接的一些扩展。涉及不确定性的扩展贯穿整个 Part III，在运动规划中引入微分约束则是 Part IV 的主要关注点。在机器人学研究文献和网上还能找到大量其它扩展。下面按小节概括原书的阅读建议：</p>
+<ul>
+  <li><b>7.1</b>：时变运动规划假设所有运动都可预测，大部分内容基于早期工作（如 Reif–Sharir、Kant–Zucker 的路径–速度分解）。要在这种情境下引入不确定性，见第 10 章。2.4 节基于逻辑的表示已被推广到<b>时序逻辑 temporal logics</b>，以允许离散规划问题的时变部分。</li>
+  <li><b>7.2</b>：多机器人运动规划的文献很多。与之密切相关的是模块化可重构机器人的规划问题。在这两种情境里，<b>非正曲率 nonpositive curvature（NPC）</b>都是一个能大大简化最优路径结构的重要条件；拓扑图上点的 \(\mathcal{C}_{free}\) 的拓扑也有专门研究。近年来对一队或一群机器人的协调兴趣很大。装配规划的复杂性：一般 NP-hard，某些特殊情况有多项式时间算法。</li>
+  <li><b>7.3</b>：混合系统过去十年受到广泛关注，大多数工作考虑怎样为分段光滑系统设计控制律。操作规划框架基于 Alami 等人的工作；本章的框架忽略了抓取问题，抓取的分析与算法、微观尺度的操作另有文献。</li>
+  <li><b>7.4</b>：闭运动链的采样规划还可以看 Cortés、Han–Amato、Yakey 等人的工作；某些闭链有完备规划器；逆运动学与冗余自由度的威力另有文献。</li>
+  <li><b>7.5</b>：运动规划技术在计算生物学中的应用是一个蓬勃发展的领域；折纸箱的内容基于 Lu–Akella；还有一个创作折纸的机器人系统与规划技术<sup class="fn"><a href="#fn-knotref" id="fn-knotref-ref">16</a></sup>。</li>
+  <li><b>7.6</b>：覆盖规划方法基于 Choset–Pignon 与 Gabriely–Rimon，有一篇综述；在离散环境中，最优地访问目标集合中所有状态的近似算法（<b>orienteering problem</b>）也有研究。</li>
+  <li><b>7.7</b>：二维以上的最优运动规划极其困难；基于动态规划的近似见 8.5.2 节；\(\mathbb{R}^3\) 中的近似最短路、加权区域问题、Pareto 最优协调都有专门文献。</li>
+</ul>
+</section>
+
+<!-- ============================================================ 末尾 -->
+<section id="cheatsheet">
+<h2>本章速查表</h2>
+<div class="table-wrap">
+<table class="data">
+  <thead><tr><th style="width:9.5em">概念</th><th>要点</th></tr></thead>
+  <tbody>
+    <tr><td>状态空间 X</td><td>比 C 更一般；本章的 X 多由一个或多个 C-space 派生：C × T、C¹ × … × Cᵐ、C × M、[0,1]ᵐ。</td></tr>
+    <tr><td>时变问题</td><td>(7.1)(7.2)；路径必须<b>时间单调</b>（s₁ &lt; s₂ ⇒ t₁ &lt; t₂）；静止目标 X_G = {(q_G, t)} 是平行于 T 轴的线；默认允许无限加速度、无界速度。</td></tr>
+    <tr><td>ρ_X (7.3)</td><td>q = q' 为 0；t' ≤ t 为 ∞；否则 ρ(q, q')。单树 RDT 自动时间单调；双向难（X_G 不是点）；路线图用有向边、t = t' 不连。</td></tr>
+    <tr><td>组合方法</td><td>代数运动 ⇒ 半代数 X_obs；柱形代数分解把 t 放在最后投影；多面体时先沿时间轴扫描、在临界时刻切片；不按 T 切成柱体会破坏传递性（图 7.2）。</td></tr>
+    <tr><td>速度上限</td><td>‖v‖ ≤ b ⇒ 路径斜率有界、速度锥 (7.4)；分段线性运动下仍 PSPACE-hard；采样路线图只连锥内的邻居。</td></tr>
+    <tr><td>速度调节</td><td>先定 τ，再在 X = T × S 上找时间单调的 g，φ = τ∘σ；X_obs 见 (7.5)；s 方向可以不单调；承诺 τ 之后完备，对 Formulation 7.1 不完备。</td></tr>
+    <tr><td>多机器人</td><td>(7.6)–(7.10)；dim X = Σ dim Cⁱ（12 个 SE(3) 刚体就是 72 维）；X^{ij}_obs 只依赖两个机器人 ⇒ 柱形结构。</td></tr>
+    <tr><td>装配规划</td><td>零件当机器人，从装好的状态倒推；一般 NP-hard；能用直线依次移走的情形有多项式算法。</td></tr>
+    <tr><td>优先级规划</td><td>高优先级先规划，低优先级把它们当移动障碍（7.1 节方法）；不完备（图 7.8），结果依赖优先级顺序。</td></tr>
+    <tr><td>固定路径协调</td><td>X = [0,1]ᵐ，qⁱ = τᵢ(sᵢ)；(7.11)(7.12) 柱形障碍，½m(m−1) 张投影刻画 X_obs；h 不必单调；横 / 竖 = 一个不动，斜 = 都动。</td></tr>
+    <tr><td>固定路线图协调</td><td>每个机器人在拓扑图上；有车库 + X 中完备方法 ⇒ 完备；协调空间是立方复形：2-立方体 n₁n₂ 个，1-立方体 |V₁||E₂| + |E₁||V₂|，0-立方体 |V₁||V₂|。</td></tr>
+    <tr><td>混合系统</td><td>Formulation 7.3：X = C × M，(7.13)；动作 + 模式转移 f_m；解 = 路径 τ + 动作轨迹 σ（紧密耦合）；例 7.2（12 个模式）、例 7.3。</td></tr>
+    <tr><td>操作规划</td><td>(7.14)–(7.20)：C_adm 去掉 C^a_obs、C^p_obs（零件内部）、C^{ap}_obs；C_free = C_sta ∪ C_gr；只在 C_tra = C_sta ∩ C_gr 切换 transit / transfer；操作图 G_m 的顶点 = X_tra 的连通分量。</td></tr>
+    <tr><td>闭链</td><td>(7.21) C_clo（m 维，m &lt; n），C_fea = C_clo ∩ C_free；随机点落在上面的概率 0；RDT 样本在 ℝⁿ 里取，沿切平面步进 (7.22)–(7.24)，法向修正，或加厚 |fᵢ| &lt; ε。</td></tr>
+    <tr><td>主动–被动</td><td>m 个主动、n − m 个被动；平面单环 3 个被动（dim SE(2)），空间 6 个（dim SE(3)）；环生成器依次求区间 Iᵢ；需要关节角的可达界；奇点处失去完备性。</td></tr>
+    <tr><td>折叠</td><td>纸箱 = 转动关节树；结：环绕同痕、平凡结 = 三角形、删点 / 挪点；药物：药效团 ⇒ C_clo，能量 (7.25) 代替碰撞检测，无预定目标；蛋白质：成百上千自由度。</td></tr>
+    <tr><td>覆盖</td><td>最优覆盖 NP-hard；牛耕式分解只在连通性改变处切开、单元切成竖条来回耕；生成树覆盖：方格宽 ε → 生成树 → 分辨率加倍沿外围走，每个小格一次。</td></tr>
+    <tr><td>最短路</td><td>定义在 cl(C_free) 上；平面：最短路路线图 / 连续 Dijkstra O(n lg n)；三维多面体 NP-hard（不必过顶点，图 7.39）。</td></tr>
+    <tr><td>Formulation 7.4</td><td>q' = q + εu，K 步计划，(7.26) L = Σ l(q_k, u_k) + l_F(q_F)，终止动作 u_T；ε 是分辨率 / 时间步。</td></tr>
+    <tr><td>动作模型</td><td>Manhattan 2n 个（单调路径一样长）；independent-joint 3ⁿ − 1 个；Euclidean Sⁿ⁻¹（不在网格上，用 8.5.2 的近似）；加权区域 = 灰度障碍。</td></tr>
+    <tr><td>Pareto 最优</td><td>(7.28) 代价向量；等价 / 支配 / Pareto 最优 / unique；(7.29) 加权和的最优解一定是 Pareto 最优，反之不一定（前沿不凸时）；拓扑图上的协调只有有限个解。</td></tr>
+  </tbody>
+</table>
+</div>
+</section>
+
+<section id="pitfalls">
+<h2>常见陷阱</h2>
+<ol>
+  <li><b>把 X = C × T 当普通 C-space 用对称度量</b>：RRT 会把样本连到「未来」的顶点上，得到时间倒流的边。用 ρ_X，或者在路线图里用有向边。</li>
+  <li><b>允许 t = t' 的连边</b>：那是瞬间传送。时间单调要求严格的 t₁ &lt; t₂。</li>
+  <li><b>单元分解不按 T 切成柱体就传递可达性</b>：图 7.2 说明「A 到 B、B 到 C」推不出「A 到 C」。</li>
+  <li><b>以为速度调节是完备的</b>：它只在承诺了路径 τ 之后完备；τ 选得不好（比如正好穿过一个移动障碍必须停留的地方）就可能无解，而 Formulation 7.1 本身有解。</li>
+  <li><b>以为速度调节里 s 必须单调</b>：只有 t 必须单调；机器人可以沿 τ 倒退躲障碍。</li>
+  <li><b>把优先级规划当完备方法</b>：高优先级的机器人不理会低优先级者，可能把它堵死（图 7.8）；换顺序有时能行，但没有一般的办法事先知道。</li>
+  <li><b>多机器人直接用完备算法</b>：维数线性增长、完备算法时间至少指数增长；72 维的 C-space 不是组合方法能处理的。</li>
+  <li><b>把 C_tra 之外的地方当作可以松手</b>：零件只能在放稳且被夹住时切换模式；transit 路径中零件不动，transfer 路径中零件必须一直被夹着。</li>
+  <li><b>在 ℝⁿ 里随机撒点指望落在 C_clo 上</b>：概率是 0。要么步进 + 投影 + 法向修正，要么主动–被动分解。</li>
+  <li><b>忘了 Jacobian 的秩与切空间维数的关系</b>：切空间维数 = n − 秩；n 个变量、秩 n − m 时才有 m 个可独立选的位移（原书这里有笔误，见脚注 9）。</li>
+  <li><b>把能量阈值当成「真正的」障碍</b>：阈值是任意的，能量函数携带的信息比 C_obs 多。</li>
+  <li><b>把 Manhattan / independent-joint 的最优当成欧氏最优</b>：方向受限造成的长度误差不随 ε → 0 消失。</li>
+  <li><b>用加权和就以为找到了所有 Pareto 最优解</b>：(7.29) 的最优解一定是 Pareto 最优，但前沿不凸时有些 Pareto 最优解任何正权重都选不中；而且加权和本身就隐含了优先级。</li>
+</ol>
+</section>
+
+<section id="exercises">
+<h2>习题导引</h2>
+<p class="small muted">只给思路，不给完整解答。标「互动」的可以先在本页对应的图里做实验。</p>
+<ol>
+  <li><b>X_obs 何时是多面体 / 半代数的</b>：(a) 若 O 只做（分段）平移，把 (x − c₁t, y − c₂t) 代进原语 Hᵢ = {aᵢx + bᵢy + cᵢ ≤ 0}，得到 aᵢ(x − c₁t) + bᵢ(y − c₂t) + cᵢ ≤ 0，对 (x, y, t) 仍是线性的，所以 X_obs 是（分段的）多面体；一旦有随 t 变化的旋转，系数里出现 cos ωt、sin ωt，就不再是多面体了。(b) 只要变换矩阵的元素是 t 的多项式（旋转可以用 4.2 节的 (a, b) 参数化写成多项式），X_obs 就是半代数的。（互动：「时变障碍」三维图里的 X_obs 就是分段平移得到的多面体。）</li>
+  <li><b>有速度上限的采样路线图</b>：每个顶点只尝试连接落在它的速度锥（式 7.4）里、而且时间更晚的邻居，边有向。注意锥让「邻居」变成非对称关系。（互动：「时变问题上的 RDT」的速度锥。）</li>
+  <li><b>两个沿直线平移的多边形机器人的障碍区域</b>：协调空间是 [0,1]²，X_obs = {(s₁, s₂) | A¹(τ₁(s₁)) ∩ A²(τ₂(s₂)) ≠ ∅}。相对位置 τ₁(s₁) − τ₂(s₂) 是 (s₁, s₂) 的线性函数，碰撞当且仅当它落在 Minkowski 差 A² ⊖ A¹（4.3.2 节）里，所以 X_obs 是一个凸多边形的线性原像——还是凸多边形。</li>
+  <li><b>画出图 7.43 的协调空间</b>：A¹ 的之字形四次横穿 A² 的两条竖直腿，每次横穿得到 X_obs 中的一个小块，共 8 块。（互动：「固定路径协调」选「图 7.43（习题 4）」，先自己画再对照。）</li>
+  <li><b>两个三角形路线图</b>：(a) 9 个正方形，每条棱被两个正方形共用，χ = 0——环面 S¹ × S¹。(b) n 个机器人：n 维环面 Tⁿ。（互动：「立方复形」两个都选三角形。）</li>
+  <li><b>n 个相同机器人的 X 分成 n! 块</b>：排列群作用在 X 上（交换两个机器人的位形），X_obs 在这个作用下不变；按坐标的某种排序（例如第一个坐标的大小顺序）选一个基本区域，其余 n! − 1 块是它的像。</li>
+  <li><b>三角形 × Y</b>：9 个正方形、21 条棱、12 个角点，χ = 0；Y 的中心顶点对应的棱被 3 个正方形共用，所以不是流形——是三个圆柱沿一个圆粘在一起。（互动：「立方复形」选「三角形」×「T / Y 形」。）</li>
+  <li><b>自动做主动–被动分解</b>：思路是先求连杆图的生成树和一组独立环（环的个数 = 边数 − 顶点数 + 1，可以用图遍历在近似线性时间里求出）；每个环需要 3（平面）或 6（空间）个被动关节，选的时候让它们在环上连续出现、不与主动关节交错。可行的分解不难找，难的是挑出让可达界最紧、环生成器成功率最高的那一种。</li>
+  <li><b>两个固定路径机器人 + 可预测的移动障碍</b>：协调空间再加一维时间：X = [0,1]² × T，X_obs 包括柱形的机器人–机器人部分和随时间变化的机器人–障碍部分，路径必须在 T 方向单调——这是 7.1 与 7.2 的组合。</li>
+  <li><b>四连杆、末端固定在 (0, 2)</b>：(a) 末端位置 = Σ (cos φᵢ, sin φᵢ)（φᵢ 是累加的关节角），令它等于 (0, 2) 得两个方程；(b) 用 aᵢ = cos θᵢ、bᵢ = sin θᵢ 加上 aᵢ² + bᵢ² = 1 写成多项式；(c) 对 (a) 的两个方程求微分，就是 (7.22)(7.23)：2×4 的 Jacobian 乘 dq = 0，切空间维数 4 − 2 = 2。</li>
+  <li><b>实现：速度调节的竖直分解</b>（互动：「速度调节」的单元分解模式就是一个实现：沿时间轴扫描，只在矩形的左右边处切开，单元之间只连时间向前的边）。</li>
+  <li><b>实现：三个机器人的网格协调</b>（互动：「三个机器人的协调空间」用 41³ 的网格和 A*，判断碰撞只查三张投影表）。</li>
+  <li><b>Pareto 最优协调的波前算法</b>：在协调网格上按拓扑序传播，每个格点保存一组互不支配的代价向量（不存整条计划，只存回溯指针）。（互动：「Pareto 最优协调」就是这样实现的。）</li>
+  <li><b>环面上的闭链规划</b>：用 (6.40) 的隐式环面方程做 C_clo，RDT 的样本在包围盒里取，沿切平面步进再拉回。（互动：「沿 C_clo 步进的 RDT」是同一套方法在一条曲线上的版本。）</li>
+  <li><b>实现生成树覆盖</b>（互动：「生成树覆盖」：把每个方格的四个小格连成圈，在树边处剪开交叉连接，就得到一条哈密顿圈）。</li>
+  <li value="16">–17. <b>追逐移动目标的 RRT</b>：每个规划周期只执行最近一次计划的开头一段，同时为下一时间增量重新规划；17 题假设目标匀速，直到观测到偏差再修正——这已经接近第 8 章的反馈思想。</li>
+  <li value="18"><b>处理意外障碍</b>：执行中发现障碍改变，就从当前位置重新规划；用竖直分解这类足够快的算法。注意它只是「重规划」，不是真正的反馈计划。</li>
+  <li value="19"><b>用操作规划框架解汉诺塔</b>：每个圆环是一个零件，稳定位形 = 放在柱子上且不压在更小的环上；transfer 时只能拿每根柱子最上面的环。（互动：「操作规划」的网格版可以作为起点。）</li>
+  <li value="20"><b>网格近似的最优规划</b>：比较 4-、8-、16-邻域与不同度量。（互动：「三种动作模型」——Manhattan 的误差不随 ε → 0 消失。）</li>
+</ol>
+</section>
+
+<section id="notes">
+<h2>脚注与原书笔误</h2>
+<div class="box small">
+  <p id="fn-accel" style="margin:0 0 6px"><sup>1</sup> 原书脚注：无限加速度、无界速度的假设可能会让有力学或控制背景的读者不舒服。这时可以假定这里的模型近似的是每个物体都运动得很慢、动力学因而可以忽略的情形；如果仍不满意，就直接跳到 Part IV 去看一般的非线性系统。即使如此，考虑本章概念的含义也仍然有帮助，因为这些问题在涉及动力学的更复杂问题里依然存在。<a href="#fn-accel-ref">↩</a></p>
+  <p id="fn-f72" style="margin:0 0 6px"><sup>2</sup> 记号小问题：Formulation 7.2 第 5、6 条用的是 \(x_I\)、\(x_G\)，第 7 条却写成 \(x_{init}\)、\(x_{goal}\)，还写成「\(\tau(1)\in x_{goal}\)」——\(x_{goal}\) 是一个点，应为 \(\tau(1)=x_G\)。<a href="#fn-f72-ref">↩</a></p>
+  <p id="fn-n" style="margin:0 0 6px"><sup>3</sup> <b>原书笔误</b>（p. 322）：原文写「have been computed for \(i\) from 1 to \(n\)」，机器人的个数是 \(m\)，应为「从 1 到 \(m\)」。<a href="#fn-n-ref">↩</a></p>
+  <p id="fn-g1" style="margin:0 0 6px"><sup>4</sup> <b>原书笔误</b>（p. 326）：原文写「Suppose that \(\mathcal{G}\) and \(\mathcal{G}_2\) have \(n_1\) and \(n_2\) edges」，前一个应为 \(\mathcal{G}_1\)。<a href="#fn-g1-ref">↩</a></p>
+  <p id="fn-cube" style="margin:0 0 6px"><sup>5</sup> <b>原书笔误</b>（p. 326）：原书说图 7.10 的立方复形「由三个 2-立方体（正方形）、<b>一个</b> 1-立方体（线段）和八个 0-立方体（角点）定义」。按立方复形定义的第 1 条（每个立方体的面也必须在复形中），以及紧接着给出的一般规则 \(|V_1||E_2|+|E_1||V_2|=4\cdot1+3\cdot2\)，1-立方体应有 <b>10</b> 个；原文的「one 1-cube」大概只数了三个正方形共用的那条公共边（参考代码第 4 项）。<a href="#fn-cube-ref">↩</a></p>
+  <p id="fn-f73" style="margin:0 0 6px"><sup>6</sup> 记号小问题：原文第 10 条写「A set \(X_G\in X_{free}\)」，集合之间应为 \(X_G\subset X_{free}\)。<a href="#fn-f73-ref">↩</a></p>
+  <p id="fn-port" style="margin:0 0 6px"><sup>7</sup> 原书脚注：portiernia 是波兰某些公共设施里有人看管钥匙的地方（门卫室）。<a href="#fn-port-ref">↩</a></p>
+  <p id="fn-qp" style="margin:0 0 6px"><sup>8</sup> 记号小问题：\(q^p_{init}\) 是零件位形，属于 \(\mathcal{C}^p\)，原文却写 \(q^p_{init}\in\mathcal{C}_{sta}\)、\(\tau(0)=q^p_{init}\)（而 \(\tau\) 映到 \(X_{free}\)）。意思是：初始状态里零件处在 \(q^p_{init}\)、整个位形在 \(\mathcal{C}_{sta}\) 中，终止状态里零件处在 \(q^p_{goal}\)。<a href="#fn-qp-ref">↩</a></p>
+  <p id="fn-rank" style="margin:0 0 6px"><sup>9</sup> <b>原书笔误</b>（p. 342）：原文写「If the rank of the matrix is \(m\le n\), then \(m\) configuration displacements can be chosen independently, and the remaining \(n-m\) parameters must satisfy (7.23)」。这里的 \(m\) 是 (7.21) 定义的 \(\dim\mathcal{C}_{clo}\)，随后的 \(e_1,\ldots,e_m\) 也是切空间的 \(m\) 个基向量；而齐次方程组的解空间（切空间）维数是 \(n-\)秩，所以要让切空间是 \(m\) 维，矩阵的秩应为 \(n-m\)。正文已按此改写。参考代码第 6 项对七关节平面闭环算了 Jacobian：\(n=7\)、秩 3、\(\dim\mathcal{C}_{clo}=4\)。<a href="#fn-rank-ref">↩</a></p>
+  <p id="fn-cubes" style="margin:0 0 6px"><sup>10</sup> 原文写「connects the centers of each pair of adjacent cubes」，这里是二维的方格，应为 squares。另外，图 7.22 的图题「the project of the vector」应为 projection；图 7.24 的图题「four of the joints be designated as active」漏了 can。这几处都是文字小错。<a href="#fn-cubes-ref">↩</a></p>
+  <p id="fn-mn" style="margin:0 0 6px"><sup>11</sup> 记号说明：正文说 \(\mathcal{C}\subset\mathbb{R}^m\)、动作是 \(m\) 维向量，Formulation 7.4 第 1、2 条却说 \(\mathcal{C}\) 是 \(n\) 维流形、\(u\) 是 \(n\) 维向量，第 5 条又说在 \(\mathbb{R}^m\) 上做向量加法。可以理解为 \(\mathcal{C}\) 是嵌在 \(\mathbb{R}^m\) 里的 \(n\) 维流形，动作 \(u\) 与嵌入空间同维（\(m\) 维）；例 7.4–7.6 里 \(\mathcal{C}=\mathbb{R}^n\)，两者相等。<a href="#fn-mn-ref">↩</a></p>
+  <p id="fn-sphere" style="margin:0 0 6px"><sup>12</sup> <b>原书笔误</b>（p. 362）：原文写「\(\mathbb{S}^{n-1}\) is the \(m\)-dimensional unit sphere centered at the origin of \(\mathbb{R}^n\)」。\(\mathbb{S}^{n-1}\) 是 \(\mathbb{R}^n\) 中的 \((n-1)\) 维单位球面。<a href="#fn-sphere-ref">↩</a></p>
+  <p id="fn-onoff" style="margin:0 0 6px"><sup>13</sup> 原书脚注：这个模型允许无限加速度。可以想象速度慢到足以这样近似；如果仍不满意，就跳到第 13 章。<a href="#fn-onoff-ref">↩</a></p>
+  <p id="fn-avg" style="margin:0 0 6px"><sup>14</sup> <b>原书笔误</b>（小，p. 364）：原文说这样会得到两个最好计划之一，「yielding \(t_{off}\) average wasted time」。代价向量 \((0,t_{off})\) 的<b>平均</b>浪费时间是 \(t_{off}/2\)，\(t_{off}\) 是两个机器人的<b>总</b>浪费时间。<a href="#fn-avg-ref">↩</a></p>
+  <p id="fn-scal" style="margin:0 0 6px"><sup>15</sup> <b>补充说明</b>：这句话的字面意思（「Pareto 最优解也是某个线性加权标量泛函的最优解」）一般<b>不成立</b>：只有落在 Pareto 前沿凸包上的解才能被某组正权重选中；前沿不凸时，有的 Pareto 最优解任何正权重都选不中（互动图「之字形三次穿越」的 (4, 2.5)，参考代码第 9 项）。紧接着的那句「对 (7.29) 最优的计划一定是 Pareto 最优的」是对的。<a href="#fn-scal-ref">↩</a></p>
+  <p id="fn-knotref" style="margin:0 0 6px"><sup>16</sup> <b>原书笔误</b>（p. 366）：Further Reading 写「The knot-planning coverage is based on [90]」，但参考文献 [90] 是 Ladd 与 Kavraki 的《Fast exploration for robots with dynamics》；关于结的那篇是 [89]《Motion planning for knot untangling》，7.5 节正文引用的也是 [89]。另外，图 7.34 的图题引用 [10]，正文却说「Figure 7.34 shows an example from [11]」——两篇都是 Amato 组的蛋白质折叠论文，无法判断哪个对，这里只记下这处不一致。<a href="#fn-knotref-ref">↩</a></p>
+</div>
+</section>
+
+<nav class="pager">
+  <a href="ch6-combinatorial-motion-planning.html"><span class="dir">← 上一章</span>第 6 章 组合运动规划</a>
+  <a class="next" href="ch8-feedback-motion-planning.html"><span class="dir">下一章 →</span>第 8 章 反馈运动规划</a>
+</nav>
+
+<footer class="page-foot">
+  内容依据 Steven M. LaValle《Planning Algorithms》（Cambridge University Press, 2006）Part II 第 7 章整理与讲解，原书可在 <a href="https://lavalle.pl/planning/ch7.pdf" target="_blank" rel="noopener">lavalle.pl/planning/ch7.pdf</a> 免费阅读。互动图为学习辅助，标「补充」的内容不是书中原文；数值例子由 <a href="code/ch7_extensions.py">part2/code/ch7_extensions.py</a> 核对。
+</footer>
+
+</main>
+</div>
+</body>
+</html>

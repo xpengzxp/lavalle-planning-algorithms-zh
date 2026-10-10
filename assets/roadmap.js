@@ -28,7 +28,7 @@
       desc: "近年来主导文献的运动规划算法；只要理解「配置空间是连续状态空间」即可读懂大部分。第 14 章会在微分约束下重访。", key: "", pre: [4, 2] },
     { n: 6, part: "II", title: "组合运动规划", en: "Combinatorial Motion Planning", href: "part2/ch6-combinatorial-motion-planning.html",
       desc: "也叫精确算法：构造离散表示而不丢失信息，是完备的（有解必找到，否则报告失败）。", key: "", pre: [4] },
-    { n: 7, part: "II", title: "基本运动规划的扩展", en: "Extensions of Basic Motion Planning",
+    { n: 7, part: "II", title: "基本运动规划的扩展", en: "Extensions of Basic Motion Planning", href: "part2/ch7-extensions-of-basic-motion-planning.html",
       desc: "第 5、6 章方法的许多扩展问题与算法。", key: "7.4（闭链）需要 4.4。", pre: [5, 6] },
     { n: 8, part: "II", title: "反馈运动规划", en: "Feedback Motion Planning", href: "part2/ch8-feedback-motion-planning.html",
       desc: "过渡性章节：把反馈引入运动规划，但还不引入微分约束。开环计划 vs 闭环计划。", key: "", pre: [5, 6] },
