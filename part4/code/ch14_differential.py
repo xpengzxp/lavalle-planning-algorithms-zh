@@ -503,6 +503,24 @@ def check_path_constrained():
         print(f"   四分之一圆 R = 2，ψ = {psi_deg}°：极限速率² = {v2:.4f}，公式 (cos ψ + sin ψ)R = {(math.cos(psi) + math.sin(psi)) * R:.4f}")
     T, _ = two_pass_time(P)
     print(f"   四分之一圆静止到静止的最短时间（两遍法）≈ {T:.4f}")
+    # 页面「路径约束相平面 S」里的四条路径（数值导数），细网格两遍法
+    def num_path(f):
+        e1, e2 = 1e-5, 1e-3
+        d1 = lambda s: tuple((f(s + e1)[i] - f(s - e1)[i]) / (2 * e1) for i in range(2))
+        d2 = lambda s: tuple((f(s + e2)[i] - 2 * f(s)[i] + f(s - e2)[i]) / (e2 * e2) for i in range(2))
+        return Path(f, d1, d2)
+    pages = {
+        "直线 (4s−2, 2s−1)": lambda s: (4 * s - 2, 2 * s - 1),
+        "四分之一圆": lambda s: (2 * math.sin(math.pi / 2 * s) - 1, 2 * (1 - math.cos(math.pi / 2 * s)) - 1),
+        "斜向波浪线": lambda s: (4 * s - 2, 0.3 * math.sin(2 * math.pi * s) + 2 * s - 1),
+        "发夹弯": lambda s: (2.2 * math.cos(math.pi * (s - 0.5)) - 1.1, 0.6 * math.sin(math.pi * (s - 0.5))),
+    }
+    for name, f in pages.items():
+        row = []
+        for N in (600, 4000):
+            T, _ = two_pass_time(num_path(f), N)
+            row.append(f"N={N}: {T:.4f}")
+        print(f"   页面路径「{name}」两遍法最短时间：" + "，".join(row))
 
 
 # =========================================================== 12. 带插值的值迭代

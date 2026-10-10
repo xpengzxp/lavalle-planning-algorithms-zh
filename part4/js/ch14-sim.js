@@ -93,13 +93,11 @@
       const S = SIMS[this.sys], f = this.f(S), N = Math.max(1, Math.round(T / hh)), dt = T / N;
       const step = method === "euler" ? C.eulerStep : C.rk4Step;
       let x = x0.slice(); const out = [{ t: 0, x }];
+      // 反向积分 (14.20)：对 −f 正向积分；输入按时间倒放
+      const g = back ? (xx, u) => f(xx, u).map((v) => -v) : f;
       for (let k = 0; k < N; k++) {
-        const t = k * dt, sign = back ? -1 : 1;
-        // 反向积分 (14.20)：对 −f 正向积分；输入按时间倒放
-        const g = back ? (xx, u) => f(xx, u).map((v) => -v) : f;
-        const uf = back ? (s) => S.u(T - t - s) : (s) => S.u(t + s);
+        const t = k * dt, uf = back ? (s) => S.u(T - t - s) : (s) => S.u(t + s);
         x = step(g, x, uf, dt); out.push({ t: t + dt, x });
-        void sign;
       }
       return out;
     }
