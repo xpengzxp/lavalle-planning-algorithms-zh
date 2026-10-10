@@ -227,9 +227,11 @@
 
 <svg class="fig" viewBox="0 0 400 310" role="img" aria-label="图 13.1 的重画：简单车的参数">
   <defs><marker id="f131a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker></defs>
-  <line x1="40" y1="170" x2="120" y2="170" stroke="var(--muted)" stroke-width="1.2" marker-end="url(#f131a)"/>
-  <path d="M 100 170 A 40 40 0 0 0 110.6 144.3" fill="none" stroke="var(--muted)" stroke-width="1.2"/>
-  <text x="104" y="160" font-size="13" fill="var(--muted)" font-style="italic">θ</text>
+  <line x1="22" y1="268" x2="100" y2="268" stroke="var(--muted)" stroke-width="1.2" marker-end="url(#f131a)"/>
+  <line x1="22" y1="268" x2="81.8" y2="217.8" stroke="var(--accent)" stroke-width="1.2" marker-end="url(#f131a)"/>
+  <path d="M 62 268 A 40 40 0 0 0 52.6 242.3" fill="none" stroke="var(--muted)" stroke-width="1.2"/>
+  <text x="66" y="258" font-size="13" fill="var(--muted)" font-style="italic">θ</text>
+  <text x="104" y="272" font-size="11" fill="var(--muted)">x 轴</text>
   <polygon points="140.1,209.1 255.0,112.6 216.5,66.7 101.6,163.1" fill="color-mix(in srgb, var(--accent) 14%, transparent)" stroke="var(--accent)" stroke-width="1.6"/>
   <polygon points="113.8,165.2 139.8,143.4 132.8,134.9 106.7,156.8" fill="var(--text)"/>
   <polygon points="147.2,205.1 173.3,183.2 166.2,174.8 140.2,196.6" fill="var(--text)"/>
@@ -247,11 +249,11 @@
   <text x="170" y="242" font-size="13" fill="var(--ok)" font-style="italic">ρ</text>
   <circle cx="236.4" cy="284.9" r="3.5" fill="var(--ok)"/>
   <circle cx="140" cy="170" r="4" fill="var(--accent)" stroke="var(--surface)" stroke-width="1.2"/>
-  <text x="60" y="198" font-size="13" fill="var(--accent)">(x, y)</text>
+  <text x="52" y="200" font-size="13" fill="var(--accent)">(x, y)</text>
   <path d="M 92 194 Q 120 192 135 175" fill="none" stroke="var(--accent)" stroke-width="1" marker-end="url(#f131a)"/>
   <text x="250" y="292" font-size="11.5" fill="var(--ok)">转弯中心</text>
 </svg>
-<p class="small muted" style="text-align:center">图 13.1 的重画：简单车有三个自由度，但任何位形处的速度空间只有二维。原点 = 后轴中心；橙色是前轮（转向角 φ，此处为右转，φ &lt; 0）；两条虚线是后轴与前轴的延长线，交于转弯中心。</p>
+<p class="small muted" style="text-align:center">图 13.1 的重画：简单车有三个自由度，但任何位形处的速度空间只有二维。原点 = 后轴中心；左下角是车身朝向 θ（相对 x 轴）；橙色是前轮（转向角 φ，此处为右转，φ &lt; 0）；两条虚线是后轴与前轴的延长线，交于转弯中心。</p>
 
 <p>接下来要把车的运动写成</p>
 <div class="eq">$$\dot x = f_1(x,y,\theta,s,\phi),\qquad \dot y = f_2(x,y,\theta,s,\phi),\qquad \dot\theta = f_3(x,y,\theta,s,\phi). \tag{13.11}$$</div>

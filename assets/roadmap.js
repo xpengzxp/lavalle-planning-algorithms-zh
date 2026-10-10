@@ -40,7 +40,7 @@
       desc: "执行时当前状态未知：信息来自传感器观测与历史动作。信息空间之于感知不确定性，就像配置空间之于运动规划。", key: "", pre: [10] },
     { n: 12, part: "III", title: "感知不确定下的规划", en: "Planning Under Sensing Uncertainty", href: "part3/ch12-planning-under-sensing-uncertainty.html",
       desc: "定位、建图、追逃（pursuit–evasion）、操作等问题，统一在信息空间中规划。", key: "", pre: [11] },
-    { n: 13, part: "IV", title: "微分模型", en: "Differential Models",
+    { n: 13, part: "IV", title: "微分模型", en: "Differential Models", href: "part4/ch13-differential-models.html",
       desc: "大量含微分约束的模型：车轮滚动约束、机械系统动力学。", key: "", pre: [4] },
     { n: 14, part: "IV", title: "微分约束下的采样规划", en: "Sampling-Based Planning Under Differential Constraints",
       desc: "第 5 章方法的扩展；在微分约束下组合方法几乎无能为力，所以全部是基于采样的方法。", key: "", pre: [13, 5] },
