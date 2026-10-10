@@ -10,12 +10,12 @@
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
 <script src="../assets/common.js"></script>
-<script defer src="js/formulation.js"></script>
-<script defer src="js/search-lab.js"></script>
-<script defer src="js/value-iteration.js"></script>
-<script defer src="js/strips.js"></script>
-<script defer src="js/planning-graph.js"></script>
-<script defer src="js/sat.js"></script>
+<script defer src="js/ch2-formulation.js"></script>
+<script defer src="js/ch2-search-lab.js"></script>
+<script defer src="js/ch2-value-iteration.js"></script>
+<script defer src="js/ch2-strips.js"></script>
+<script defer src="js/ch2-planning-graph.js"></script>
+<script defer src="js/ch2-sat.js"></script>
 </head>
 <body>
 
@@ -89,7 +89,7 @@
   </ul>
 </div>
 <p>书里还顺带讨论了一个历史问题：AI 里「问题求解（problem solving）」和「规划（planning）」到底有什么区别？Russell &amp; Norvig 的教材对两者的定义几乎一样，STRIPS 名字里的 PS 也是 Problem Solver。所以本书<b>不区分二者</b>，统称规划。</p>
-<p class="small muted">怎么用这一页：读正文 → 玩嵌在正文里的互动图 → 做「？」自测。所有数字都可以和原书的表对照。配套的 Python 参考实现在 <a href="code/discrete_planning.py"><code>code/discrete_planning.py</code></a>，它会打印出书中图 2.9、2.12、2.14、2.15 的表。</p>
+<p class="small muted">怎么用这一页：读正文 → 玩嵌在正文里的互动图 → 做「？」自测。所有数字都可以和原书的表对照。配套的 Python 参考实现在 <a href="code/ch2_discrete_planning.py"><code>part1/code/ch2_discrete_planning.py</code></a>，它会打印出书中图 2.9、2.12、2.14、2.15 的表。</p>
 </section>
 
 <!-- ================================================================ -->
@@ -649,7 +649,7 @@
     <tr><td>13</td><td>为什么 \(G\) 需要正负字面量，而 \(S\) 只需要正的？</td><td>\(S\) 描述的是<b>一个</b>状态（没提到的默认为负）；\(G\) 描述的是一个<b>集合</b>（没提到的 = 无所谓）。</td></tr>
     <tr><td>14–16</td><td>开灯问题：STRIPS 建模 → 规划图 → SAT</td><td>可以照着手电筒的三个组件依次做。</td></tr>
     <tr><td>17</td><td>SAT 编码最坏要多少项</td><td>按五类分别数：初始、目标、每阶段每个算子、每阶段每个字面量（正反两个方向）、每阶段每对算子。可以先用 SAT 组件验证手电筒的总数是 70。</td></tr>
-    <tr><td>18–24</td><td>编程实现</td><td>起点：<a href="code/discrete_planning.py"><code>code/discrete_planning.py</code></a>（含 BFS/DFS/Dijkstra/A*/Best-first 和值迭代，并复现了书中的表）。18、19、20 可以先在搜索实验室里观察现象。</td></tr>
+    <tr><td>18–24</td><td>编程实现</td><td>起点：<a href="code/ch2_discrete_planning.py"><code>part1/code/ch2_discrete_planning.py</code></a>（含 BFS/DFS/Dijkstra/A*/Best-first 和值迭代，并复现了书中的表）。18、19、20 可以先在搜索实验室里观察现象。</td></tr>
   </tbody>
 </table>
 </div>
@@ -697,7 +697,7 @@
 </nav>
 
 <footer class="page-foot">
-  内容依据 Steven M. LaValle《Planning Algorithms》（Cambridge University Press, 2006）Part I 第 2 章整理与讲解，原书可在 <a href="https://lavalle.pl/planning/" target="_blank" rel="noopener">lavalle.pl/planning</a> 免费阅读；本地副本见 <a href="https://lavalle.pl/planning/par1.pdf">book/par1.pdf</a>。互动图为学习辅助，标「补充」的内容不是书中原文。
+  内容依据 Steven M. LaValle《Planning Algorithms》（Cambridge University Press, 2006）Part I 第 2 章整理与讲解，原书可在 <a href="https://lavalle.pl/planning/" target="_blank" rel="noopener">lavalle.pl/planning</a> 免费阅读；原书 PDF：<a href="https://lavalle.pl/planning/par1.pdf" target="_blank" rel="noopener">par1.pdf</a>。互动图为学习辅助，标「补充」的内容不是书中原文。
 </footer>
 
 </main>

@@ -1,7 +1,7 @@
 """LaValle《Planning Algorithms》第 4 章 配置空间 —— 参考实现与数值核对。
 
 教程页 part2/ch4-configuration-space.html 里出现的数字都由本文件验证。
-运行：python3 ch4_configuration_space.py   （只用标准库）
+运行（在仓库根目录）：python3 part2/code/ch4_configuration_space.py   （只用标准库）
 
 依次核对：
   1. 例 4.13  一维 C-space 障碍（Minkowski 差）以及式 (4.38) 的卷积写法

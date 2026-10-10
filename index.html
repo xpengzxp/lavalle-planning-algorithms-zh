@@ -53,7 +53,7 @@
       <div class="tags"><span class="tag blue">搜索实验室</span><span class="tag blue">值迭代实验室</span><span class="tag blue">手电筒 STRIPS</span><span class="tag blue">规划图互斥</span><span class="tag blue">SAT 编码</span></div>
     </a>
   </div>
-  <p class="small muted">配套代码：<a href="part1/code/discrete_planning.py"><code>part1/code/discrete_planning.py</code></a>（运行后会打印书中图 2.9、2.12、2.14、2.15 的表）。原书 PDF：<a href="https://lavalle.pl/planning/par1.pdf" target="_blank" rel="noopener">Part I ↗</a> ·<a href="https://lavalle.pl/planning/" target="_blank" rel="noopener">作者主页 ↗</a></p>
+  <p class="small muted">配套代码：<a href="part1/code/ch2_discrete_planning.py"><code>part1/code/ch2_discrete_planning.py</code></a>（运行后会打印书中图 2.9、2.12、2.14、2.15 的表）。原书 PDF：<a href="https://lavalle.pl/planning/par1.pdf" target="_blank" rel="noopener">Part I ↗</a> ·<a href="https://lavalle.pl/planning/" target="_blank" rel="noopener">作者主页 ↗</a></p>
 
   <h2>Part II · 运动规划（已完成）</h2>
   <div class="chapter-cards">
@@ -151,23 +151,26 @@
   <h2>全书路线图 &amp; 我的进度</h2>
   <div class="widget" data-widget="roadmap" data-base="" data-progress="true"></div>
 
-  <h2>这个文件夹的组织方式</h2>
-  <div class="tree">Planning Algorithm/
+  <h2>这个仓库的组织方式</h2>
+  <div class="tree">planning-algorithms-study/   <span class="c"># github.com/xpengzxp/planning-algorithms-study</span>
 ├── index.html              <span class="c"># 你在这里：学习主页</span>
-├── README.md               <span class="c"># 文件夹说明（怎么打开、怎么扩展）</span>
+├── README.md               <span class="c"># 仓库说明（怎么阅读、目录、章节列表）</span>
+├── CLAUDE.md               <span class="c"># 编写约定与「新增一章」流程</span>
+├── docs/COORDINATION.md    <span class="c"># 第 6–15 章的协调记录</span>
 ├── assets/                 <span class="c"># 所有页面共用的样式和脚本</span>
 │   ├── style.css
 │   ├── common.js           <span class="c"># 深色模式、目录高亮、公式渲染、小工具</span>
-│   └── roadmap.js          <span class="c"># 全书路线图（章节数据也在这里）</span>
-├── book/
-│   └── par1.pdf            <span class="c"># 原书 Part I</span>
-├── part1/
+│   └── roadmap.js          <span class="c"># 全书路线图（章节登记表也在这里）</span>
+├── part1/                  <span class="c"># Part I：第 1–2 章</span>
 │   ├── ch1-introduction.html
 │   ├── ch2-discrete-planning.html
-│   ├── js/                 <span class="c"># 本部分的互动组件</span>
-│   └── code/               <span class="c"># 可运行的参考实现</span>
-└── part2/ part3/ part4/    <span class="c"># 以后学到哪里就加到哪里</span></div>
-  <p class="small">直接用浏览器打开 <code>index.html</code> 就能用（公式渲染需要联网加载 KaTeX）。「我已读完」的勾选只保存在当前浏览器里。</p>
+│   ├── js/                 <span class="c"># 本部分的互动组件 chK-*.js</span>
+│   └── code/               <span class="c"># 可运行的参考实现 chK_*.py</span>
+├── part2/                  <span class="c"># Part II：第 3–8 章</span>
+├── part3/                  <span class="c"># Part III：第 9–12 章</span>
+└── part4/                  <span class="c"># Part IV：第 13–15 章</span></div>
+  <p class="small">全站是纯静态网页，可以直接托管在 GitHub Pages 上，也可以 clone 仓库后在根目录运行 <code>python3 -m http.server</code> 阅读。公式渲染需要联网加载 KaTeX。原书 PDF 不在仓库里，页面中的原书链接都指向 <a href="https://lavalle.pl/planning/" target="_blank" rel="noopener">lavalle.pl/planning</a>。</p>
+  <p class="small">「我已读完」的勾选只保存在<b>你当前的浏览器</b>里（localStorage），每个人、每个浏览器的进度各自独立，不会上传，也不会写进仓库；换浏览器或清除浏览器数据后会从零开始。</p>
 
   <footer class="page-foot">
     原书：Steven M. LaValle, <i>Planning Algorithms</i>, Cambridge University Press, 2006 ·

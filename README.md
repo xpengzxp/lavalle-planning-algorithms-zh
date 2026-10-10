@@ -1,27 +1,55 @@
-# Planning Algorithms 学习站
+# Planning Algorithms 中文互动教程
 
-学习 Steven M. LaValle《Planning Algorithms》（Cambridge University Press, 2006）的中文互动教程。
-原书全文免费：<https://lavalle.pl/planning/>
+跟着 Steven M. LaValle《Planning Algorithms》（Cambridge University Press, 2006）逐章学习的中文教程，共 15 章。每章都有中文讲解（关键术语保留英文）、嵌在正文里的可交互图，以及可以运行的 Python 参考实现。原书全文免费：<https://lavalle.pl/planning/>
 
-## 怎么打开
+- 仓库：<https://github.com/xpengzxp/planning-algorithms-study>
+- 入口：仓库根目录的 [`index.html`](index.html)，也就是学习主页，有每章卡片、全书路线图和「我已读完」勾选。每个章节页的顶栏都能回到主页。
 
-直接用浏览器打开 **`index.html`**，这是学习主页：每章一张卡片、全书路线图、「我已读完」进度勾选。所有章节都从这里进入；每个章节页的顶栏都能回到主页。公式渲染和字体需要联网，无需任何构建或服务器。
+## 怎么阅读
+
+全站是纯静态网页（HTML/CSS/JS），没有构建步骤。
+
+- **在线阅读**：仓库开启 GitHub Pages（Settings → Pages → 从 `main` 分支根目录部署）之后，地址是 <https://xpengzxp.github.io/planning-algorithms-study/>。
+- **下载到自己电脑**：
+
+  ```bash
+  git clone https://github.com/xpengzxp/planning-algorithms-study.git
+  cd planning-algorithms-study
+  python3 -m http.server 8765
+  ```
+
+  然后在浏览器打开 <http://localhost:8765/>。
+- 公式（KaTeX / MathJax）和字体从 CDN 加载，需要联网。
+
+## 阅读进度只保存在你自己的浏览器里
+
+「我已读完」的勾选保存在当前浏览器的 `localStorage` 里（键 `pa-progress`）：
+
+- 每位读者、每个浏览器的进度都是独立的，不会上传，也不会写进仓库。别人打开时看到的是他自己的进度，一开始全部是空的。
+- 换浏览器、换电脑、用无痕窗口，或者清除浏览器数据之后，进度会从零开始。
+- 在线版（github.io）和下载到本地运行的版本是不同的网址，两边的进度也互不相通。
+- 深浅色设置同样只存在浏览器里（键 `pa-theme`）。
 
 ## 目录
 
 ```
-Planning Algorithm/
-├── index.html      学习主页
-├── CLAUDE.md       给 Claude 的编写约定与「新增一章」流程
-├── assets/         共用样式与脚本（style.css, common.js, roadmap.js）
-├── book/           原书 PDF（par1.pdf, ch3.pdf, …）
-├── part1/          Part I  入门材料（第 1–2 章）
-├── part2/          Part II 运动规划（第 3–8 章）
-├── part3/          Part III 决策论规划（第 9–12 章）
-└── part4/          Part IV 微分约束下的规划（第 13–15 章）
+planning-algorithms-study/
+├── index.html          学习主页（所有章节从这里进入）
+├── README.md           本文件
+├── CLAUDE.md           编写约定与「新增一章」流程（给 Claude 会话看）
+├── docs/
+│   └── COORDINATION.md 第 6–15 章云端会话的协调记录
+├── assets/             共用样式与脚本：style.css、common.js、roadmap.js（章节登记表）
+├── part1/              Part I   入门材料          第 1–2 章
+├── part2/              Part II  运动规划          第 3–8 章
+├── part3/              Part III 决策论规划        第 9–12 章
+└── part4/              Part IV  微分约束下的规划  第 13–15 章
+    每个 partN/ 里：chK-<slug>.html 是章节页，js/chK-*.js 是该章的互动组件，code/chK_*.py 是参考实现
 ```
 
-## 章节进度
+原书 PDF 版权属于 Cambridge University Press，不放进仓库。页面里的原书链接都指向 <https://lavalle.pl/planning/>。
+
+## 章节
 
 | 章 | 标题 | 入口 |
 |---|---|---|
@@ -41,6 +69,6 @@ Planning Algorithm/
 | 14 | 微分约束下的采样规划 Sampling-Based Planning Under Differential Constraints | [part4/ch14-sampling-based-planning-under-differential-constraints.html](part4/ch14-sampling-based-planning-under-differential-constraints.html) |
 | 15 | 系统理论与解析方法 System Theory and Analytical Techniques | [part4/ch15-system-theory-and-analytical-techniques.html](part4/ch15-system-theory-and-analytical-techniques.html) |
 
-## 新增一章
+## 参与修改
 
-在新的 Claude 对话里直接说「做第 K 章的教程」即可，`CLAUDE.md` 规定了文件放哪、怎么登记到主页和路线图。人工检查清单：主页有卡片、路线图可点击、章节页顶栏能回首页、深浅色一致。
+修改或新增内容前请先读 [`CLAUDE.md`](CLAUDE.md)，里面规定了文件放在哪里、怎么登记到主页和路线图，以及页面写法。提交后检查：主页卡片能点进去、路线图可点击、章节页顶栏能回首页、深浅色一致、浏览器控制台没有报错。

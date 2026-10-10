@@ -1,7 +1,7 @@
 """
 Planning Algorithms (LaValle) · 第 2 章 离散规划 —— 参考实现
 
-运行：  python3 discrete_planning.py
+运行（在仓库根目录）：  python3 part1/code/ch2_discrete_planning.py
 会依次复现书中的：
   - 图 2.9   固定长度 K=4 的反向值迭代 (Example 2.3)
   - 图 2.12  固定长度 K=4 的正向值迭代 (Example 2.4)

@@ -3,7 +3,7 @@
   "use strict";
   const { h, s, arrowDefs, onThemeChange } = PA;
 
-  // ---- 共享模型（planning-graph.js、sat.js 也会用） ----
+  // ---- 共享模型（ch2-planning-graph.js、ch2-sat.js 也会用） ----
   const FL = {
     lits: ["O", "I1", "I2"],
     full: { O: "On(Cap, Flashlight)", I1: "In(Battery1, Flashlight)", I2: "In(Battery2, Flashlight)" },
