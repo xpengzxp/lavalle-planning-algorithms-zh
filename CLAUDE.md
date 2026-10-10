@@ -72,5 +72,7 @@ Planning Algorithm/
   - 中途可以多次提交、推送，好让进度保存在远端；最后一个提交信息写 `chK: done`。
 - **PDF**：`book/` 在 `.gitignore` 里（版权原因，原书 PDF 不进 `main`）。云端访问 lavalle.pl 会返回 403，所以从 `book-pdfs` 分支取：`git fetch origin book-pdfs && git show origin/book-pdfs:book/chK.pdf > book/chK.pdf`。不要把 PDF 提交进 `main`。页面里的原书链接一律指向 `https://lavalle.pl/planning/chK.pdf`。阅读方法见第 2 节第 1 步：用 Read 直接通读整份 PDF，不能用 txt 代替。
 - **新的 Part**：主页上 Part III、Part IV 的分区已经建好，往对应的 `.chapter-cards` 里加卡片即可。`part3/`、`part4/` 目录可能是你第一个建的，也可能别人已经建好，两种情况都正常。每章的共用库命名为 `partN/js/chK-lib.js`，不要建不带章号前缀、多章共用的文件，以免并行会话之间互相覆盖。
+- **范本**：动手前读 `part2/ch5-sampling-based-planning.html` 和 `part2/js/ch5-*.js`，把它当作结构、组件写法、语气和完成度的范本，本章要和它像同一套教程。文件名用 `partN/chK-<英文标题 slug>.html`，英文标题以 `assets/roadmap.js` 里的 `en` 为准。原书覆盖全部小节，没有人会回答问题，遇到不确定的就自己做合理决定，并写进最后的总结。
+- **新 Part 的颜色**：第 9 章为 Part III、第 13 章为 Part IV 定颜色约定，写进第 4 节；同一 Part 的后续章节沿用。如果开始时还没有约定，就先自定一套，写进自己那一行。
 - **验证**：云端没有浏览器面板。用 `node --check` 检查每个 JS 文件，用 `python3 -m http.server` 加 `curl` 确认页面引用的本地文件都返回 200，参考代码用 `python3` 跑通。浏览器里的实际渲染和交互检查由本地协调会话完成。
 - **收尾**：在对话最后用中文写一段总结：做了哪些互动图、哪些地方标了「补充」、原书有哪些笔误、还有哪些没验证的地方。
