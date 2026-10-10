@@ -356,14 +356,14 @@ def di_value_iteration(n, dt, lo=-2.0, hi=2.0, goal_r=0.08, iters=600):
     INF = 1e9
     h = (hi - lo) / (n - 1)
     pts = [lo + h * k for k in range(n)]
-    V = [[0.0 if math.hypot(pts[i], pts[j]) <= goal_r else INF for i in range(n)] for j in range(n)]
+    V = [[0.0 if math.hypot(pts[i], pts[j]) <= goal_r + 1e-9 else INF for i in range(n)] for j in range(n)]
     for _ in range(iters):
         changed = 0.0
         newV = [row[:] for row in V]
         for j in range(n):
             for i in range(n):
                 x1, x2 = pts[i], pts[j]
-                if math.hypot(x1, x2) <= goal_r:
+                if math.hypot(x1, x2) <= goal_r + 1e-9:
                     continue
                 best = INF
                 for u in (-1.0, 0.0, 1.0):  # 「蛮力」只取三个动作
