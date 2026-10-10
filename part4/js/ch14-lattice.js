@@ -253,7 +253,7 @@
       body.append(h("div", { class: "controls" }, this.segDt, this.sC0, this.sC1, C.button("BFS 搜索", () => this.search(), "small primary"), C.button("播放", () => { this.anim = 0; this.runner.start(); }, "small")),
         this.st.wrap, h("div", { class: "stats" }, Object.values(this.stats)), this.msg,
         C.legend([[C.cv("accent"), "BFS 到过的位置", true], [C.cv("path"), "解轨迹（抛物线段）"], [C.cv("warn"), "δ(c₀,c₁)(q̇) 圆盘"]]));
-      this.render();
+      this.search();
     }
     search() {
       const t0 = performance.now(), dt = this.dt, hq = (dt * dt) / 2, J = Math.floor(this.vmax / dt + 1e-9), NJ = 2 * J + 1;
@@ -347,7 +347,7 @@
     constructor(root) {
       this.q2 = 1.0; this.qd1 = 0.3; this.qd2 = 0.2; this.grid = 0.25; this.dt = 0.03;
       const body = C.frame(root, "新的动作集 U′(q, q̇)", "图 14.15：两连杆臂，力矩 u ∈ [−1,1]² 经 q̈ = M⁻¹(u − c(q,q̇)) 变成可用加速度；网格点 = 采样到的 u′");
-      this.st = new C.Stage({ view: [-4, 4, -6, 6], aspect: 1, maxW: 430, onDraw: (ctx, st, col) => this.draw(ctx, st, col) });
+      this.st = new C.Stage({ view: [-4, 4, -6, 6], aspect: 1, maxW: 430, pad: 22, onDraw: (ctx, st, col) => this.draw(ctx, st, col) });
       this.arm = new C.Stage({ view: [-2.2, 2.2, -2.2, 2.2], maxW: 200, onDraw: (ctx, st, col) => this.drawArm(ctx, st, col) });
       this.sQ2 = C.slider("肘关节角 q₂", -3, 3, 0.05, this.q2, (v) => { this.q2 = v; this.render(); }, (v) => v.toFixed(2));
       this.sQd1 = C.slider("q̇₁", -2, 2, 0.05, this.qd1, (v) => { this.qd1 = v; this.render(); }, (v) => v.toFixed(2));

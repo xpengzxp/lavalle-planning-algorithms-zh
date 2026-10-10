@@ -123,6 +123,9 @@
       const dub = new Uint8Array(n * n), rs = new Uint8Array(n * n), r = C.rng(this.seed);
       for (let k = 0; k < this.N; k++) { const g = grid(this.sample([1], r)); if (g >= 0) dub[g] = 1; }
       for (let k = 0; k < this.N * 1.5; k++) { const g = grid(this.sample([1, -1], r)); if (g >= 0) rs[g] = 1; }
+      // 蒙特卡罗留下的零星空洞：八邻域里至少 6 个格子已占据的空格子补上
+      const fill = (G) => { const add = []; for (let j = 1; j < n - 1; j++) for (let i = 1; i < n - 1; i++) { if (G[j * n + i]) continue; let c = 0; for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) if ((di || dj) && G[(j + dj) * n + i + di]) c++; if (c >= 6) add.push(j * n + i); } for (const k of add) G[k] = 1; };
+      fill(dub); fill(dub); fill(rs); fill(rs);
       // 把 RS 里的真实可达点也补上 Dubins 及其镜像（RS 包含它们）
       const wrong = new Uint8Array(n * n);
       for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) if (dub[j * n + i]) { wrong[j * n + i] = 1; wrong[j * n + (n - 1 - i)] = 1; }
@@ -463,6 +466,7 @@
         h("div", { class: "split" }, h("div", null, this.svg, h("p", { class: "small muted" }, "点自动机里可以去的模式（高亮的节点）。")), this.st.wrap), this.seqEl, this.msg,
         C.legend([[C.cv("accent"), "配平轨迹（稳态）"], [C.cv("warn"), "机动（过渡）"]]));
       this.reset();
+      this.go("fwd"); this.go("left"); this.go("fwd");   // 先放一段示例序列
     }
     reset() { this.seq = []; this.rebuild(); }
     // 依次积分：每段 {kind: 'trim'|'man', from, to, T}

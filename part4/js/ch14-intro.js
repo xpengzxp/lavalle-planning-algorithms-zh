@@ -44,7 +44,7 @@
     constructor(root) {
       this.key = "dubins"; this.qd = 0.6;
       const body = C.frame(root, "速度集 f(x, U) 与系统性质", "实线 = f(x,U)，虚线 = −f(x,U)；对称 ⇔ 两者重合，无漂移 ⇔ 原点在集合里");
-      this.st = new C.Stage({ view: [-1.6, 1.6, -1.6, 1.6], maxW: 380, onDraw: (ctx, st, col) => this.draw(ctx, st, col) });
+      this.st = new C.Stage({ view: [-1.6, 1.6, -1.6, 1.6], maxW: 380, pad: 22, onDraw: (ctx, st, col) => this.draw(ctx, st, col) });
       this.sel = C.select(Object.entries(SYSTEMS).map(([k, s]) => [k, s.name]), this.key, (k) => { this.key = k; this.render(); });
       this.sQd = C.slider("当前速度 q̇", -1.4, 1.4, 0.05, this.qd, (v) => { this.qd = v; this.render(); }, (v) => v.toFixed(2));
       this.table = h("div", { class: "table-wrap" });

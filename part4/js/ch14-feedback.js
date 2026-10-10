@@ -14,7 +14,7 @@
   class VIInterp {
     constructor(root) {
       this.n = 61; this.dt = 0.1; this.goalR = 0.12; this.obs = false; this.five = false; this.M = 100; this.lim = 3;
-      this.start = { x: 2.2, y: 1.2 }; this.traj = null; this.iter = 0;
+      this.start = { x: 1.5, y: 0.8 }; this.traj = null; this.iter = 0;
       const body = C.frame(root, "带插值的值迭代", "14.5 节：P = 网格样本，G*(x_{k+1}) 用双线性插值；点相平面里任一点执行反馈计划 (14.28)");
       this.st = new C.Stage({
         view: [-3, 3, -3, 3], aspect: 0.82, maxW: 560, stretch: true, padL: 26, padB: 18, onDraw: (ctx, st, col) => this.draw(ctx, st, col),
@@ -32,6 +32,9 @@
         this.st.wrap, h("div", { class: "stats" }, Object.values(this.stats)), this.msg,
         C.legend([[C.cv("accent"), "G*（由浅到深 = 由小到大）"], [C.cv("badSoft"), "G* = ∞"], [C.cv("warn"), "开关曲线 q = −q̇|q̇|/2（补充：无障碍时的最优切换）"], [C.cv("path"), "反馈计划的执行轨迹"]]));
       this.reset();
+      // 打开页面时先迭代到收敛，并从默认起点执行一次反馈计划；「重置」可以回到全 ∞ 的初始状态一步步看
+      for (let k = 0; k < 600 && this.sweep() > 1e-6; k++);
+      this.execute();
     }
     acts() { return this.five ? [-1, -0.5, 0, 0.5, 1] : [-1, 0, 1]; }
     inGoal(q, v) { return Math.hypot(q, v) <= this.goalR; }
@@ -93,13 +96,16 @@
       this.stats.ex.set(this.traj ? (this.traj.ok ? this.traj.t.toFixed(2) : '<span class="no">没到目标</span>') : "点一下相平面");
       this.msg.innerHTML = "反向值迭代从最终阶段开始：目标样本 G* = 0，其余为 ∞（这里用一个大数代替 ∞，否则只要插值的一个角是 ∞，整片区域都会卡住——见参考代码第 12 项）。每一轮对 P 中每个样本按 (14.27) 取最小，G*(x_{k+1}) 用相邻四个样本插值。代价值稳定后得到的 G* 就是一个<b>导航函数</b>，用局部算子 (14.28) 就能从任何状态得到反馈动作。" +
         (this.obs ? " 加了障碍后，障碍左边、向右冲得太快的状态 G* = ∞：它们落在 X_ric 里，什么反馈都救不了。" : " 迭代收敛后，G* 的「折痕」正好落在补充画出的开关曲线上：bang-bang 控制在那里从全力加速切换到全力减速。") +
+        " 注意相平面被截在 [−3, 3]² 里：右上、左下两角那些冲得太快、来不及在边界前停住的状态也是 ∞——越界在这里就相当于碰撞，紧贴这条边的样本插值后代价很大（深色的一圈）。" +
         " 这种方法只适合很低维的 X：动力学会让维数翻倍，平面里的刚体就有 dim X = 6，已经到了实用的上限。";
       this.st.draw();
     }
     draw(ctx, st, col) {
       st.frame(col);
-      const n = this.n, M = this.M; let mx = 0;
-      for (let k = 0; k < n * n; k++) if (this.G[k] < 0.9 * M) mx = Math.max(mx, this.G[k]);
+      // 色标用有限值的 85% 分位数：贴着 ∞ 边界的样本插值后会混进很大的数，不能让它们决定色标
+      const n = this.n, M = this.M, fin = [];
+      for (let k = 0; k < n * n; k++) if (this.G[k] < 0.9 * M) fin.push(this.G[k]);
+      fin.sort((a, b) => a - b); const mx = fin.length ? fin[Math.floor(fin.length * 0.85)] : 0;
       const bs = C.rgb(col.badSoft);
       const h2 = this.hx / 2;
       C.heat(st, n, n, [-this.lim - h2, this.lim + h2, -this.lim - h2, this.lim + h2], this.G, (v) => (v >= 0.9 * M ? [bs[0], bs[1], bs[2], 255] : C.blueRamp(col, mx > 0 ? v / mx : 0)));

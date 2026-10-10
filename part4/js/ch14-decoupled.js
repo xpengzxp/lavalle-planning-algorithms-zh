@@ -105,8 +105,8 @@
         for (const q of [this.last.a, this.last.b]) for (const s of [1, -1]) st.circle({ x: q.x - s * this.rho * Math.sin(q.th), y: q.y + s * this.rho * Math.cos(q.th) }, this.rho, null, C.alpha(col.text2, 0.5), 1, [3, 3]);
       }
       st.polyline(this.P, col.accent, 2.4);
-      for (const i of this.kinks()) st.dot(this.P[i], 5, col.bad);
       for (const w of this.way) st.dot(w, 4.5, col.surface, col.text2, 1.5);
+      for (const i of this.kinks()) st.dot(this.P[i], 5.5, col.bad, col.surface, 1.2);
       st.car(this.P[0], 0.45, col.start, col.text); st.car(this.P[this.P.length - 1], 0.45, C.alpha(col.goal, 0.85), col.text);
     }
   }
@@ -146,7 +146,7 @@
       this.key = "arc"; this.s = 0.5; this.sd = 0.3;
       const body = C.frame(root, "沿路径走时允许的加速度", "例 14.6：平面上两个双积分器，U = [−1,1]²；左：路径与当前位置，右：加速度平面");
       this.path = new C.Stage({ view: [-2.6, 2.6, -1.8, 1.8], aspect: 0.7, maxW: 380, onDraw: (ctx, st, col) => this.drawPath(ctx, st, col) });
-      this.acc = new C.Stage({ view: [-2.2, 2.2, -2.2, 2.2], aspect: 1, maxW: 320, onDraw: (ctx, st, col) => this.drawAcc(ctx, st, col) });
+      this.acc = new C.Stage({ view: [-2.2, 2.2, -2.2, 2.2], aspect: 1, maxW: 320, pad: 22, onDraw: (ctx, st, col) => this.drawAcc(ctx, st, col) });
       this.segP = C.seg(Object.entries(PATHS).map(([k, p]) => [k, p.name]), this.key, (k) => { this.key = k; this.render(); });
       this.sS = C.slider("s", 0, 1, 0.005, this.s, (v) => { this.s = v; this.render(); }, (v) => v.toFixed(3));
       this.sSd = C.slider("ṡ", 0, 1.2, 0.005, this.sd, (v) => { this.sd = v; this.render(); }, (v) => v.toFixed(3));
