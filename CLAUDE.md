@@ -58,10 +58,14 @@ Planning Algorithm/
 
 ## 5. 云端会话（Claude Code cloud）的补充约定
 
-从第 6 章起，每章由一个**云端会话**生成。仓库是 `github.com/xpengzxp/planning-algorithms-study`（目前私有，全部写完后开源）。本地有一个协调会话负责启动、检查和合并。云端会话除了第 2 节的流程，还要遵守：
+从第 6 章起，每章由一个**云端会话**生成，最多 5 个会话**同时**写不同的章。仓库是 `github.com/xpengzxp/planning-algorithms-study`（目前私有，全部写完后开源）。本地有一个协调会话负责启动和检查。模型统一用 Opus 5.5，推理强度 xhigh（`.claude/settings.json` 里的 `effortLevel`）。云端会话除了第 2 节的流程，还要遵守：
 
-- **分支**：从最新的 `main` 拉一个分支 `claude/chK-<slug>`，所有改动都提交在这个分支上。不要直接推 `main`，也不要改别的章节文件。
-- **PDF**：`book/` 在 `.gitignore` 里（版权原因，原书 PDF 不进主分支）。先 `curl -fL -o book/chK.pdf https://lavalle.pl/planning/chK.pdf`；下载失败就从 `book-pdfs` 分支取：`git fetch origin book-pdfs && git show origin/book-pdfs:book/chK.pdf > book/chK.pdf`。不要把 PDF 提交进你的分支。
-- **验证**：云端没有浏览器面板。用 `node --check` 检查每个 JS 文件（云端一般装了 node），用 `python3 -m http.server` 加 `curl` 确认页面引用的本地文件都返回 200，参考代码用 `python3` 跑通。浏览器里的实际渲染和交互检查由本地协调会话在合并前完成。
-- **登记点**：第 2 节第 3–5 步照做，另外把本章加到本文件第 4 节的登记表里。
-- **收尾**：全部完成后一次性 `git push -u origin claude/chK-<slug>`，最后一个提交信息写 `chK: done`。若能用 `gh` 或 GitHub 工具，就开一个指向 `main` 的 PR；不能也没关系，协调会话会按分支名找到它。最后在对话里用中文写一段总结：做了哪些互动图、哪些地方标了「补充」、原书有哪些笔误、还有哪些没验证的地方。
+- **只用 `main`**：不建任何分支，直接在 `main` 上提交，推送到 `origin main`。别的会话也在同时往 `main` 推，所以：
+  - 只改自己这一章的文件（`partN/chK-*.html`、`partN/js/chK-*.js`、`partN/code/chK_*.py`）和登记点（`index.html`、`assets/roadmap.js`、`README.md`、`CLAUDE.md` 第 4 节）。不碰别的章节的文件，也不重写共享文件里不属于自己的部分。
+  - 登记点只做「插入一行 / 一张卡片」这样的局部修改，按章号顺序插入，不要重新排版整个文件。
+  - 推送步骤：`git fetch origin && git rebase origin/main`。有冲突时只会出现在登记点：**两边的内容都保留**（别人的卡片、表格行一行都不能丢），按章号排好。然后重新做一遍检查，再 `git push origin HEAD:main`。如果因为别人刚推过而被拒，重复 fetch、rebase、push，最多重试 10 次。绝对不要 `--force`。
+  - 中途可以多次提交、推送，好让进度保存在远端；最后一个提交信息写 `chK: done`。
+- **PDF**：`book/` 在 `.gitignore` 里（版权原因，原书 PDF 不进 `main`）。云端访问 lavalle.pl 会返回 403，所以从 `book-pdfs` 分支取：`git fetch origin book-pdfs && git show origin/book-pdfs:book/chK.pdf > book/chK.pdf`。不要把 PDF 提交进 `main`。页面里的原书链接一律指向 `https://lavalle.pl/planning/chK.pdf`。
+- **新的 Part**：主页上 Part III、Part IV 的分区已经建好，往对应的 `.chapter-cards` 里加卡片即可。`part3/`、`part4/` 目录可能是你第一个建的，也可能别人已经建好，两种情况都正常。每章的共用库命名为 `partN/js/chK-lib.js`，不要建不带章号前缀、多章共用的文件，以免并行会话之间互相覆盖。
+- **验证**：云端没有浏览器面板。用 `node --check` 检查每个 JS 文件，用 `python3 -m http.server` 加 `curl` 确认页面引用的本地文件都返回 200，参考代码用 `python3` 跑通。浏览器里的实际渲染和交互检查由本地协调会话完成。
+- **收尾**：在对话最后用中文写一段总结：做了哪些互动图、哪些地方标了「补充」、原书有哪些笔误、还有哪些没验证的地方。
