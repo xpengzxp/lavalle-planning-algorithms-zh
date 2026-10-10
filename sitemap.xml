@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://xpengzxp.github.io/lavalle-planning-algorithms-zh/</loc><lastmod>2026-10-10</lastmod></url>
+  <url><loc>https://xpengzxp.github.io/lavalle-planning-algorithms-zh/part1/ch1-introduction.html</loc><lastmod>2026-10-10</lastmod></url>
+  <url><loc>https://xpengzxp.github.io/lavalle-planning-algorithms-zh/part1/ch2-discrete-planning.html</loc><lastmod>2026-10-10</lastmod></url>
+  <url><loc>https://xpengzxp.github.io/lavalle-planning-algorithms-zh/part2/ch3-geometric-representations.html</loc><lastmod>2026-10-10</lastmod></url>
+  <url><loc>https://xpengzxp.github.io/lavalle-planning-algorithms-zh/part2/ch4-configuration-space.html</loc><lastmod>2026-10-10</lastmod></url>
+  <url><loc>https://xpengzxp.github.io/lavalle-planning-algorithms-zh/part2/ch5-sampling-based-planning.html</loc><lastmod>2026-10-10</lastmod></url>
+  <url><loc>https://xpengzxp.github.io/lavalle-planning-algorithms-zh/part2/ch6-combinatorial-motion-planning.html</loc><lastmod>2026-10-10</lastmod></url>
+  <url><loc>https://xpengzxp.github.io/lavalle-planning-algorithms-zh/part2/ch7-extensions-of-basic-motion-planning.html</loc><lastmod>2026-10-10</lastmod></url>
+  <url><loc>https://xpengzxp.github.io/lavalle-planning-algorithms-zh/part2/ch8-feedback-motion-planning.html</loc><lastmod>2026-10-10</lastmod></url>
+  <url><loc>https://xpengzxp.github.io/lavalle-planning-algorithms-zh/part3/ch9-basic-decision-theory.html</loc><lastmod>2026-10-10</lastmod></url>
+  <url><loc>https://xpengzxp.github.io/lavalle-planning-algorithms-zh/part3/ch10-sequential-decision-theory.html</loc><lastmod>2026-10-10</lastmod></url>
+  <url><loc>https://xpengzxp.github.io/lavalle-planning-algorithms-zh/part3/ch11-sensors-and-information-spaces.html</loc><lastmod>2026-10-10</lastmod></url>
+  <url><loc>https://xpengzxp.github.io/lavalle-planning-algorithms-zh/part3/ch12-planning-under-sensing-uncertainty.html</loc><lastmod>2026-10-10</lastmod></url>
+  <url><loc>https://xpengzxp.github.io/lavalle-planning-algorithms-zh/part4/ch13-differential-models.html</loc><lastmod>2026-10-10</lastmod></url>
+  <url><loc>https://xpengzxp.github.io/lavalle-planning-algorithms-zh/part4/ch14-sampling-based-planning-under-differential-constraints.html</loc><lastmod>2026-10-10</lastmod></url>
+  <url><loc>https://xpengzxp.github.io/lavalle-planning-algorithms-zh/part4/ch15-system-theory-and-analytical-techniques.html</loc><lastmod>2026-10-10</lastmod></url>
+</urlset>

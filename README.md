@@ -2,19 +2,19 @@
 
 跟着 Steven M. LaValle《Planning Algorithms》（Cambridge University Press, 2006）逐章学习的中文教程，共 15 章。每章都有中文讲解（关键术语保留英文）、嵌在正文里的可交互图，以及可以运行的 Python 参考实现。原书全文免费：<https://lavalle.pl/planning/>
 
-- 仓库：<https://github.com/xpengzxp/planning-algorithms-study>
+- 仓库：<https://github.com/xpengzxp/lavalle-planning-algorithms-zh>
 - 入口：仓库根目录的 [`index.html`](index.html)，也就是学习主页，有每章卡片、全书路线图和「我已读完」勾选。每个章节页的顶栏都能回到主页。
 
 ## 怎么阅读
 
 全站是纯静态网页（HTML/CSS/JS），没有构建步骤。
 
-- **在线阅读**：仓库开启 GitHub Pages（Settings → Pages → 从 `main` 分支根目录部署）之后，地址是 <https://xpengzxp.github.io/planning-algorithms-study/>。
+- **在线阅读**：仓库开启 GitHub Pages（Settings → Pages → 从 `main` 分支根目录部署）之后，地址是 <https://xpengzxp.github.io/lavalle-planning-algorithms-zh/>。
 - **下载到自己电脑**：
 
   ```bash
-  git clone https://github.com/xpengzxp/planning-algorithms-study.git
-  cd planning-algorithms-study
+  git clone https://github.com/xpengzxp/lavalle-planning-algorithms-zh.git
+  cd lavalle-planning-algorithms-zh
   python3 -m http.server 8765
   ```
 
@@ -33,7 +33,7 @@
 ## 目录
 
 ```
-planning-algorithms-study/
+lavalle-planning-algorithms-zh/
 ├── index.html          学习主页（所有章节从这里进入）
 ├── README.md           本文件
 ├── CLAUDE.md           编写约定与「新增一章」流程（给 Claude 会话看）

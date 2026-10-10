@@ -1,11 +1,11 @@
 # Planning Algorithms 学习站 —— 给 Claude 的编写约定
 
-这个仓库（<https://github.com/xpengzxp/planning-algorithms-study>）是用户学习 LaValle《Planning Algorithms》的学习站，以 GitHub 上的 `main` 分支为准。用户会在**多个并行的 Claude 会话**里各写一章，所有章节都必须从同一个学习主页 `index.html` 进入。新建任何教程前先读完本文件。
+这个仓库（<https://github.com/xpengzxp/lavalle-planning-algorithms-zh>）是用户学习 LaValle《Planning Algorithms》的学习站，以 GitHub 上的 `main` 分支为准。用户会在**多个并行的 Claude 会话**里各写一章，所有章节都必须从同一个学习主页 `index.html` 进入。新建任何教程前先读完本文件。
 
 ## 1. 目录布局（唯一的约定，不要另起一套）
 
 ```
-planning-algorithms-study/
+lavalle-planning-algorithms-zh/
 ├── index.html                 学习主页：每章一张卡片 + 全书路线图 + 进度勾选
 ├── README.md                  给人看的说明（怎么打开、有哪些章）
 ├── CLAUDE.md                  本文件
@@ -77,7 +77,7 @@ planning-algorithms-study/
 
 ## 5. 云端会话（Claude Code cloud）的补充约定
 
-从第 6 章起，每章由一个**云端会话**生成，最多 5 个会话**同时**写不同的章。仓库是 `github.com/xpengzxp/planning-algorithms-study`（目前私有，全部写完后开源）。协调员会话负责启动和检查，过程记录在 `docs/COORDINATION.md`。模型统一用 Opus 5.5，推理强度 xhigh（`.claude/settings.json` 里的 `effortLevel`）。云端会话除了第 2 节的流程，还要遵守：
+从第 6 章起，每章由一个**云端会话**生成，最多 5 个会话**同时**写不同的章。仓库是 `github.com/xpengzxp/lavalle-planning-algorithms-zh`（目前私有，全部写完后开源）。协调员会话负责启动和检查，过程记录在 `docs/COORDINATION.md`。模型统一用 Opus 5.5，推理强度 xhigh（`.claude/settings.json` 里的 `effortLevel`）。云端会话除了第 2 节的流程，还要遵守：
 
 - **只用 `main`**：不建任何分支，直接在 `main` 上提交，推送到 `origin main`。别的会话也在同时往 `main` 推，所以：
   - 只改自己这一章的文件（`partN/chK-*.html`、`partN/js/chK-*.js`、`partN/code/chK_*.py`）和登记点（`index.html`、`assets/roadmap.js`、`README.md`、`CLAUDE.md` 第 4 节）。不碰别的章节的文件，也不重写共享文件里不属于自己的部分。
