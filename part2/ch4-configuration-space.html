@@ -1,0 +1,747 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>配置空间 · 第 4 章</title>
+<meta name="description" content="LaValle《Planning Algorithms》第 4 章配置空间的中文互动教程：拓扑基础、流形与粘合、基本群、SE(2)/SE(3) 与四元数、C-space 障碍与星形算法、闭链的代数簇。">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<link rel="stylesheet" href="../assets/style.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+<script src="../assets/common.js"></script>
+<script defer src="js/ch4-kit.js"></script>
+<script defer src="js/ch4-topology.js"></script>
+<script defer src="js/ch4-manifolds.js"></script>
+<script defer src="js/ch4-cspace.js"></script>
+<script defer src="js/ch4-obstacles.js"></script>
+<script defer src="js/ch4-closed-chains.js"></script>
+<style>
+  /* 本章专用：试一试提示框、脚注 */
+  .box.try { border-left: 4px solid var(--warn); }
+  .box.try .box-title { color: var(--warn); }
+  .box.try ul { margin: 0; }
+  sup.fn a { font-weight: 600; }
+  .footnotes p { margin: 0 0 8px; }
+  .footnotes p:last-child { margin-bottom: 0; }
+  .sbs { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <a class="brand" href="../index.html">Planning Algorithms 学习站</a>
+  <span class="crumbs"><a href="../index.html">首页</a> › Part II › 第 4 章 配置空间</span>
+  <button class="icon-btn" id="theme-toggle" type="button" aria-label="切换深浅色">☾</button>
+</header>
+
+<div class="layout">
+<nav class="toc" aria-label="目录">
+  <p class="toc-title">本章目录</p>
+  <ol>
+    <li><a href="#overview">本章导读</a></li>
+    <li><a href="#s4-1">4.1 拓扑基本概念</a>
+      <ol>
+        <li><a href="#s4-1-1">拓扑空间</a></li>
+        <li><a href="#homeo">连续与同胚</a></li>
+        <li><a href="#s4-1-2">流形</a></li>
+        <li><a href="#identification">粘合出来的曲面</a></li>
+        <li><a href="#s4-1-3">路径与连通性</a></li>
+        <li><a href="#fundamental-group">基本群</a></li>
+      </ol>
+    </li>
+    <li><a href="#s4-2">4.2 定义配置空间</a>
+      <ol>
+        <li><a href="#s4-2-1">2D 刚体：SE(2)</a></li>
+        <li><a href="#s4-2-2">3D 刚体：SE(3)</a></li>
+        <li><a href="#quaternions">四元数</a></li>
+        <li><a href="#s4-2-3">链与树</a></li>
+      </ol>
+    </li>
+    <li><a href="#s4-3">4.3 配置空间障碍</a>
+      <ol>
+        <li><a href="#s4-3-1">基本运动规划问题</a></li>
+        <li><a href="#s4-3-2">平移情形：Minkowski 差</a></li>
+        <li><a href="#star">星形算法</a></li>
+        <li><a href="#s4-3-3">一般情形</a></li>
+      </ol>
+    </li>
+    <li><a href="#s4-4">4.4 闭运动链</a>
+      <ol>
+        <li><a href="#s4-4-1">域、多项式、簇</a></li>
+        <li><a href="#s4-4-2">平面上的运动链</a></li>
+        <li><a href="#s4-4-3">一般连杆的簇</a></li>
+      </ol>
+    </li>
+    <li><a href="#cheatsheet">本章速查表</a></li>
+    <li><a href="#pitfalls">常见陷阱</a></li>
+    <li><a href="#exercises">习题导引</a></li>
+    <li><a href="#notes">脚注：原书勘误</a></li>
+  </ol>
+</nav>
+
+<main class="content">
+
+<p class="kicker">Part II · 第 4 章</p>
+<h1>配置空间 <span class="en">The Configuration Space</span></h1>
+<p class="lede">第 3 章教我们怎么描述机器人和障碍物、怎么移动它们。这一章回答规划真正需要的问题：<b>状态空间是什么？</b>运动规划的状态空间是「所有可以施加给机器人的变换」组成的集合，叫<b>配置空间</b>（configuration space，简称 C-space）。一旦把它想清楚，几何外形、运动学千差万别的问题，都变成了同一个问题：在一个流形上找一条连续路径。</p>
+
+<section id="overview">
+<div class="box">
+  <div class="box-title">本章地图</div>
+  <ul style="margin:0">
+    <li><b>4.1 拓扑基本概念</b>：开集、同胚、流形、粘合、同伦、基本群。不需要全懂，但懂得越多，对运动规划的理解越深。</li>
+    <li><b>4.2 定义配置空间</b>：用第 3 章的变换定义 C。平面刚体是 \(\mathbb{R}^2\times S^1\)，空间刚体是 \(\mathbb{R}^3\times\mathbb{RP}^3\)，后者要靠四元数才能看清。</li>
+    <li><b>4.3 配置空间障碍</b>：把世界里的障碍物 \(\mathcal{O}\) 搬进 C，得到 \(\mathcal{C}_{obs}\) 和 \(\mathcal{C}_{free}\)，正式写出钢琴搬运工问题（Formulation 4.1）。要记住：这种变换<b>通常不会被显式地构造出来</b>。</li>
+    <li><b>4.4 闭运动链</b>：带环的连杆。C 一般不再是流形，而是代数簇（variety），连参数化都很难。</li>
+  </ul>
+</div>
+<div class="box intuition">
+  <div class="box-title">书中给的阅读建议（1.5 节）</div>
+  <p>4.1、4.2、4.3.1 是理解后面大部分内容的关键；整个 4.3 是第 6 章组合方法的背景；第 7.4 节（闭链的采样规划）需要 4.4。第 5 章的采样方法只要求你接受「C 是一个连续状态空间」。</p>
+</div>
+<p>和第 2 章的离散规划对照着读最清楚：</p>
+<div class="table-wrap">
+<table class="data">
+  <thead><tr><th>第 2 章（离散）</th><th>第 4 章（连续）</th></tr></thead>
+  <tbody>
+    <tr><td>状态空间 \(X\)，有限或可数</td><td>配置空间 \(\mathcal{C}\)，一个流形（或簇）</td></tr>
+    <tr><td>动作序列，状态 \(x_1, x_2, \ldots\)</td><td>连续路径 \(\tau:[0,1]\to\mathcal{C}\)，参数 \(s\) 取代阶段编号</td></tr>
+    <tr><td>图的连通性</td><td>路径连通、同伦、基本群</td></tr>
+    <tr><td>隐式表示的状态转移图</td><td>隐式表示的 \(\mathcal{C}_{free}\)（只能做碰撞检测，不能把它画出来）</td></tr>
+  </tbody>
+</table>
+</div>
+<p class="small muted">怎么用这一页：读正文 → 玩嵌在概念旁边的互动图 → 看下面的「试一试」。所有数值例子都用 <a href="code/ch4_configuration_space.py"><code>code/ch4_configuration_space.py</code></a> 核对过；核对过程中发现的几处原书笔误放在文末<a href="#notes">脚注</a>里。</p>
+</section>
+
+<!-- ================================================================ -->
+<h2 id="s4-1">4.1 拓扑基本概念 <span class="en">Basic Topological Concepts</span></h2>
+
+<h3 id="s4-1-1">4.1.1 拓扑空间</h3>
+<p>先回忆实数轴上的开区间 \((0,1)\)：它包含 0 和 1 之间的所有实数，但不包含端点。数列 \(1/2, 1/4, \ldots, 1/2^i\) 可以无限逼近 0，所以我们能在 \((0,1)\) 里挑出离端点任意近的点，却挑不到端点本身。闭区间 \([0,1]\) 则包含端点。拓扑学把「开」这个概念推广到极其一般的集合上。</p>
+
+<div class="box def">
+  <div class="box-title">定义：拓扑空间 topological space</div>
+  <p>集合 \(X\) 连同它的一族子集（称为<b>开集</b> open sets），如果满足：</p>
+  <ol style="margin:0">
+    <li>任意多个开集的并是开集；</li>
+    <li><b>有限</b>个开集的交是开集；</li>
+    <li>\(X\) 和 \(\emptyset\) 都是开集，</li>
+  </ol>
+  <p style="margin-top:6px">就称 \(X\) 是一个拓扑空间。</p>
+</div>
+<p>注意公理 1 允许<b>无限</b>并，公理 2 只允许<b>有限</b>交：无限个开集相交可能不再是开集（比如 \(\bigcap_i (-1/i, 1/i) = \{0\}\)）。在 \(\mathbb{R}\) 中，开区间的各种并、交也是开集，例如两两不相交的无限并</p>
+<div class="eq">$$\bigcup_{i=1}^{\infty}\left(\frac{1}{3^i},\ \frac{2}{3^i}\right). \tag{4.1}$$</div>
+
+<p><b>闭集</b> closed set：\(C\subset X\) 是闭集，当且仅当 \(X\setminus C\) 是开集。于是 \([0,1]\) 是闭集，因为补集 \((-\infty,0)\cup(1,\infty)\) 是开集。但「开」和「闭」并不是非此即彼：\([0,2\pi)\) <b>既不开也不闭</b>；而对任何拓扑空间，\(X\) 和 \(\emptyset\) <b>既开又闭</b>。</p>
+
+<p><b>特殊点</b>（图 4.1）。设 \(U\subseteq X\)，\(x\in X\)：</p>
+<ul>
+  <li>存在开集 \(O_1\) 使 \(x\in O_1\subseteq U\)：\(x\) 是 \(U\) 的<b>内点</b> interior point，全体内点记作 \(\operatorname{int}(U)\)。</li>
+  <li>存在开集 \(O_2\) 使 \(x\in O_2\subseteq X\setminus U\)：\(x\) 是<b>外点</b> exterior point。</li>
+  <li>两者都不是：\(x\) 是<b>边界点</b> boundary point，全体记作 \(\partial U\)。</li>
+  <li>内点或边界点统称<b>极限点</b> limit point（聚点 accumulation point）。全体极限点构成闭集 \(\operatorname{cl}(U)=\operatorname{int}(U)\cup\partial U\)，叫<b>闭包</b> closure。</li>
+</ul>
+
+<div class="widget" data-widget="point-class"></div>
+<div class="box try">
+  <div class="box-title">试一试</div>
+  <ul>
+    <li>二维模式下把 x 放进 U 内部，然后把 ε 调大：开球迟早跨过边界，但「存在一个够小的 ε」就足以判定内点。</li>
+    <li>把 x 拖到边界上（会自动吸附），无论 ε 多小，开球都同时含 U 内外的点。再取消「U 包含边界」，看 x 是否还属于 U：边界点可以属于也可以不属于 U。</li>
+    <li>一维模式选 [0, 1)：0 属于 U、1 不属于 U。这就是 [0, 2π) 既不开也不闭的原因。</li>
+  </ul>
+</div>
+
+<p>由定义直接得到几条后面常用的结论：闭集包含它里面任何数列的极限点，因此包含自己全部的边界点；\(\operatorname{cl}\) 总给出闭集；开集不含任何边界点。<b>这些在讨论 C-space 障碍时会派上用场</b>：\(\mathcal{C}_{obs}\) 是闭集，\(\mathcal{C}_{free}\) 是开集。</p>
+
+<h4>几个例子</h4>
+<ul>
+  <li><b>例 4.1（\(\mathbb{R}^n\) 的拓扑）</b>：开球 \(B(x,\rho)=\{x'\in\mathbb{R}^n \mid \|x'-x\|&lt;\rho\}\)（式 4.2）是开集，所有开集都能写成开球的可数并（这样一族球叫<b>基</b> basis）。第 3 章的代数原语 \(\{x\mid f(x)\le 0\}\) 是闭集，有限次并、交仍是闭集，所以 3.1 节建出的障碍区域 \(\mathcal{O}\) 都是闭集；只用 \(&lt;\) 的原语给出开集。</li>
+  <li><b>例 4.2（子空间拓扑 subspace topology）</b>：\(Y\subset X\) 的开集定义为 \(U\cap Y\)（\(U\) 是 \(X\) 的开集）。</li>
+  <li><b>例 4.3（平凡拓扑 trivial topology）</b>：只声明 \(X\) 和 \(\emptyset\) 是开集，公理照样成立。</li>
+  <li><b>例 4.4（奇怪的拓扑）</b>：\(X=\{\text{cat}, \text{dog}, \text{tree}, \text{house}\}\)（式 4.3），声明 \(\{\text{cat}\}\)、\(\{\text{dog}\}\) 是开集，那么由公理，\(\{\text{cat},\text{dog}\}\) 也必须是开集。</li>
+</ul>
+
+<div class="widget" data-widget="finite-topology" data-preset="ex44"></div>
+<div class="box try">
+  <div class="box-title">试一试</div>
+  <ul>
+    <li>默认是例 4.4：检查器会指出 {cat} ∪ {dog} 不是开集。点「补全」得到它生成的拓扑，再看哪些子集既不开也不闭。</li>
+    <li>切到「Sierpiński 空间」：它满足三条公理，却不是 Hausdorff 的——0 和 1 分不开。本书用到的空间都会额外满足 Hausdorff 公理。</li>
+    <li>习题 1 也在预设里。先自己做，再用它对答案。</li>
+  </ul>
+</div>
+
+<div class="box def">
+  <div class="box-title">Hausdorff 公理</div>
+  <p>对任意不同的 \(x_1,x_2\in X\)，存在开集 \(O_1\ni x_1\)、\(O_2\ni x_2\) 且 \(O_1\cap O_2=\emptyset\)。在 \(\mathbb{R}^n\) 里取足够小的开球即可。本书出现的配置空间都是 Hausdorff 空间，后面的流形也都是。</p>
+</div>
+
+<h4 id="homeo">连续函数与同胚</h4>
+<p>拓扑空间之间的连续性有一个非常干净的定义。对 \(f:X\to Y\) 和 \(B\subseteq Y\)，定义<b>原像</b> preimage</p>
+<div class="eq">$$f^{-1}(B)=\{x\in X \mid f(x)\in B\}. \tag{4.4}$$</div>
+<p>（这里不要求 \(f\) 可逆。）<b>\(f\) 连续，当且仅当每个开集 \(O\subseteq Y\) 的原像 \(f^{-1}(O)\) 都是开集。</b>证明「连续函数的复合仍连续」只要一句话：原像的原像还是开集，完全不需要 \(\delta\)-\(\epsilon\)。</p>
+
+<div class="box def">
+  <div class="box-title">同胚 homeomorphism</div>
+  <p>若 \(f:X\to Y\) 是双射，且 \(f\) 与 \(f^{-1}\) 都连续，则称 \(f\) 是同胚，\(X\) 与 \(Y\) <b>同胚</b>，记作 \(X\cong Y\)。同胚是拓扑空间上的等价关系。拓扑学家眼里甜甜圈和带把手的咖啡杯是一样的，说的就是它们的表面同胚。</p>
+</div>
+<p><b>例 4.5（区间的同胚）</b>：任意两个开区间同胚，如 \(x\mapsto 5x\) 把 \((0,1)\) 映到 \((0,5)\)；非奇异线性变换把子集映到同胚的子集，第 3 章的刚体变换也是同胚，所以机器人平移、旋转后拓扑不变。但 \([0,1]\)、\((0,1)\)、\([0,1)\) 两两不同胚：端点让连续双射造不出来。更出人意料的是，有界集可以和无界集同胚。</p>
+
+<div class="widget" data-widget="homeo"></div>
+<div class="box try">
+  <div class="box-title">试一试</div>
+  <ul>
+    <li>选 \(x\mapsto 2\tan^{-1}(x)/\pi\)，把上方的点往右拖到底：整条实轴被压进了 (−1, 1)，越远压得越狠，但始终一一对应、连续。</li>
+    <li>选 \(x\mapsto 1/x\)，把点拖向 0：像跑向无穷远。这说明「有界」不是拓扑性质。</li>
+  </ul>
+</div>
+
+<p><b>例 4.6（拓扑图 topological graph）</b>：图的每个顶点对应 \(X\) 中一点，每条边对应一个连续单射 \(\tau:[0,1]\to X\)，不同边只在顶点处相交（拓扑学里叫 1-复形）。两个同构的图对应同胚的拓扑图。反过来不一定：度为 2 的顶点是「无用顶点」，图 4.2 中几个不同构的图都同胚于圆。删掉这些顶点后，不同构的图就给出不同胚的空间（图 4.3）。</p>
+
+<h3 id="s4-1-2">4.1.2 流形 <span class="en">Manifolds</span></h3>
+<p>大多数配置空间都属于一类「好」的拓扑空间：流形。直观上，流形在每一点附近都像我们熟悉的曲面。</p>
+<div class="box def">
+  <div class="box-title">定义：流形 manifold</div>
+  <p>拓扑空间 \(M\subseteq\mathbb{R}^m\) 是流形，如果对每个 \(x\in M\) 都存在开集 \(O\subset M\) 使得：1) \(x\in O\)；2) \(O\) 同胚于 \(\mathbb{R}^n\)；3) \(n\) 对所有 \(x\) 都相同。这个 \(n\) 叫流形的<b>维数</b>。</p>
+</div>
+<p>第 2 条最重要：在任何一点附近，「能往哪些方向走」都和 \(\mathbb{R}^n\) 一样。自然有 \(m\ge n\)；<b>Whitney 嵌入定理</b>说 \(m\le 2n+1\) 就够了，即 \(\mathbb{R}^{2n+1}\) 装得下任何 \(n\) 维流形。按这个定义，流形不能包含边界点；允许边界点的叫<b>带边流形</b> manifold with boundary：边界点的邻域同胚于 \(n\) 维半空间，内点的邻域同胚于 \(\mathbb{R}^n\)。</p>
+
+<div class="widget" data-widget="manifold-test"></div>
+<div class="box try">
+  <div class="box-title">试一试</div>
+  <ul>
+    <li>在 8 字形上移动：大部分点的小邻域与图形交 2 次（像 ℝ），只有中间那个点交 4 次。去掉它邻域断成 4 段，而 ℝ 去掉一点只断成 2 段，所以它不是流形。</li>
+    <li>把 ε 调大再靠近 T 的交叉点：在离交叉点还有一段距离时，ε 圆就已经交 3 次了。定义说的是「存在一个足够小的邻域」，所以要让 ε 足够小再判断。</li>
+    <li>比较开线段和闭线段：前者是一维流形，后者是带边流形。</li>
+  </ul>
+</div>
+
+<p><b>笛卡尔积</b> Cartesian product：\(X\times Y\) 的点是 \((x,y)\)，开集由「\(X\) 的开集 × \(Y\) 的开集」作为基生成。\(\mathbb{R}\times\mathbb{R}=\mathbb{R}^2\)，一般地 \(\mathbb{R}^n=\mathbb{R}\times\mathbb{R}^{n-1}\)。后面很多重要的流形都靠积来构造。</p>
+<p><b>一维流形</b>：\(\mathbb{R}\)，或与之同胚的 \((0,1)\)。另一个与 \((0,1)\) 不同胚的一维流形是<b>圆</b></p>
+<div class="eq">$$S^1=\{(x,y)\in\mathbb{R}^2 \mid x^2+y^2=1\}. \tag{4.5}$$</div>
+<p>像拓扑学家那样思考时，这个具体的圆并不重要，任何与它同胚的流形我们都叫 \(S^1\)。</p>
+
+<h4 id="identification">粘合（identification）</h4>
+<p>表示 \(S^1\) 的一个方便办法是<b>粘合</b>：宣布空间里某些原本不同的点是同一个点，记作 \(X/\!\sim\)（正式名字是商拓扑 quotient topology）。\(S^1=[0,1]/\!\sim\)，其中 \(0\sim 1\)：把区间两端粘起来就成了一个环，同胚由 \(\theta\mapsto(\cos 2\pi\theta, \sin 2\pi\theta)\) 给出。这和「极坐标里 0 与 2π 是同一个角」是一回事。粘合并不违反「流形是 \(\mathbb{R}^m\) 的子集」：Whitney 定理保证总能嵌进去，粘合只是减少了可视化需要的维数，而且在规划算法的实现里非常方便。</p>
+<p><b>二维流形</b>：\(\mathbb{R}^2=\mathbb{R}\times\mathbb{R}\)；\(\mathbb{R}\times S^1\) 是无限长的柱面；\(S^1\times S^1\) 是环面（甜甜圈的表面）。还有更多二维流形可以从开正方形 \(M=(0,1)\times(0,1)\cong\mathbb{R}^2\) 出发，把边成对粘合得到（图 4.5）：</p>
+<ul>
+  <li><b>柱面</b>：\((0,y)\sim(1,y)\)。</li>
+  <li><b>Möbius 带</b>：\((0,y)\sim(1,1-y)\)，粘合时带一次翻转（图中箭头反向）。它只有一个面，而且<b>不可定向</b>。</li>
+  <li><b>环面 \(T^2\)</b>：左右 \((0,y)\sim(1,y)\)，上下 \((x,0)\sim(x,1)\)，都不翻转。\((0,0)\) 和另外三个角是同一点。这就是 1980 年代小行星游戏的屏幕：飞船从一边飞出，从对边飞回。</li>
+  <li><b>Klein 瓶</b>：像环面，但左右粘合带翻转。它能嵌入 \(\mathbb{R}^4\)，里外是同一面。</li>
+  <li><b>射影平面 \(\mathbb{RP}^2\)</b>：左右、上下都带翻转。它等价于 \(\mathbb{R}^3\) 中过原点的所有直线。它的三维版本 \(\mathbb{RP}^3\) 是运动规划里最重要的流形之一。</li>
+  <li><b>球面 \(S^2\)</b>：\(S^2=\{(x,y,z)\in\mathbb{R}^3\mid x^2+y^2+z^2=1\}\)（式 4.6），也可以用图 4.5 最后一行的粘合得到：两极在左上角和右下角，虚线是赤道，像一张扭曲的世界地图。</li>
+</ul>
+<p>后面这几个（环面、Klein 瓶、\(\mathbb{RP}^2\)、\(S^2\)）有界却<b>没有边界</b>：住在里面可以沿任何方向永远走下去，不会碰到宇宙的边缘。</p>
+
+<div class="widget wide" data-widget="gluing" data-surface="torus"></div>
+<div class="box try">
+  <div class="box-title">试一试（这也是习题 27）</div>
+  <ul>
+    <li>环面上依次点斜率 1、1/2、2/3、3/5：有理斜率的直线飞一阵后回到起点，画出有限条条纹；点「√2（无理）」让它多飞一会儿，直线会越来越密地铺满正方形。</li>
+    <li>切到 Möbius 带，让飞船穿过左右边：黄色小旗从左边跑到了右边，飞船变成了镜像。再穿一次又恢复。在柱面上无论穿多少次都不会镜像，这就是「不可定向」的意思。</li>
+    <li>试试 ℝP² 和 Klein 瓶：哪条边会翻转手性？在球面上，飞船从左边出去时会从上边进来。</li>
+  </ul>
+</div>
+
+<p><b>高维流形</b>：\(\mathbb{R}^n\)；\(n\) 维环面 \(T^n=(S^1)^n\)（注意 \(S^1\times S^1\ne S^2\)，所以要单独记号）；\(n\) 维柱面 \(\mathbb{R}^i\times T^j\)（\(i+j=n\)）；\(n\) 维球面</p>
+<div class="eq">$$S^n=\{x\in\mathbb{R}^{n+1} \mid \|x\|=1\}. \tag{4.7}$$</div>
+<p>把立方体 \((0,1)^n\) 或多面体的面成对粘合（允许各种翻转），能得到许多有趣的空间，例如透镜空间。</p>
+
+<div class="box def">
+  <div class="box-title">射影空间 \(\mathbb{RP}^n\)</div>
+  <p>标准定义：\(\mathbb{R}^{n+1}\) 中过原点的所有直线，每条直线是 \(\mathbb{RP}^n\) 的一个点。每条这样的直线恰好在两个<b>对径点</b> antipodal points 处穿过 \(S^n\)，所以把 \(S^n\) 的对径点两两粘合，就得到 \(S^n/\!\sim\ \cong\mathbb{RP}^n\)。</p>
+  <p>另一种看法：\(\mathbb{RP}^n\) 就是 \(S^n\) 的上半球，只是赤道上的每一点和它的对径点粘在一起。你想走进南半球，会发现自己出现在世界的另一侧、朝北走。把图 4.5 里 \(\mathbb{RP}^2\) 的正方形变形成圆盘（对边粘合），再把圆心往上提，就是 \(S^2\) 的上半球。</p>
+</div>
+
+<h3 id="s4-1-3">4.1.3 路径与连通性 <span class="en">Paths and Connectivity</span></h3>
+<p>运动规划的核心是判断空间的一部分能否到达另一部分。第 2 章里靠施加动作序列从一个状态到另一个状态；这里对应的是用<b>连续路径</b>连接 C 中的两点。</p>
+<p><b>路径</b> path：连续函数 \(\tau:[0,1]\to X\)（定义域也可以用 \(\mathbb{R}\)）。<b>路径是一个函数，不是点集。</b>\(\tau(s)\) 中的 \(s\) 取代了第 2 章的阶段编号；把 \(\tau\) 写成 \(x\)，就是 \(x(s)\)。</p>
+<p><b>连通 vs 路径连通</b>：\(X\) 不能写成两个不相交非空开集的并，叫<b>连通</b> connected。但连通不保证任意两点之间有路径，反例是<b>拓扑学家的正弦曲线</b></p>
+<div class="eq">$$X=\{(x,y)\in\mathbb{R}^2 \mid x=0 \text{ 或 } y=\sin(1/x)\}. \tag{4.8}$$</div>
+<p>它是连通的，但从正弦曲线出发没有路径能到达 \(y\) 轴。修正办法是直接用路径来定义：对任意 \(x_1,x_2\) 都存在 \(\tau(0)=x_1\)、\(\tau(1)=x_2\) 的路径，叫<b>路径连通</b> path connected。路径连通蕴含连通。本书只考虑流形，流形上两种定义一致（正弦曲线不是流形：包含原点的开集都含有正弦曲线上的点，不同胚于 \(\mathbb{R}\)），所以以后就说「连通」。</p>
+
+<div class="box def">
+  <div class="box-title">同伦 homotopy（端点固定）</div>
+  <p>两条路径 \(\tau_1,\tau_2\) 同伦，如果存在连续函数 \(h:[0,1]\times[0,1]\to X\) 满足：</p>
+  <ol style="margin:0">
+    <li>（从第一条路径开始）\(h(s,0)=\tau_1(s)\)；</li>
+    <li>（以第二条路径结束）\(h(s,1)=\tau_2(s)\)；</li>
+    <li>（起点固定）\(h(0,t)=h(0,0)\)；</li>
+    <li>（终点固定）\(h(1,t)=h(1,0)\)。</li>
+  </ol>
+  <p style="margin-top:6px">参数 \(t\) 像一个旋钮，慢慢把 \(\tau_1\) 变形成 \(\tau_2\)。因为 \(h\) 连续，变形过程中路径不能跳跃，在 \(\mathbb{R}^2\) 里就不能越过洞（图 4.6b）。</p>
+</div>
+<p>同伦是从 \(x_1\) 到 \(x_2\) 的所有路径上的等价关系。若 \(X\) 路径连通且所有路径都在同一个等价类里，\(X\) 叫<b>单连通</b> simply connected，否则叫<b>多连通</b> multiply connected。在 \(\mathbb{R}^3\) 里洞的种类更多：像瑞士奶酪里的气泡，同伦可以绕过去；但贯穿整块奶酪的孔就绕不过去。</p>
+
+<h4 id="fundamental-group">群与基本群</h4>
+<div class="box def">
+  <div class="box-title">群 group</div>
+  <p>集合 \(G\) 和二元运算 \(\circ\)，满足：1) <b>封闭</b>：\(a\circ b\in G\)；2) <b>结合律</b>：\((a\circ b)\circ c=a\circ(b\circ c)\)；3) <b>单位元</b>：存在 \(e\) 使 \(e\circ a=a\circ e=a\)；4) <b>逆元</b>：每个 \(a\) 有 \(a^{-1}\) 使 \(a\circ a^{-1}=a^{-1}\circ a=e\)。若还满足 \(a\circ b=b\circ a\)，叫<b>交换群</b>（Abel 群）。</p>
+</div>
+<p><b>例 4.7</b>：整数 \(\mathbb{Z}\) 对加法是群（单位元 0，逆元 \(-i\)）；去掉 0 的有理数 \(\mathbb{Q}\setminus 0\) 对乘法是群（去掉 0 是为了不除以零）。\(\mathbb{R}^n\) 上的向量加法是交换群；三维旋转构成<b>不交换</b>的群。</p>
+
+<p><b>基本群</b> fundamental group \(\pi_1(X)\)（第一同伦群）：取一个<b>基点</b> \(x_b\)，考虑所有满足 \(\tau(0)=\tau(1)=x_b\) 的<b>环路</b> loop。两条环路的乘积是首尾相接：</p>
+<div class="eq">$$\tau(t)=\begin{cases}\tau_1(2t) &amp; t\in[0,1/2)\\ \tau_2(2t-1) &amp; t\in[1/2,1].\end{cases} \tag{4.9}$$</div>
+<p>群运算实际是在<b>同伦类</b>上进行的：同一个类里取哪条代表都行。基本群描述了这些路径类之间的关系，刻画了 \(X\) 的连通性。</p>
+<ul>
+  <li><b>例 4.8</b>：单连通空间的 \(\pi_1(X)=1_G\)，只有单位元。</li>
+  <li><b>例 4.9</b>：\(\pi_1(S^1)=\mathbb{Z}\)。每个整数 \(i\) 对应「逆时针绕 \(i\) 圈」的一类环路（负数是顺时针）；复合就是圈数相加，绕 7 圈再反绕 7 圈同伦于原地不动。</li>
+  <li><b>例 4.10</b>：\(\pi_1(T^n)=\mathbb{Z}^n\)，第 \(i\) 个分量记录绕第 \(i\) 个 \(S^1\) 的圈数。书中接着说，平面挖掉 \(n\) 个互不相交的有界洞也得到 \(\mathbb{Z}^n\)，这正是移动机器人躲避 \(n\) 个障碍物的情形。<sup class="fn"><a id="fn1-ref" href="#fn1">1</a></sup></li>
+  <li><b>例 4.11</b>：\(\pi_1(\mathbb{RP}^2)=\mathbb{Z}_2\)。绕偶数次的环路都同伦（可以收缩成一点），绕奇数次的也都同伦（图 4.7）。\(\mathbb{RP}^3\) 的基本群也是 \(\mathbb{Z}_2\)，而 \(\mathbb{RP}^3\) 同胚于三维旋转的集合，所以三维旋转出人意料地只有两类路径。</li>
+</ul>
+
+<div class="widget wide" data-widget="homotopy"></div>
+<div class="box try">
+  <div class="box-title">试一试</div>
+  <ul>
+    <li>同伦变形：先点「τ₂ 放到洞的上方」，拖动 t 从 0 到 1，橙色路径顺利变成 τ₂。再点「放到洞的下方」，判断变成「不同伦」，中间的橙色路径会撞上洞。</li>
+    <li>基本群：依次点「绕洞 1 一圈」→「存为 τ₁」→「绕洞 2 一圈」→「复合」，绕数 (1, 0) 和 (0, 1) 相加得到 (1, 1)。也可以自己从蓝色基点画环路。</li>
+    <li>点「a·b·a⁻¹·b⁻¹」：绕数是 (0, 0)，但这条环路<b>收缩不成一点</b>。这说明绕数只记录了基本群的一部分信息，见脚注 1。</li>
+  </ul>
+</div>
+
+<p><b>基本群的局限</b>：不同胚的空间可以有相同的基本群。\(S^1\)、柱面 \(\mathbb{R}\times S^1\)、Möbius 带的基本群都是 \(\mathbb{Z}\)，基本群看不出 Möbius 带的扭转。\(S^2\) 的基本群是 \(1_G\)，和 \(\mathbb{R}^2\) 一样，所以 \(S^2\) 是单连通的；\(\mathbb{R}^3\) 里的气泡也会被忽略，因为同伦能绕过去。用二元连续函数 \([0,1]\times[0,1]\to X\) 代替路径，可以定义第二同伦群 \(\pi_2(X)\)，它能「包住」气泡；继续推广就是<b>高阶同伦群</b>。各阶同伦群都平凡的空间叫<b>可缩</b> contractible：可以连续地缩成一个点。平面上可缩与单连通等价；在高维（运动规划常见的情形）应该用「可缩」来表达「没有内部障碍」。另一条路是基于胞腔复形的<b>同调</b> homology，更难讲，但证明定理时更强大。</p>
+
+<!-- ================================================================ -->
+<h2 id="s4-2">4.2 定义配置空间 <span class="en">Defining the Configuration Space</span></h2>
+<p>若机器人有 \(n\) 个自由度，它的变换集合通常是一个 \(n\) 维流形，这就是<b>配置空间</b> \(\mathcal{C}\)。在本书里，C-space 可以看成一种特殊的状态空间：求解运动规划就是在 C 中搜索。C-space 把第 3 章复杂的模型和变换抽象成「在流形上找路径」这一个通用问题，直接为它开发的算法适用于各种各样的机器人。本节还没有障碍物，障碍物在 4.3 节才进来。</p>
+
+<h3 id="s4-2-1">4.2.1 二维刚体：SE(2)</h3>
+<p><b>直觉版答案</b>：平移 \((x_t,y_t)\) 可以任意选，给出 \(M_1=\mathbb{R}^2\)；旋转 \(\theta\in[0,2\pi)\) 中 \(2\pi\) 与 0 是同一个旋转，粘合后是 \(M_2=S^1\)。所以 \(\mathcal{C}=M_1\times M_2=\mathbb{R}^2\times S^1\)，一种柱面。下面给出技术性的推导，因为这种直觉论证在三维时会失效。</p>
+
+<h4>矩阵群</h4>
+<p>把变换集合同时看成群和拓扑空间（它们其实是 Lie 群，书里暂不使用这个名字）：</p>
+<ul>
+  <li><b>一般线性群</b> \(GL(n)\)：所有非奇异 \(n\times n\) 实矩阵，对矩阵乘法成群。要求非奇异，和从 \(\mathbb{Q}\) 里去掉 0 是同一个道理。</li>
+  <li><b>正交群</b> \(O(n)\)：满足 \(AA^T=I\) 的矩阵。各列两两正交，行列式为 \(\pm 1\)。</li>
+  <li><b>特殊正交群</b> \(SO(n)\)：\(O(n)\) 中行列式为 1 的子群，也就是 <b>\(n\) 维旋转矩阵群</b>。</li>
+</ul>
+<p>于是有子群链 \(SO(n)\le O(n)\le GL(n)\)。数维数：所有 \(n\times n\) 矩阵同胚于 \(\mathbb{R}^{n^2}\)；\(GL(n)\) 去掉奇异矩阵后仍是 \(n^2\) 维流形。\(AA^T=I\) 有 \(n^2\) 个方程，但很多是冗余的：只有 \(\binom{n}{2}\) 个「两列正交」的方程和 \(n\) 个「每列长度为 1」的方程，共 \(n(n+1)/2\) 个独立方程。每个独立方程让维数减 1，所以</p>
+<div class="eq">$$\dim O(n)=n^2-\frac{n(n+1)}{2}=\frac{n(n-1)}{2}=\binom{n}{2}.$$</div>
+<p>再加上 \(\det A=1\) 恰好去掉 \(O(n)\) 的一半元素，维数不变。</p>
+<div class="table-wrap">
+<table class="data">
+  <thead><tr><th>群</th><th>约束</th><th>维数</th><th>n = 2</th><th>n = 3</th></tr></thead>
+  <tbody>
+    <tr><td>\(GL(n)\)</td><td>\(\det A\ne 0\)</td><td>\(n^2\)</td><td>4</td><td>9</td></tr>
+    <tr><td>\(O(n)\)</td><td>\(AA^T=I\)</td><td>\(n(n-1)/2\)</td><td>1（两个圆）</td><td>3</td></tr>
+    <tr><td>\(SO(n)\)</td><td>再加 \(\det A=1\)</td><td>\(n(n-1)/2\)</td><td>1：\(S^1\)</td><td>3：\(\mathbb{RP}^3\)</td></tr>
+    <tr><td>\(SE(n)\)</td><td>式 (4.16)</td><td>\(n+n(n-1)/2\)</td><td>3：\(\mathbb{R}^2\times S^1\)</td><td>6：\(\mathbb{R}^3\times\mathbb{RP}^3\)</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p><b>例 4.12（矩阵子群，\(n=2\)）</b>：所有 \(2\times 2\) 矩阵 \(\begin{pmatrix}a&amp;b\\c&amp;d\end{pmatrix}\)（式 4.10）同胚于 \(\mathbb{R}^4\)；\(GL(2)\) 加上 \(ad-bc\ne 0\)，仍是四维流形。\(AA^T=I\)（式 4.11）给出四个方程：</p>
+<div class="eq">$$a^2+b^2=1 \tag{4.12}$$ $$ac+bd=0 \tag{4.13}$$ $$ca+db=0 \tag{4.14}$$ $$c^2+d^2=1. \tag{4.15}$$</div>
+<p>(4.14) 是冗余的。从 \(\mathbb{R}^4\) 减去 3 个维数，剩一维。\((a,b)\) 在单位圆上任取；对每个 \((a,b)\)，正交条件让 \((c,d)\) 只有两种选择：\(c=b,\ d=-a\) 或 \(c=-b,\ d=a\)。所以 \(O(2)=S^1\sqcup S^1\)，两个不相交的圆，不连通。最后 \(\det A=ad-bc=1\) 选出第二种，扔掉一个圆，剩下 \(SO(2)\cong S^1\)。没有这个条件，矩阵会把刚体变成旋转后的镜像。</p>
+
+<div class="widget" data-widget="o2"></div>
+<div class="box try">
+  <div class="box-title">试一试</div>
+  <ul>
+    <li>拖动 (a, b) 绕单位圆一圈：在 det = +1 下，F 只是在转，矩阵走遍了整个 SO(2)。</li>
+    <li>切到 det = −1：F 被翻面了。同样的 (a, b)，换一种 (c, d) 就跳到另一个圆上，中间没有连续的路可走。</li>
+  </ul>
+</div>
+
+<h4>特殊欧氏群 SE(n)</h4>
+<p>允许旋转和平移，就是所有形如</p>
+<div class="eq">$$\left\{\begin{pmatrix}R &amp; v\\ 0 &amp; 1\end{pmatrix} \ \middle|\ R\in SO(n),\ v\in\mathbb{R}^n\right\} \tag{4.16}$$</div>
+<p>的 \((n+1)\times(n+1)\) 矩阵，叫<b>特殊欧氏群</b> \(SE(n)\)，它是式 (3.52)、(3.56) 的推广。旋转和平移可以独立选，所以作为拓扑空间 \(SE(n)\cong\mathbb{R}^n\times SO(n)\)。在平面上，</p>
+<div class="eq">$$\mathcal{C}=\mathbb{R}^2\times S^1. \tag{4.17}$$</div>
+<p>严格说应写 \(\cong\)，表示 C 可以是任何同胚于 \(\mathbb{R}^2\times S^1\) 的空间，书里多数时候省略。</p>
+
+<p><b>理解这个 C-space</b>：\(S^1\) 是多连通的，所以 \(\mathbb{R}\times S^1\) 和 \(\mathbb{R}^2\times S^1\) 也是多连通的。三维流形不好画，但可以用粘合：取开立方体 \((0,1)^3\)，加上 \((x,y,0)\)、\((x,y,1)\) 这些边界点，并令 \((x,y,0)\sim(x,y,1)\)。沿 \(x\)、\(y\) 方向有「边疆」，沿 \(z\)（即 \(\theta\)）方向会绕回来。<b>规划算法必须知道这种绕回存在。</b>图 4.8 用更好画的 \(\mathbb{R}\times S^1\) 说明：上下两条边粘合成柱面，中间横着一块障碍物。若不粘合，\(q_I\) 和 \(q_G\) 不连通；知道自己在柱面上，问题就很简单。不理解 C 的拓扑，潜在的解就会丢失。</p>
+
+<div class="widget wide" data-widget="cylinder"></div>
+<div class="box try">
+  <div class="box-title">试一试</div>
+  <ul>
+    <li>默认就是图 4.8 的布局：路径从 q<sub>I</sub> 往下穿过 θ = 0，从顶上冒出来到达 q<sub>G</sub>。在右边的柱面上，这只是绕到背面走了一段。</li>
+    <li>取消「识别上下边」：同一个问题立刻无解。</li>
+    <li>在左图障碍带上挖一个缺口：BFS 会在「穿过缺口」和「绕到背面」之间选更短的那条。</li>
+  </ul>
+</div>
+
+<h3 id="s4-2-2">4.2.2 三维刚体：SE(3)</h3>
+<p>你可能以为三维只是二维的直接推广，但三维旋转要复杂得多。结论先说：<b>\(\mathcal{C}=\mathbb{R}^3\times\mathbb{RP}^3\)</b>，六维流形，三维来自平移，三维来自旋转。本节的任务就是弄清 \(SO(3)\) 的拓扑。</p>
+<p>3.2.3 节用 yaw、pitch、roll 生成旋转矩阵，适合可视化、软件里做变换、推导 DH 参数，但那是「施加一个旋转」；现在要刻画「所有旋转的集合」。用 \(\alpha,\beta,\gamma\) 参数化会出大问题：有些非零角度给出单位矩阵（等同于 \(\alpha=\beta=\gamma=0\)），有些情况下一整段连续的角度给出同一个矩阵。这些都破坏了拓扑，在理论和实践上都会给运动规划带来麻烦。</p>
+<p>沿用矩阵群：\(GL(3)\cong\mathbb{R}^9\)；\(AA^T=I\) 有 \(\binom{3}{2}=3\) 个正交方程和 3 个单位长度方程，所以 \(O(3)\) 是三维的，和 3.2.3 节三个旋转参数吻合。\(\det A=1\) 选出 \(O(3)\) 两个分支中的一个。书中先说这两支各是一个 \(S^3\)，再补充一个复杂之处：<b>球面上的对径点给出同一个旋转矩阵</b>，下面用四元数就能看清。</p>
+
+<h4>用复数表示 SO(2)</h4>
+<p><b>单位复数</b> \(a+bi\)（\(a^2+b^2=1\)）在乘法下成群，而且和 \(SO(2)\) 是「同一个」群：两个群 \(G,H\) <b>同构</b> isomorphic，指存在双射 \(f:G\to H\) 使 \(f(a)\circ f(b)=f(a\circ b)\)。在 \(G\) 里算一部分、映到 \(H\) 里接着算、再映回来，都不会出错。令 \(e^{i\theta}\) 对应旋转矩阵 (3.31)：先转 \(\theta_1\) 再转 \(\theta_2\)，复数相乘 \(e^{i\theta_1}e^{i\theta_2}=e^{i(\theta_1+\theta_2)}\)。笛卡尔形式下 \((a_1+b_1i)(a_2+b_2i)=(a_1a_2-b_1b_2)+(a_1b_2+a_2b_1)i\)。随时可以换回矩阵：</p>
+<div class="eq">$$R(a,b)=\begin{pmatrix}a &amp; -b\\ b &amp; a\end{pmatrix}. \tag{4.18}$$</div>
+<p>这里没用复数解多项式方程，只是借用了它漂亮的代数性质。只有一个独立参数，因为 \(a^2+b^2=1\)，所以单位复数和 \(SO(2)\) 是同一个流形 \(S^1\)。</p>
+
+<h4 id="quaternions">四元数 quaternions</h4>
+<p>四元数 \(h=a+bi+cj+dk\in\mathbb{H}\)，可以看成四维向量，满足 \(i^2=j^2=k^2=ijk=-1\)，由此 \(ij=k,\ jk=i,\ ki=j\)。乘法 \(h_1\cdot h_2=a_3+b_3i+c_3j+d_3k\)：</p>
+<div class="eq">$$\begin{aligned}a_3&amp;=a_1a_2-b_1b_2-c_1c_2-d_1d_2\\ b_3&amp;=a_1b_2+a_2b_1+c_1d_2-c_2d_1\\ c_3&amp;=a_1c_2+a_2c_1+b_2d_1-b_1d_2\\ d_3&amp;=a_1d_2+a_2d_1+b_1c_2-b_2c_1.\end{aligned} \tag{4.19}$$</div>
+<p>\(\mathbb{H}\) 对这个乘法成群，但<b>乘法不交换</b>，三维旋转也不交换，这不是巧合。向量写法：记 \(v=[b\ c\ d]\)，则 \(h_1\cdot h_2\) 的实部是 \(a_1a_2-v_1\cdot v_2\)，虚部是 \(a_1v_2+a_2v_1+v_1\times v_2\)。</p>
+<p>和单位复数一样，用<b>单位四元数</b>（\(a^2+b^2+c^2+d^2=1\)）表示 \(SO(3)\)，它们构成子群。映射</p>
+<div class="eq">$$R(h)=\begin{pmatrix}2(a^2+b^2)-1 &amp; 2(bc-ad) &amp; 2(bd+ac)\\ 2(bc+ad) &amp; 2(a^2+c^2)-1 &amp; 2(cd-ab)\\ 2(bd-ac) &amp; 2(cd+ab) &amp; 2(a^2+d^2)-1\end{pmatrix} \tag{4.20}$$</div>
+<p>给出正交、行列式为 1 的矩阵。绕单位轴 \(v=[v_1\ v_2\ v_3]\) 转角 \(\theta\)（图 4.9）对应</p>
+<div class="eq">$$h=\cos\frac{\theta}{2}+\left(v_1\sin\frac{\theta}{2}\right)i+\left(v_2\sin\frac{\theta}{2}\right)j+\left(v_3\sin\frac{\theta}{2}\right)k. \tag{4.21}$$</div>
+<p><b>这个表示不唯一</b>：由 (4.20) 可以验证 \(R(h)=R(-h)\)。几何解释见图 4.10：绕 \(v\) 转 \(\theta\) 等于绕 \(-v\) 转 \(2\pi-\theta\)。后者的实部是 \(\cos\frac{2\pi-\theta}{2}=-\cos\frac{\theta}{2}=-a\)（式 4.22），虚部是 \(-v\sin\frac{2\pi-\theta}{2}=[-b\ -c\ -d]\)（式 4.23），正好是 \(-h\)。幸运的是这是唯一的问题，(4.20) 是从单位四元数到 \(SO(3)\) 的<b>二对一</b>映射。</p>
+
+<div class="box intuition">
+  <div class="box-title">所以 SO(3) ≅ ℝP³</div>
+  <p>单位四元数满足 \(a^2+b^2+c^2+d^2=1\)，同胚于 \(S^3\)（这时四元数的代数性质无关紧要，只把 \(h\) 看成 \(\mathbb{R}^4\) 里的点）。用粘合宣布 \(h\sim -h\)，即把 \(S^3\) 的对径点粘起来。4.1.2 节末尾说过 \(\mathbb{RP}^n\cong S^n/\!\sim\)，所以 \(SO(3)\cong\mathbb{RP}^3\)。</p>
+  <p>也可以把图 4.5 的 \(\mathbb{RP}^2\) 推广：取 \((0,1)^3\)，三对相对的面各自粘合，每次都带翻转（不翻转就得到 \(T^3\)），例如 \(z\) 方向 \((x,y,0)\sim(1-x,1-y,1)\)。</p>
+</div>
+<p><b>强制唯一</b>：只取 \(S^3\) 的「上半球」，要求 \(a\ge 0\)；若 \(a=0\) 再要求 \(b\ge 0\)；若 \(a=b=0\) 再要求 \(c\ge 0\)（因为 \((0,0,-1,0)\) 和 \((0,0,1,0)\) 是同一个旋转）；若 \(a=b=c=0\) 只允许 \(d=1\)。这样做时必须记住 \(\mathbb{RP}^3\) 的连通方式：路径穿过 \(S^3\) 的赤道时，要瞬间跳到对径点，回到「北半球」。去掉一个维数，在 \(S^2\subset\mathbb{R}^3\) 上想象会容易得多。</p>
+
+<p><b>使用四元数乘法</b>：表示旋转本身只需要「在 \(S^3\) 上取点并尊重对径等同」，与代数性质无关。但引入四元数算术的一个重要原因是：<b>单位四元数（\(h\) 与 \(-h\) 等同）构成的群也同构于 \(SO(3)\)</b>。于是一串旋转可以用四元数乘法代替矩阵乘法相乘，运算量更少，随时可以用 (4.20) 换回矩阵。甚至不必换回：定义共轭 \(h^*=a-bi-cj-dk\)，把点 \((x,y,z)\) 写成 \(p=0+xi+yj+zk\)，则旋转后的点就是 \(h\cdot p\cdot h^*\) 的 \(i,j,k\) 分量，和用 \(R(h)\) 变换完全一样。</p>
+
+<p><b>从旋转矩阵反求四元数</b>：给定 (3.43) 的矩阵，</p>
+<div class="eq">$$a=\tfrac12\sqrt{r_{11}+r_{22}+r_{33}+1}, \tag{4.24}$$</div>
+<p>若 \(a\ne 0\)：</p>
+<div class="eq">$$b=\frac{r_{32}-r_{23}}{4a},\qquad c=\frac{r_{13}-r_{31}}{4a},\qquad d=\frac{r_{21}-r_{12}}{4a}. \tag{4.25–4.27}$$</div>
+<p>若 \(a=0\)，就碰上了前面说的赤道问题，改用</p>
+<div class="eq">$$b=\frac{r_{13}r_{12}}{\sqrt{r_{12}^2r_{13}^2+r_{12}^2r_{23}^2+r_{13}^2r_{23}^2}},\quad c=\frac{r_{12}r_{23}}{\sqrt{\cdots}},\quad d=\frac{r_{13}r_{23}}{\sqrt{\cdots}}. \tag{4.28–4.30}$$</div>
+<p>分母为零时方法失效，对应矩阵恰好是纯 yaw、pitch 或 roll（转 π）的情形，可以事先检测。<sup class="fn"><a id="fn4-ref" href="#fn4">4</a></sup>因为 (4.20) 是二对一的，严格说只有把四元数限制在上半球之后，这才是它的逆。</p>
+
+<div class="widget wide" data-widget="quaternion"></div>
+<div class="box try">
+  <div class="box-title">试一试</div>
+  <ul>
+    <li>把 θ 从 0 拖到 360°：盒子转了一整圈回到原样，但 h 从 1 变成了 −1。要拖到 720° 才回到 h。这就是「SO(3) 被 S³ 二重覆盖」，右边曲线上红色区域里规范代表必须换成 −h。</li>
+    <li>点「θ = 180°」：a = 0，正好在赤道上，反求公式切换到 (4.28)–(4.30)。再把转轴选成 x 轴：分母为零，方法失效。</li>
+    <li>在下方点两个「在 3D 里看」按钮：先绕 x 再绕 z，和先绕 z 再绕 x，转轴完全不同。</li>
+  </ul>
+</div>
+
+<p><b>SE(3)</b>：旋转部分解决了，平移独立选取，所以空间中能转动、平移的刚体的 C-space 是</p>
+<div class="eq">$$\mathcal{C}=\mathbb{R}^3\times\mathbb{RP}^3, \tag{4.31}$$</div>
+<p>六维流形，维数恰好等于自由浮动物体的自由度数。</p>
+
+<h3 id="s4-2-3">4.2.3 物体的链与树</h3>
+<p>多个可以独立运动的物体，C-space 取笛卡尔积。\(\mathcal{W}=\mathbb{R}^2\) 或 \(\mathbb{R}^3\) 中 \(n\) 个自由浮动的物体：</p>
+<div class="eq">$$\mathcal{C}=\mathcal{C}_1\times\mathcal{C}_2\times\cdots\times\mathcal{C}_n. \tag{4.32}$$</div>
+<p>连成运动链或运动树时只能具体问题具体分析，没有通用规则。要特别小心两件事：</p>
+<ul>
+  <li><b>关节的运动范围</b>：转动副若转不了一整圈，C-space 就同胚于 \(\mathbb{R}\) 而不是 \(S^1\)；球关节因机械阻挡达不到所有朝向，C-space 就不是 \(\mathbb{RP}^3\)，因为缺了一部分 \(SO(3)\)。</li>
+  <li><b>DH 参数忽略拓扑</b>：DH 参数化方便分配坐标系、计算变换，但常用三个零长度连杆、三个转动副表示球形手腕。运动范围受限时问题不大，一般情况下会遇到和 yaw-pitch-roll 一样的麻烦：同一个手臂配置有多种表示。</li>
+</ul>
+<p>平面上第一个关节绕固定点转（像钉在钉子上）、\(n\) 个转动副组成的链，若每个关节都能转一整圈：</p>
+<div class="eq">$$\mathcal{C}=S^1\times S^1\times\cdots\times S^1=T^n. \tag{4.33}$$</div>
+<p>若每个关节限制在 \((-\pi/2,\pi/2)\)，则 \(\mathcal{C}=\mathbb{R}^n\)。若 \(\mathcal{A}_1\) 还能做任意 \(SE(2)\) 变换，就再乘一个 \(\mathbb{R}^2\)：受限时 \(\mathbb{R}^{n+2}\)，不受限时 \(\mathbb{R}^2\times T^n\)。每个移动副贡献一个 \(\mathbb{R}\)。三维的六种关节（图 3.12）：</p>
+<div class="table-wrap">
+<table class="data">
+  <thead><tr><th>关节</th><th>对 C-space 的贡献</th><th>运动受限时</th></tr></thead>
+  <tbody>
+    <tr><td>转动副 revolute</td><td>\(S^1\)</td><td>\(\mathbb{R}\)</td></tr>
+    <tr><td>移动副 prismatic</td><td>\(\mathbb{R}\)</td><td>\(\mathbb{R}\)</td></tr>
+    <tr><td>螺旋副 screw</td><td>\(\mathbb{R}\)</td><td>\(\mathbb{R}\)</td></tr>
+    <tr><td>圆柱副 cylindrical</td><td>\(\mathbb{R}\times S^1\)</td><td>\(\mathbb{R}^2\)</td></tr>
+    <tr><td>平面副 planar</td><td>\(\mathbb{R}^2\times S^1\)（任意 \(SE(2)\) 变换）</td><td>\(\mathbb{R}^3\)</td></tr>
+    <tr><td>球副 spherical</td><td>理论上 \(\mathbb{RP}^3\)，实践中极少</td><td>更常见的是 \(\mathbb{R}^2\times S^1\) 或 \(\mathbb{R}^3\)</td></tr>
+    <tr><td>第一个物体自由浮动</td><td>\(\mathbb{R}^3\times\mathbb{RP}^3\)</td><td>—</td></tr>
+  </tbody>
+</table>
+</div>
+<p>运动树的处理方式相同。还有一个尚未提及的问题：连杆之间可能相撞，这会带来非常复杂的限制，4.3 节的概念可以处理它。<b>推理这些限制以及由此得到的空间的路径连通性，正是运动规划的要义。</b></p>
+
+<!-- ================================================================ -->
+<h2 id="s4-3">4.3 配置空间障碍 <span class="en">Configuration Space Obstacles</span></h2>
+<p>4.2 节定义了不考虑碰撞的 C。本节从 C 中去掉让机器人碰到障碍物（或让指定连杆互相碰撞）的配置，被去掉的部分叫<b>障碍区域</b>，剩下的部分才是解路径必须穿行的地方。</p>
+
+<h3 id="s4-3-1">4.3.1 基本运动规划问题的定义</h3>
+<p><b>刚体的障碍区域</b>：\(\mathcal{W}=\mathbb{R}^2\) 或 \(\mathbb{R}^3\) 中有障碍区域 \(\mathcal{O}\subset\mathcal{W}\)，刚体机器人 \(\mathcal{A}\subset\mathcal{W}\)，两者都是 3.1 节的半代数模型（含多边形、多面体）。配置 \(q\in\mathcal{C}\)：平面上 \(q=(x_t,y_t,\theta)\)，空间中 \(q=(x_t,y_t,z_t,h)\)（\(h\) 是单位四元数）。</p>
+<div class="eq">$$\mathcal{C}_{obs}=\{q\in\mathcal{C} \mid \mathcal{A}(q)\cap\mathcal{O}\ne\emptyset\}, \tag{4.34}$$</div>
+<p>即变换后的机器人 \(\mathcal{A}(q)\) 与 \(\mathcal{O}\) 相交的所有配置。\(\mathcal{O}\) 和 \(\mathcal{A}(q)\) 都是闭集，所以 <b>\(\mathcal{C}_{obs}\) 是闭集</b>；剩下的<b>自由空间</b> \(\mathcal{C}_{free}=\mathcal{C}\setminus\mathcal{C}_{obs}\) 是<b>开集</b>，机器人可以无限接近障碍物而仍然自由。只是「碰一下」，</p>
+<div class="eq">$$\operatorname{int}(\mathcal{O})\cap\operatorname{int}(\mathcal{A}(q))=\emptyset \quad\text{且}\quad \mathcal{O}\cap\mathcal{A}(q)\ne\emptyset, \tag{4.35}$$</div>
+<p>也算 \(q\in\mathcal{C}_{obs}\)。「无限接近」在实际机器人学里没什么意义，但它让问题的形式化很干净。代价是 \(\mathcal{C}_{free}\) 开，像最短路径这样的优化问题就没有最优解了，那时应改用闭包 \(\operatorname{cl}(\mathcal{C}_{free})\)（7.7 节）。</p>
+
+<p><b>多个物体的障碍区域</b>：机器人由 \(m\) 个连杆 \(\{\mathcal{A}_1,\ldots,\mathcal{A}_m\}\) 组成，整体只有一个配置向量 \(q\)；写 \(\mathcal{A}_i(q)\) 时 \(q\) 的某些参数可能与 \(\mathcal{A}_i\) 无关。<b>碰撞对</b>集合 \(P\)：\((i,j)\in P\) 表示 \(\mathcal{A}_i\)、\(\mathcal{A}_j\) 不许相交。通常 \(P\) 不含所有对，因为相邻连杆靠关节始终接触；常见约定是每个连杆避开所有不和它直接相连的连杆。\(m\) 个物体时 \(|P|=O(m^2)\)，但几何分析常能排除很多对。</p>
+<div class="eq">$$\mathcal{C}_{obs}=\left(\bigcup_{i=1}^{m}\{q\in\mathcal{C}\mid\mathcal{A}_i(q)\cap\mathcal{O}\ne\emptyset\}\right)\bigcup\left(\bigcup_{[i,j]\in P}\{q\in\mathcal{C}\mid\mathcal{A}_i(q)\cap\mathcal{A}_j(q)\ne\emptyset\}\right). \tag{4.36}$$</div>
+
+<div class="box def formulation">
+  <div class="box-title">Formulation 4.1（钢琴搬运工问题 The Piano Mover's Problem）</div>
+  <ol>
+    <li>世界 \(\mathcal{W}=\mathbb{R}^2\) 或 \(\mathbb{R}^3\)。</li>
+    <li>半代数障碍区域 \(\mathcal{O}\subset\mathcal{W}\)。</li>
+    <li>\(\mathcal{W}\) 中的半代数机器人：刚体 \(\mathcal{A}\)，或 \(m\) 个连杆 \(\mathcal{A}_1,\ldots,\mathcal{A}_m\)。</li>
+    <li>配置空间 \(\mathcal{C}\)：所有可施加给机器人的变换。由它导出 \(\mathcal{C}_{obs}\) 和 \(\mathcal{C}_{free}\)。</li>
+    <li>初始配置 \(q_I\in\mathcal{C}_{free}\)。</li>
+    <li>目标配置 \(q_G\in\mathcal{C}_{free}\)。\((q_I,q_G)\) 合称一个<b>查询</b> query。</li>
+    <li><b>完备</b>算法必须算出连续路径 \(\tau:[0,1]\to\mathcal{C}_{free}\)，使 \(\tau(0)=q_I\)、\(\tau(1)=q_G\)，或者正确报告这样的路径不存在。</li>
+  </ol>
+</div>
+<p>用 C-space 的语言，问题概念上非常简单（图 4.11）：在 \(\mathcal{C}_{free}\) 中找一条从 \(q_I\) 到 \(q_G\) 的路径。难点在于，无论是 \(\mathcal{C}_{free}\) 还是 \(\mathcal{C}_{obs}\)，显式地构造边界或实体表示都既不直接也不高效。Reif 证明了这个问题是 <b>PSPACE-hard</b>（因此也是 NP-hard），根源是 C 的维数没有上界。</p>
+
+<h3 id="s4-3-2">4.3.2 显式建模 \(\mathcal{C}_{obs}\)：平移情形</h3>
+<p>理解怎么构造 \(\mathcal{C}_{obs}\) 很重要。对第 6 章的组合方法，这是解题的重要第一步；对第 5 章的采样方法，它能帮你理解为什么要<b>避免</b>这种构造（太复杂）。最简单的情形：\(\mathcal{C}=\mathbb{R}^n\)（\(n=1,2,3\)），刚体只能平移。这时 \(\mathcal{C}_{obs}\) 是一种卷积。定义 <b>Minkowski 差</b></p>
+<div class="eq">$$X\ominus Y=\{x-y\in\mathbb{R}^n \mid x\in X,\ y\in Y\}. \tag{4.37}$$</div>
+<p>它也是 \(X\) 与 \(-Y\) 的 <b>Minkowski 和</b> \(\oplus\)（\(-Y\) 把每个 \(y\) 换成 \(-y\)）。于是</p>
+<div class="eq">$$\mathcal{C}_{obs}=\mathcal{O}\ominus\mathcal{A}(0).$$</div>
+<p class="small muted">（在数学和图像处理里，「Minkowski 差」有时指另一种运算，即腐蚀 erosion，所以有些作者坚持只用总是定义一致的 \(\oplus\)，写成 \(X\oplus(-Y)\)。）</p>
+
+<p><b>例 4.13（一维 C-space 障碍）</b>：机器人 \(\mathcal{A}=[-1,2]\)，障碍 \(\mathcal{O}=[0,4]\)，\(-\mathcal{A}=[-2,1]\)，所以 \(\mathcal{C}_{obs}=\mathcal{O}\oplus(-\mathcal{A})=[-2,5]\)（图 4.12）。书中接着把它写成卷积：令 \(f\)、\(g\) 分别是 \(\mathcal{O}\)、\(\mathcal{A}\) 的指示函数，</p>
+<div class="eq">$$h(x)=\int_{-\infty}^{\infty}f(\tau)\,g(x-\tau)\,d\tau, \tag{4.38}$$</div>
+<p>书中说 \(x\in\operatorname{int}(\mathcal{C}_{obs})\) 时 \(h(x)>0\)，否则 \(h(x)=0\)。<sup class="fn"><a id="fn2-ref" href="#fn2">2</a></sup>直观地说，\(h(q)\) 就是机器人放在 \(q\) 时与障碍物重叠的长度。</p>
+
+<div class="widget" data-widget="minkowski-1d"></div>
+<div class="box try">
+  <div class="box-title">试一试</div>
+  <ul>
+    <li>把红色机器人从左往右拖：它刚碰到 O 的那一刻，下方红点恰好进入蓝色的 Cobs。机器人的「原点」决定 q，所以 Cobs 的端点是 \(o_{\min}-a_{\max}\) 和 \(o_{\max}-a_{\min}\)。</li>
+    <li>把 A 改成不对称的（比如 [−3, 0.5]）：Cobs 是 O 加上「翻转后」的 A，不是 O 加 A。</li>
+    <li>勾上虚线：按 (4.38) 字面算出来的曲线整体偏了，它的支撑是 O ⊕ A。</li>
+  </ul>
+</div>
+
+<h4 id="star">多边形 C-space 障碍：星形算法</h4>
+<p>二维世界里，凸多边形障碍 \(\mathcal{O}\) 和凸多边形机器人 \(\mathcal{A}\)（只平移）有一个简单的算法，常叫<b>星形算法</b> star algorithm，此时 \(\mathcal{C}_{obs}\) 也是凸多边形。非凸的情形可以拆成凸部分：\(\mathcal{C}_{obs}\) 是各对凸部分的 \(\mathcal{C}_{obs}\) 之并。</p>
+<div class="box intuition">
+  <div class="box-title">关键观察</div>
+  <p>\(\mathcal{C}_{obs}\) 的每条边都是 \(\mathcal{A}\) 或 \(\mathcal{O}\) 的某条边平移过来的，而且<b>每条边恰好用一次</b>。唯一的问题是确定顺序：设 \(\alpha_1,\ldots,\alpha_n\) 是 \(\mathcal{A}\) 的<b>内</b>法向角（逆时针），\(\beta_1,\ldots,\beta_m\) 是 \(\mathcal{O}\) 的<b>外</b>法向角。把它们放在 \(S^1\) 上统一排序，按遇到的顺序依次接上对应的边，就构造出了 \(\mathcal{C}_{obs}\)。</p>
+</div>
+<p><b>例 4.14</b>：让三角形机器人贴着矩形障碍滑一圈、始终保持接触（图 4.14a），这正好走遍 \(\partial\mathcal{C}_{obs}\)，机器人原点画出的轨迹就是 \(\mathcal{C}_{obs}\) 的边。共 7 条边，每条对应 \(\mathcal{A}\) 或 \(\mathcal{O}\) 的一条边。法向排序见图 4.15。两组角本来就各自按逆时针排好，只需归并，所以运行时间是 <b>\(O(n+m)\)</b>。共线的两条边首尾相接，并成一条。</p>
+
+<p><b>计算 \(\mathcal{C}_{obs}\) 的边界</b>：还可以用 \(n+m\) 个半平面给出实体表示。边有两种来源（图 4.16）：</p>
+<ul>
+  <li><b>Type EV</b>：\(\mathcal{A}\) 的一条边碰 \(\mathcal{O}\) 的一个顶点，贡献 \(n\) 条边（\(\mathcal{A}\) 每条边一次）。此时 \(\mathcal{A}\) 的内法向夹在 \(\mathcal{O}\) 在该顶点两侧边的外法向之间。按图 4.15b 排序时，遇到 \(\mathcal{A}\) 的法向就是 EV。</li>
+  <li><b>Type VE</b>：\(\mathcal{A}\) 的一个顶点碰 \(\mathcal{O}\) 的一条边，贡献 \(m\) 条边。\(\mathcal{O}\) 的外法向夹在 \(\mathcal{A}\) 在该顶点两侧边的内法向之间。遇到 \(\mathcal{O}\) 的法向就是 VE。</li>
+</ul>
+<p>以 EV 为例：除了法向方向的约束，\(\mathcal{O}\) 的接触顶点必须落在 \(\mathcal{A}\) 接触边所在的直线上，也就是 \(n\perp v\)（图 4.17）：\(n\cdot v=0\)。平移时 \(n\) 与配置无关，\(v\) 依赖于 \(q=(x_t,y_t)\)，应写成 \(n\cdot v(x_t,y_t)=0\)。例如 \(p\) 在 \(\mathcal{A}(0,0)\) 时坐标是 \((1,2)\)，在 \((x_t,y_t)\) 时就是 \((1+x_t,2+y_t)\)。平移的变换方程是线性的，所以这是 C 中的一条直线。令 \(f(x_t,y_t)=n\cdot v(x_t,y_t)\)，\(H=\{(x_t,y_t)\in\mathcal{C}\mid f(x_t,y_t)\le 0\}\)：<b>不在 \(H\) 里的配置一定在 \(\mathcal{C}_{free}\) 中</b>。把所有 EV、VE 接触的半平面交起来，就得到 \(n+m\) 条边的凸多边形 \(\mathcal{C}_{obs}\)。</p>
+
+<p><b>例 4.15（\(\mathcal{C}_{obs}\) 的边界）</b>：图 4.18 的三角形机器人 \(a_1=(1,0)\)、\(a_2=(0,1)\)、\(a_3=(-1,-1)\)，正方形障碍 \(b_1=(1,1)\)、\(b_2=(-1,1)\)、\(b_3=(-1,-1)\)、\(b_4=(1,-1)\)，朝向固定，\(\mathcal{C}=\mathbb{R}^2\)。\(\mathcal{C}_{obs}\) 是七边形，七个接触按法向在 \(S^1\) 上出现的顺序列在图 4.19。下面的互动图会实时生成这张表。<sup class="fn"><a id="fn3-ref" href="#fn3">3</a></sup></p>
+<p class="small muted">补充：表中 n 的约定。VE 行的 n 是 O 那条边的外法向，v 从 O 的顶点指向 A 的顶点；EV 行的 n 是 A 那条边的<b>外</b>法向（与排序时用的内法向差一个符号），v 从 A 边上的点指向 O 的顶点。这样两种行都是「n·v ≤ 0 的一侧包含 Cobs」。</p>
+
+<div class="widget wide" data-widget="star"></div>
+<div class="box try">
+  <div class="box-title">试一试</div>
+  <ul>
+    <li>点「▶ 自动滑一圈」：机器人贴着障碍滑动，原点画出的正是虚线七边形。黄色高亮显示当前是哪个顶点碰哪条边；右边 S¹ 上对应的法向和表中对应的行也同时高亮。</li>
+    <li>把机器人拖到障碍附近：表的最后一列只要有一个值 &gt; 0，q 就在 Cobs 外。拖进去，所有值都 ≤ 0，同时 A(q) 确实和 O 相交。</li>
+    <li>转动机器人朝向 θ（习题 26b、c）：法向的排序会变，某些接触在特定角度互换，Cobs 的形状跟着变。</li>
+  </ul>
+</div>
+
+<p><b>多面体 C-space 障碍</b>：三维中凸多面体机器人只平移、障碍是凸多面体时，\(\mathcal{C}_{obs}\) 是凸多面体。接触有三种，每种给出一个半空间、即 \(\mathcal{C}_{obs}\) 的一个面（图 4.20）：<b>Type FV</b>（\(\mathcal{A}\) 的面碰 \(\mathcal{O}\) 的顶点）、<b>Type VF</b>（\(\mathcal{A}\) 的顶点碰 \(\mathcal{O}\) 的面）、<b>Type EE</b>（边碰边）。可以在 \(O(n+m+k)\) 时间内构造，\(k\) 是 \(\mathcal{C}_{obs}\) 的面数，至多 \(nm\)。</p>
+
+<h3 id="s4-3-3">4.3.3 显式建模 \(\mathcal{C}_{obs}\)：一般情形</h3>
+<p>遗憾的是，\(\mathcal{C}_{obs}\) 是多边形或多面体的情形非常有限，大多数问题的 C-space 障碍极其复杂。好消息是：只要机器人和障碍物都是半代数模型，即使做了 3.2–3.4 节的任何变换，<b>\(\mathcal{C}_{obs}\) 都能用半代数模型表达</b>（像弯曲柔性材料那样的变换除外）。</p>
+<p>考虑凸多边形机器人和凸多边形障碍，允许任意 \(SE(2)\) 变换：\(\mathcal{C}=\mathbb{R}^2\times S^1\)，\(q=(x_t,y_t,\theta)\)。以 EV 为例。有了旋转，法向的排序依赖于 \(\theta\)，某个 EV 接触是否「适用」也依赖于 \(\theta\)。「\(\mathcal{A}\) 的内法向夹在 \(\mathcal{O}\) 两条外法向之间」可以用内积表达：用接触顶点处的两条边向量 \(v_1,v_2\)，要求 \(n\) 与它们的夹角都小于 \(\pi/2\)，即 \(n\cdot v_1\ge 0\)、\(n\cdot v_2\ge 0\)（图 4.21），再加上接触条件 \(n\cdot v=0\)，只是现在 \(n\) 依赖于 \(\theta\)。</p>
+<p>对任意 \(q\)，若 \(n(\theta)\cdot v_1\ge 0\)、\(n(\theta)\cdot v_2\ge 0\) 且 \(n(\theta)\cdot v(q)>0\)，则 \(q\in\mathcal{C}_{free}\)，记满足这些条件的配置为 \(H_f\)。通常 \(H_f\subset\mathcal{C}_{free}\)，于是 \(\mathcal{C}_{obs}\subset\mathcal{C}\setminus H_f=:H_A\)。用原语</p>
+<div class="eq">$$H_1=\{q\in\mathcal{C}\mid n(\theta)\cdot v_1\le 0\}, \tag{4.39}$$ $$H_2=\{q\in\mathcal{C}\mid n(\theta)\cdot v_2\le 0\}, \tag{4.40}$$ $$H_3=\{q\in\mathcal{C}\mid n(\theta)\cdot v(q)\le 0\}, \tag{4.41}$$</div>
+<p>令 \(H_A=H_1\cup H_2\cup H_3\)。已知 \(\mathcal{C}_{obs}\subseteq H_A\)，但 \(H_A\) 可能包含自由点，就像 3.1.1 节用半平面拼凸多边形一样，只知道 \(H_A\) 之外一定自由。<b>把所有 EV、VE 接触的 \(H_A\) 交起来，结果就是 \(\mathcal{C}_{obs}\)</b>：每个接触都有机会去掉一部分 \(\mathcal{C}_{free}\)，去掉足够多以后剩下的就只能是 \(\mathcal{C}_{obs}\)。对任意 EV 接触，\((H_1\cup H_2)\setminus H_3\subseteq\mathcal{C}_{free}\)。可以像 3.1.1 节那样构造一个逻辑谓词，在原语个数的线性时间内判断 \(q\in\mathcal{C}_{obs}\)。</p>
+<p><b>还剩一个问题</b>：\(n(\theta)\) 含 \(\cos\theta\)、\(\sin\theta\)，不是多项式。可以用球极投影替换，更简单的办法是<b>用复数表示旋转</b>：</p>
+<div class="eq">$$T(a,b,x_t,y_t)=\begin{pmatrix}a &amp; -b &amp; x_t\\ b &amp; a &amp; y_t\\ 0 &amp; 0 &amp; 1\end{pmatrix}. \tag{4.42}$$</div>
+<p>点 \([x\ y\ 1]\) 变成 \((ax-by+x_t,\ bx+ay+y_t)\)，对 \(a,b,x_t,y_t\) 是<b>线性</b>的。代价是 C 看起来从 3 维变成 \(\mathbb{R}^4\)，所以要加一个原语把 \((a,b)\) 约束在单位圆上。对每个 EV 接触得到 \(\mathbb{R}^4\) 中的原语</p>
+<div class="eq">$$H_1=\{(x_t,y_t,a,b)\mid n\cdot v_1\le 0\},\quad H_2=\{\cdots\mid n\cdot v_2\le 0\},\quad H_3=\{\cdots\mid n\cdot v\le 0\}, \tag{4.43–4.45}$$</div>
+<p>\(H_A=H_1\cup H_2\cup H_3\)，再与</p>
+<div class="eq">$$H_s=\{(x_t,y_t,a,b)\in\mathcal{C}\mid a^2+b^2-1=0\} \tag{4.46}$$</div>
+<p>相交以保持正确的 \(\mathbb{R}^2\times S^1\) 拓扑。\(H_s\) 对所有接触都一样，只需考虑一次。</p>
+
+<p><b>例 4.16（\(\mathcal{C}_{obs}\) 的非线性边界）</b>：给例 4.15 加上旋转。这时所有边对之间的接触都要考虑：12 个 EV（3 条边 × 4 个顶点）和 12 个 VE，每个 3 个原语，再加 \(H_s\)，<b>这么简单的例子就有 73 个原语</b>。以 \(a_3\) 与 \(b_4\)-\(b_1\) 的 VE 接触为例：外法向 \(n=[1,0]\) 固定。用 \(a+bi\) 表示旋转，\(a_1=(a+x_t,\ b+y_t)\)，\(a_2=(-b+x_t,\ a+y_t)\)，\(a_3=(-a+b+x_t,\ -b-a+y_t)\)，于是 \(v_1=a_2-a_3=[a-2b,\ 2a+b]\)、\(v_2=a_1-a_3=[2a-b,\ a+2b]\)，它们只依赖于朝向。设 \(v\) 从 \(b_4\) 指向 \(a_3\)：\(v=a_3-b_4=[-a+b+x_t-1,\ -a-b+y_t+1]\)。（这几个表达式已用参考代码核对。）有趣的是，唯一的非线性原语是 \(a^2+b^2=1\)，所以 \(\mathcal{C}_{obs}\) 可以看成 \(\mathbb{R}^4\) 中的线性多胞形与一个圆柱的交。</p>
+
+<p><b>三维刚体</b>：原理相同。四元数再次成为表示 \(SO(3)\) 的正确方式，因为 (4.20) 像 (4.18) 一样避免了三角函数。可惜 (4.20) 对配置变量不是线性的，但至少是多项式，所以仍能构造半代数模型。FV、VF、EE 三种接触都会出现，每一片 \(\mathcal{C}_{obs}\) 都是 \(x_t,y_t,z_t,a,b,c,d\) 七个变量的多项式。同样要加一个原语强制单位四元数（维数从 7 降回 6），并去掉因对径等同而冗余的半个 \(S^3\)。</p>
+<p><b>链与树</b>：概念相同，代数更繁琐。每个连杆的变换是齐次矩阵的乘积，旋转部分用复数（\(SO(2)\)）或四元数（\(SO(3)\)）表示，矩阵元素就都是多项式，乘出来仍是配置变量的多项式，所以仍有半代数模型。可以想象，没有人会手工做完这些，但它可以自动化，而且这种自动构造对组合方法的理论算法非常重要（6.4 节）。若用 DH 参数，可以把每个 \(\theta_i\)、\(\alpha_i\) 都换成一个复数（变换矩阵里只出现 cos、sin），维数先增加，再用「单位模长」约束降回来。</p>
+
+<p>下面这个互动图是<b>补充</b>的（书中没有这张图），但它把本节的抽象定义变得非常具体：两连杆平面机械臂的 C-space 是环面 \(T^2\)（式 4.33），世界里几块凸多边形障碍在环面上变成形状奇特的 \(\mathcal{C}_{obs}\)。我们没有显式构造它们，只是对每个格点做碰撞检测，第 5 章的采样方法正是这样「隐式」地对待 \(\mathcal{C}_{obs}\)。</p>
+<div class="widget wide" data-widget="arm-cspace"></div>
+<div class="box try">
+  <div class="box-title">试一试</div>
+  <ul>
+    <li>在右图上慢慢拖动，看左边的手臂怎么动。饱和的绿色是一整条竖带：第一根连杆撞上了，与 θ₂ 无关。颜色较淡的区域是只有第二根连杆撞上的配置。</li>
+    <li>在左图拖动障碍物，Cobs 实时变形。注意一块凸的障碍在 C-space 里可以变成弯曲、不凸的形状。</li>
+    <li>选「左边一根柱子」预设：柱子在 C 中切出 θ₁ ≈ π 的一整条竖带，手臂从朝上转到朝下只能经过 θ₁ = 0，也就是穿过环面的粘合边。取消「环面拓扑」，规划器就找不到路了，这正是图 4.8 那个教训。</li>
+  </ul>
+</div>
+
+<!-- ================================================================ -->
+<h2 id="s4-4">4.4 闭运动链 <span class="en">Closed Kinematic Chains</span></h2>
+<p>接着 3.4 节：连杆排成环时，关节角必须保证环保持闭合，于是出现 (3.80) 那样的约束（图 3.26），某些连杆之间必须保持指定的相对位置。满足这些约束的配置集合是流形吗？<b>一般不是。</b>但它属于代数几何里一类很好的空间：<b>簇</b> variety。运动学都能写成多项式，所以闭合约束是一组多项式方程，其解集就是闭链的 C-space。簇不一定是流形，但能分解成有限个拼接得很好的流形（Whitney 分层 stratification）。</p>
+<div class="box warn">
+  <div class="box-title">坏消息</div>
+  <p>只有少数简单情形能参数化闭链的簇，连它的拓扑都极难刻画。更糟的是，Jordan 和 Steiner 证明了：<b>任何能嵌入 \(\mathbb{R}^n\) 的有界闭实代数簇，都存在某个连杆机构，其 C-space 与之同胚。</b>所以大多数时候规划算法只能直接对付隐式的多项式。6.4.2 节的代数方法本来就直接处理多项式，没有概念上的困难；采样方法依赖高效采样配置，没有参数化就很难采样到簇上，7.4 节介绍扩展采样方法以处理闭链的近期工作。</p>
+</div>
+
+<h3 id="s4-4-1">4.4.1 数学概念：域、多项式、簇</h3>
+<div class="box def">
+  <div class="box-title">域 field</div>
+  <p>集合 \(\mathbb{F}\) 带乘法 \(\cdot\) 和加法 \(+\)，满足：1) 结合律；2) 交换律；3) 分配律 \(a\cdot(b+c)=a\cdot b+a\cdot c\)；4) 存在 0、1 使 \(a+0=a\cdot 1=a\)；5) 加法逆元；6) 除 0 外都有乘法逆元。熟悉的例子：\(\mathbb{Q}\)、\(\mathbb{R}\)、\(\mathbb{C}\)。</p>
+</div>
+<p>域可以看成两个群（加法群和乘法群），但额外要求交换律，所以四元数构不成域。分配律出现是因为现在两种运算之间有了相互作用。</p>
+<p><b>单项式</b> monomial：\(x_1^{d_1}x_2^{d_2}\cdots x_n^{d_n}\)（式 4.47），指数是正整数，总次数为 \(d_1+\cdots+d_n\)。<b>多项式</b>是系数在 \(\mathbb{F}\) 中的单项式的有限线性组合 \(\sum_{i=1}^m c_im_i\)（式 4.48），\(c_i\ne 0\) 的 \(c_im_i\) 叫<b>项</b>，各项最大总次数是多项式的总次数。全体记作 \(\mathbb{F}[x_1,\ldots,x_n]\)。<b>例 4.17</b>：\(x_1^4-12x_1x_2x_3^3+x_1^2x_2^2+4\in\mathbb{Q}[x_1,x_2,x_3]\)（式 4.49），因第二项而总次数为 5；也可以写成 \(x^4-12xyz^3+x^2y^2+4\)（式 4.50）。注意 1 也是单项式，所以常数 4 可以单独成项。\(\mathbb{F}[x_1,\ldots,x_n]\) 对加法是群，但有些多项式没有乘法逆元，所以它不是域，而是<b>交换环</b> commutative ring。</p>
+<p><b>仿射空间</b> \(\mathbb{F}^n=\{(c_1,\ldots,c_n)\mid c_i\in\mathbb{F}\}\)（式 4.51），在这里可以当作向量空间。多项式可以看成函数 \(f:\mathbb{F}^n\to\mathbb{F}\)（式 4.52）。问题来了：哪些点使 \(f=0\)？（问非零值没必要，移项即可，例如 \(x^2+y^2=1\) 改写成 \(x^2+y^2-1=0\)。）</p>
+<div class="box def">
+  <div class="box-title">（仿射）簇 affine variety</div>
+  <div class="eq">$$V(f_1,\ldots,f_k)=\{(a_1,\ldots,a_n)\in\mathbb{F}^n \mid f_i(a_1,\ldots,a_n)=0,\ 1\le i\le k\}. \tag{4.53}$$</div>
+</div>
+<p>簇的并、交仍是簇，行为像 3.1.2 节的半代数集，但<b>只允许等式约束</b>。交集就是把多项式放在一起：</p>
+<div class="eq">$$V(f_1,\ldots,f_k)\cap V(g_1,\ldots,g_l)=V(f_1,\ldots,f_k,g_1,\ldots,g_l). \tag{4.54}$$</div>
+<p>并集则把多项式<b>相乘</b>：\(V_1=\{f_1=0\}\)、\(V_2=\{f_2=0\}\)（式 4.55、4.56），则 \(V_1\cup V_2=V(f_1f_2)\)，因为乘积为零当且仅当某个因子为零。有多个多项式时，所有 \(f_ig_j\) 都要放进 \(V(\cdot)\)。</p>
+
+<h3 id="s4-4-2">4.4.2 平面上的运动链</h3>
+<p>\(\mathcal{W}=\mathbb{R}^2\)，链 \(\mathcal{A}_1,\ldots,\mathcal{A}_n\)（例 3.3 是 \(n=3\)），第一根连杆用转动副固定在原点，其余逐个用转动副相连：</p>
+<div class="eq">$$\mathcal{C}=S^1\times S^1\times\cdots\times S^1=T^n. \tag{4.57}$$</div>
+
+<p><b>两根连杆</b>：C 是对边粘合的正方形，\(\theta_1,\theta_2\in[0,2\pi)\)，\(0\sim 2\pi\)。每根长 1，\(\mathcal{A}_2\) 上的点 \((x,y)\) 变换为</p>
+<div class="eq">$$\begin{pmatrix}\cos\theta_1 &amp; -\sin\theta_1 &amp; 0\\ \sin\theta_1 &amp; \cos\theta_1 &amp; 0\\ 0&amp;0&amp;1\end{pmatrix}\begin{pmatrix}\cos\theta_2 &amp; -\sin\theta_2 &amp; 1\\ \sin\theta_2 &amp; \cos\theta_2 &amp; 0\\ 0&amp;0&amp;1\end{pmatrix}\begin{pmatrix}x\\y\\1\end{pmatrix}. \tag{4.58}$$</div>
+<p>用 4.2.2 节的技巧，令 \(a_i=\cos\theta_i\)、\(b_i=\sin\theta_i\)，加约束 \(a_i^2+b_i^2=1\)，得到 (4.59)。这样保住了环面拓扑，但 C 嵌进了 \(\mathbb{R}^4\)：坐标 \((a_1,b_1,a_2,b_2)\)，只有两个自由度。乘出来得到 \(x\)、\(y\) 坐标的多项式</p>
+<div class="eq">$$f_1=xa_1a_2-ya_1b_2-xb_1b_2+ya_2b_1+a_1, \tag{4.60}$$ $$f_2=-ya_1a_2+xa_1b_2+xa_2b_1-yb_1b_2+b_1. \tag{4.61}$$</div>
+<p>注意多项式的变量是配置参数，\(x,y\) 不是变量：给定 \(\mathcal{A}_2\) 上的点，系数就都定了。</p>
+
+<p><b>零维簇</b>：把 \(\mathcal{A}_2\) 体坐标系里的点 \((1,0)\) 固定在 \(\mathcal{W}\) 中的 \((1,1)\)：</p>
+<div class="eq">$$f_1=a_1a_2-b_1b_2+a_1=1, \tag{4.62}$$ $$f_2=a_1b_2+a_2b_1+b_1=1, \tag{4.63}$$ $$V(a_1a_2-b_1b_2+a_1-1,\ a_1b_2+a_2b_1+b_1-1,\ a_1^2+b_1^2-1,\ a_2^2+b_2^2-1)\subset\mathbb{R}^4. \tag{4.64}$$</div>
+<p>(4.64) 虽然表示了约束后的 C-space，却一点都不显式；没有参数化，运动规划就很麻烦。从图 4.22 看只有两个解：\(\theta_1=0,\theta_2=\pi/2\) 和 \(\theta_1=\pi/2,\theta_2=-\pi/2\)，即 \((1,0,0,1)\) 和 \((0,1,0,-1)\)，代入四个多项式都得 0（参考代码已验证）。四个独立约束、四个变量，所以是零维。约束取得不好簇可能是空集，比如把 \((1,0)\in\mathcal{A}_2\) 拉到 \((1000,0)\) 物理上不可能。</p>
+
+<p><b>一维簇</b>：最有趣也最复杂的是解有一个连续统时。去掉一个约束，只令 \(x\) 坐标为 0：</p>
+<div class="eq">$$a_1a_2-b_1b_2+a_1=0, \tag{4.65}$$</div>
+<p>\(y\) 任意。点 \(p\) 只能沿 \(y\) 轴走（图 4.23a，相当于加一个被约束在 \(y\) 轴上的移动副，得到三杆机构）。图 4.23b 在 \(\theta_1\)-\(\theta_2\) 坐标下画出 \(V(a_1a_2-b_1b_2+a_1)\)。书中说：中心 \((\pi,\pi)\) 让它不是流形，整个空间同胚于两个在一点相切的圆；水平线对应两根连杆完全重叠、一起转动；斜线对应图 4.23a 那样的配置，连杆和 \(y\) 轴总构成等腰三角形，由此可得斜线是直线。<sup class="fn"><a id="fn6-ref" href="#fn6">6</a></sup></p>
+<p>图 4.23c、d 是</p>
+<div class="eq">$$a_1a_2-b_1b_2+a_1=\tfrac18, \tag{4.66}$$ $$a_1a_2-b_1b_2+a_1=1 \tag{4.67}$$</div>
+<p>的簇：点 \(p\) 分别沿 \(x=1/8\)、\(x=1\) 走，<sup class="fn"><a id="fn5-ref" href="#fn5">5</a></sup>簇都是同胚于 \(S^1\) 的流形。从 4.23b 到 4.23d 像动画一样收缩成一个小圈，在 \(a_1a_2-b_1b_2+a_1=2\) 时缩成一点（只有 \(\theta_1=\theta_2=0\)），再往后就是空集。<b>只让一个约束变化，就得到四种拓扑</b>：交叉的两个圆、一个圆、一个点、空集。</p>
+
+<div class="widget wide" data-widget="variety-2link"></div>
+<div class="box try">
+  <div class="box-title">试一试</div>
+  <ul>
+    <li>先选「零维」：蓝线是 x(p) = 1 的解，紫线是 y(p) = 1 的解，它们恰好交于两点。点右图在两个解之间切换，左边是图 4.22 的两个姿态。</li>
+    <li>切到「一维」，点预设 1/8 → 1 → 2 → 2.3：圆越缩越小，变成一点，最后消失。</li>
+    <li>回到 0：在右图上沿水平线拖，两根连杆叠在一起转；沿斜线拖，p 在 y 轴上上下移动。两条线在正中央和左右边上各交叉一次，用红圈标出（见脚注 6）。</li>
+  </ul>
+</div>
+
+<p><b>三根连杆</b>：还能可视化。C 是对面粘合的立方体，每根长 1（式 4.68）。令 \(a_i=\cos\theta_i\)、\(b_i=\sin\theta_i\)（式 4.69），C 嵌入 \(\mathbb{R}^6\)。乘出来得到 \(x\)、\(y\) 坐标的多项式 \(f_1,f_2\)（式 4.70、4.71）。<sup class="fn"><a id="fn7-ref" href="#fn7">7</a></sup>按 (4.69) 直接相乘：</p>
+<div class="eq">$$f_1=a_1+a_1a_2-b_1b_2+a_1a_2a_3-b_1b_2a_3-a_1b_2b_3-b_1a_2b_3,$$ $$f_2=b_1+b_1a_2+a_1b_2+b_1a_2a_3+a_1b_2a_3+a_1a_2b_3-b_1b_2b_3.$$</div>
+<p>只加一个约束 \(f_1=0\)（式 4.72），让 \((1,0)\in\mathcal{A}_3\) 沿 \(y\) 轴走，得到一个有趣的二维流形（图 4.24，记住立方体对面是粘合的）。增大 \(f_1\) 的值，簇会收缩（图 4.25 是 \(f_1=7/8\) 和 \(f_1=2\)）。\(f_1=1\) 时簇不是流形，之后变成 \(S^2\)，\(f_1=3\) 时缩成一点，\(f_1>3\) 时为空。<sup class="fn"><a id="fn8-ref" href="#fn8">8</a></sup></p>
+<p>也可以改为约束 \(y\) 坐标，\(f_2=0\) 给出另一个二维簇。两个约束同时加，就是两个簇的交。例如 \(f_1=1\)、\(f_2=0\)，相当于一个<b>四连杆机构</b>，第四根杆 \(\mathcal{A}_4\) 沿 \(x\) 轴从 0 固定到 1，其簇为式 (4.73)，见图 4.26。在 \(\theta\) 坐标下它可以参数化成几段线段：对所有 \(t\in[0,\pi]\)，解点为 \((0,2t,\pi)\)、\((t,2\pi-t,\pi+t)\)、\((2\pi-t,t,\pi-t)\)、\((2\pi-t,\pi,\pi+t)\)、\((t,\pi,\pi-t)\)（参考代码已逐点验证）。它同样不是流形。改变各杆长度可以得到一族有趣的簇，二维和用球关节的三维推广的拓扑都已有人研究清楚。</p>
+
+<div class="widget wide" data-widget="variety-3link"></div>
+<div class="box try">
+  <div class="box-title">试一试</div>
+  <ul>
+    <li>拖动画面旋转立方体，依次点 0、7/8、1、2、3：曲面在 f₁ = 1 处改变拓扑，之后像一个球一样缩小，在 3 处缩成角上的一点。</li>
+    <li>点画面上的任意一点（或「随机取一点」），右边显示对应的三连杆，末端 p 总在虚线 x = f₁ 上。</li>
+    <li>切到「四连杆」并播放：红点沿五段直线走，右边的四连杆在动。在线段交汇处，机构可以选择往两个不同的方向继续运动，所以那里不是流形。</li>
+  </ul>
+</div>
+
+<h3 id="s4-4-3">4.4.3 为一般连杆定义簇</h3>
+<p>一般情形下，每个约束都可以想成这样一句话：<b>「\(\mathcal{A}_j\) 上点 \(p\) 的第 \(i\) 个坐标，在 \(\mathcal{A}_k\) 的体坐标系中要保持为 \(x\)。」</b>图 4.23b 中，\(p\in\mathcal{A}_2\) 的第一个坐标在 \(\mathcal{A}_1\) 的体坐标系（也就是 \(\mathcal{W}\)）中保持为 0。一般形式还必须允许相对于 \(\mathcal{A}_1\) 以外的连杆固定点。</p>
+<p>设 \(n\) 个连杆在 \(\mathcal{W}=\mathbb{R}^2\) 或 \(\mathbb{R}^3\) 中运动，取 \(\mathcal{A}_1\) 为根。构造<b>连杆图</b> linkage graph \(G(V,E)\)：<b>每个顶点是一个连杆，每条边是一个关节</b>。在平面上这看起来有点反直觉（连杆像边、关节像顶点），但反过来的约定不容易推广到一个连杆上有两个以上关节的情形。多个连杆接在同一点时，每对都生成一条边。步骤如下：</p>
+<ol>
+  <li>建连杆图，每个连杆一个顶点、每个关节一条边。一个关节连接两个以上物体时，指定其中一个为<b>连接件</b> junction（图 4.27、4.28a 中的 4、13、23）。</li>
+  <li>指定根 \(\mathcal{A}_1\)：它可以固定在 \(\mathcal{W}\) 中，也可以施加 \(SE(2)\) 或 \(SE(3)\) 变换，让整个机构在内部运动之外还能整体移动。</li>
+  <li>构造连杆图的一棵<b>生成树</b> \(T\) 来消除环，任何生成树都可以（图 4.28b 用虚线表示删掉的边）。</li>
+  <li>用 3.4 节的方法给这棵树分配体坐标系和变换。</li>
+  <li>对 \(G\) 中每条不在 \(T\) 里的边，写出对应两个连杆之间的约束（图 4.28b 中是 14–15、21–22、23–24、19–23 四对）。这是最微妙的一步：平面转动副要固定一个点，给出 \(x\)、\(y\) 两个约束（就像图 4.26）；两个连杆刚性固连还要再固定一个点的一个坐标，防止相对转动；最多 3 个独立约束（\(SE(2)\) 的维数）。三维中固定一个点给 3 个约束（等于球关节）；转动副还需第二个点的两个坐标；刚性固连再需第三个点的一个坐标；最多 6 个（\(SE(3)\) 的维数）。</li>
+  <li>把三角函数换成多项式：二维用复数；三维用 DH 参数时，每个 \(\cos\theta_i,\sin\theta_i\) 用一个复数、每个 \(\cos\alpha_i,\sin\alpha_i\) 用另一个；直接用 \(SO(3)\) 旋转矩阵时用四元数。</li>
+  <li>把所有约束写成 \(f=0\) 的多项式方程，簇就是它们的公共零点。</li>
+</ol>
+<p><b>能从独立约束的个数确定簇的维数吗？</b>一般不能，4.4.2 节的例子已经说明，同样的方程个数，簇的维数可以各不相同。不过有一个简单的上界：生成树形式下的总自由度为 \(m\)，每个独立约束至多去掉一个自由度，有 \(l\) 个独立约束时，簇的维数不超过 \(m-l\)。一大类机构的这种表达叫 <b>Kutzbach 判据</b>，平面版本叫 <b>Grübler 公式</b>。</p>
+
+<div class="widget" data-widget="linkage-graph"></div>
+<div class="box try">
+  <div class="box-title">试一试</div>
+  <ul>
+    <li>四连杆：生成树有 3 条边（3 个自由度），剪掉 1 条边带来 2 个方程，上界 3 − 2 = 1，正是图 4.26 那条一维曲线。</li>
+    <li>点实线和虚线换一棵不同的生成树：m 和 l 分别变化，但 m − l 不变，而且总等于 Grübler 公式 3(N − 1) − 2J。</li>
+    <li>三角形给出 0：它是刚性结构，动不了。</li>
+  </ul>
+</div>
+
+<p>最后，障碍区域：簇确定之后，(4.34) 的障碍区域和 Formulation 4.1 都不必改，只要把 C 重新定义为<b>满足闭合约束的配置集合</b>。</p>
+
+<!-- ================================================================ -->
+<h2 id="cheatsheet">本章速查表</h2>
+<div class="table-wrap">
+<table class="data">
+  <thead><tr><th>概念</th><th>要点</th></tr></thead>
+  <tbody>
+    <tr><td>拓扑空间</td><td>开集族：任意并、有限交封闭，含 \(X,\emptyset\)。闭集 = 开集的补。可以既开又闭，也可以都不是。</td></tr>
+    <tr><td>内点 / 外点 / 边界点</td><td>有开集在 U 里 / 有开集在 U 外 / 都没有。\(\operatorname{cl}(U)=\operatorname{int}(U)\cup\partial U\)。</td></tr>
+    <tr><td>连续、同胚</td><td>开集的原像是开集。同胚 = 双射且双向连续，记 \(\cong\)。有界与无界可以同胚。</td></tr>
+    <tr><td>流形</td><td>每点有同胚于 \(\mathbb{R}^n\) 的开邻域，\(n\) 固定。Whitney：\(\mathbb{R}^{2n+1}\) 装得下。</td></tr>
+    <tr><td>粘合</td><td>\(S^1=[0,1]/0\sim1\)；正方形粘边：柱面、Möbius 带、\(T^2\)、Klein 瓶、\(\mathbb{RP}^2\)、\(S^2\)。</td></tr>
+    <tr><td>\(\mathbb{RP}^n\)</td><td>过原点的直线 = \(S^n\) 对径点粘合 = 上半球 + 赤道对径粘合。</td></tr>
+    <tr><td>路径、连通</td><td>路径是函数 \(\tau:[0,1]\to X\)。流形上连通 = 路径连通。</td></tr>
+    <tr><td>同伦、基本群</td><td>端点固定的连续变形。\(\pi_1(S^1)=\mathbb{Z}\)，\(\pi_1(T^n)=\mathbb{Z}^n\)，\(\pi_1(\mathbb{RP}^2)=\pi_1(\mathbb{RP}^3)=\mathbb{Z}_2\)，\(\pi_1(S^2)=1\)。</td></tr>
+    <tr><td>矩阵群</td><td>\(SO(n)\le O(n)\le GL(n)\)；\(\dim SO(n)=n(n-1)/2\)；\(O(2)=S^1\sqcup S^1\)。</td></tr>
+    <tr><td>刚体 C-space</td><td>平面 \(SE(2)\cong\mathbb{R}^2\times S^1\)；空间 \(SE(3)\cong\mathbb{R}^3\times\mathbb{RP}^3\)。</td></tr>
+    <tr><td>四元数</td><td>(4.19) 乘法不交换；(4.20) \(R(h)=R(-h)\)，二对一；(4.21) \(h=\cos\frac\theta2+v\sin\frac\theta2\)；旋转点 \(hph^*\)。</td></tr>
+    <tr><td>链</td><td>平面 \(n\) 个全周转动副 \(T^n\)，受限则 \(\mathbb{R}^n\)；自由物体取积 (4.32)。</td></tr>
+    <tr><td>\(\mathcal{C}_{obs}\)、\(\mathcal{C}_{free}\)</td><td>(4.34)、(4.36)；\(\mathcal{C}_{obs}\) 闭、\(\mathcal{C}_{free}\) 开；接触也算碰撞。</td></tr>
+    <tr><td>钢琴搬运工问题</td><td>Formulation 4.1；完备 = 找到路径或正确报告无解；PSPACE-hard。</td></tr>
+    <tr><td>平移</td><td>\(\mathcal{C}_{obs}=\mathcal{O}\ominus\mathcal{A}(0)=\mathcal{O}\oplus(-\mathcal{A}(0))\)。</td></tr>
+    <tr><td>星形算法</td><td>A 内法向 + O 外法向在 \(S^1\) 上归并，\(O(n+m)\)；EV/VE 各给一个半平面 \(n\cdot v\le 0\)。3D：FV、VF、EE，\(O(n+m+k)\)。</td></tr>
+    <tr><td>带旋转</td><td>\(H_A=H_1\cup H_2\cup H_3\)，\(\mathcal{C}_{obs}=\bigcap H_A\)；用 \(a+bi\) 变线性，再交 \(H_s\)。</td></tr>
+    <tr><td>闭链</td><td>C = 簇 \(V(f_1,\ldots,f_k)\)，一般不是流形；维数 ≤ \(m-l\)（Grübler / Kutzbach）。</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2 id="pitfalls">常见陷阱</h2>
+<ul>
+  <li><b>忘了绕回</b>：把 \(\theta\in[0,2\pi)\) 当成普通区间，会让规划器错过穿过 \(0\sim2\pi\) 的解（图 4.8）。实现时距离、插值、邻居都要按 \(S^1\) 处理。</li>
+  <li><b>用欧拉角参数化 SO(3)</b>：会有奇异（万向锁）和多重表示，破坏拓扑。规划时用四元数，并记住 \(h\) 与 \(-h\) 是同一个旋转。</li>
+  <li><b>以为 Cobs = O ⊕ A</b>：是 \(\mathcal{O}\oplus(-\mathcal{A})\)，机器人要先「翻转」。对称的机器人看不出区别，不对称时就错了。</li>
+  <li><b>以为接触不算碰撞</b>：按 (4.35)，边界相交就算 \(q\in\mathcal{C}_{obs}\)。所以 \(\mathcal{C}_{free}\) 是开集，最短路径要在闭包上谈。</li>
+  <li><b>用方程个数推簇的维数</b>：只能给出上界 \(m-l\)，特殊尺寸（平行四边形机构、图 4.23 的 \(f_1=0\)）会让约束不独立或出现奇点。</li>
+  <li><b>把 DH 参数当成 C 的拓扑</b>：DH 只是方便计算的坐标，三个零长度连杆做球形手腕会带来和欧拉角一样的问题。</li>
+  <li><b>以为基本群相同就同胚</b>：\(S^1\)、柱面、Möbius 带都是 \(\mathbb{Z}\)；\(S^2\) 和 \(\mathbb{R}^2\) 都是平凡群。</li>
+</ul>
+
+<h2 id="exercises">习题导引</h2>
+<p class="small muted">这里只给思路提示和可以用来自我检查的互动图，不给完整答案。</p>
+<div class="table-wrap">
+<table class="data">
+  <thead><tr><th>题</th><th>内容</th><th>提示</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td>五元集上的开集族</td><td>逐对检查并、交。做完后用<a href="#s4-1-1">拓扑检查器</a>的「习题 1」预设对答案。</td></tr>
+    <tr><td>2</td><td>例 4.4 上的连续函数</td><td>按定义：每个开集的原像都要是开集。先想清楚补全后有哪些开集。</td></tr>
+    <tr><td>3</td><td>俄文字母哪些同胚</td><td>把每个字母画成一维图，删掉度为 2 的「无用顶点」后比较图结构，也可以数每个度的顶点个数（<a href="#s4-1-2">流形检测器</a>）。</td></tr>
+    <tr><td>4、7</td><td>同胚、同伦是等价关系</td><td>验证自反、对称、传递。同伦的传递性：把两个同伦在 \(t\) 方向上「拼接」，就像式 (4.9) 拼接路径。</td></tr>
+    <tr><td>5</td><td>圆柱形杆的 C-space</td><td>平移给 \(\mathbb{R}^3\)。绕自身轴的转动看不出来，朝向只剩「轴指向哪里」。想想这是哪个曲面，以及两端能否区分会不会影响答案。</td></tr>
+    <tr><td>6</td><td>圆与椭圆两条环路同伦</td><td>直线插值 \(h(s,t)=(1-t)\tau_1(s)+t\tau_2(s)\) 就行，因为平面上没有洞。（原书第二个路径也写成了 \(\tau_1\)，应为 \(\tau_2\)。）</td></tr>
+    <tr><td>8</td><td>小行星游戏飞船</td><td>平移部分就是<a href="#identification">粘合正方形</a>里的环面，再乘上旋转。</td></tr>
+    <tr><td>9</td><td>VE 接触的 \(H_A\)</td><td>仿照 (4.39)–(4.41)，把 A、O 的角色对调：法向来自 O 的边，\(v_1,v_2\) 来自 A 的接触顶点两侧。</td></tr>
+    <tr><td>10</td><td>大球面上开车</td><td>提示说不是 \(S^2\times S^1\)。车的位置加朝向对应一个三维旋转。</td></tr>
+    <tr><td>11</td><td>两个等边三角形的 Cobs</td><td>用星形算法列出法向顺序和每条边的接触类型。<a href="#star">星形算法互动图</a>里有这个预设，可以用来对答案。</td></tr>
+    <tr><td>12</td><td>(4.20) 是旋转矩阵</td><td>验证 \(R R^T=I\) 和 \(\det R=1\)，反复使用 \(a^2+b^2+c^2+d^2=1\)。参考代码有数值版本。</td></tr>
+    <tr><td>14</td><td>四元数复合</td><td>用 (4.21) 写出 \(h_1,h_2\)；「先 \(h_1\) 后 \(h_2\)」对应乘积 \(h_2\cdot h_1\)；再从实部读角度、从虚部读轴。<a href="#quaternions">四元数互动图</a>可以检查数值。</td></tr>
+    <tr><td>15、16</td><td>球关节、五个自由物体</td><td>15：\(\mathbb{RP}^3\) 去掉一个点。16：用 (4.32)。</td></tr>
+    <tr><td>17</td><td>停车：完全包含在 G 里</td><td>把 (4.34) 中的「相交非空」换成「包含」。凸多边形时也可以用半平面：A 的每个顶点都在 G 的每条边内侧。</td></tr>
+    <tr><td>18、19</td><td>剪开 Möbius 带、挖孔的平面</td><td>18：先在<a href="#identification">粘合正方形</a>上画出剪开后各块怎样粘。19：关键在于半径 1/2 时相邻圆盘相切。</td></tr>
+    <tr><td>20</td><td>验证图 4.26 的曲线</td><td>把五段参数化代入正确的 \(f_1,f_2\)（见脚注 7）。参考代码就是这样逐点验证的，<a href="#s4-4-2">三连杆互动图</a>可以看到它们。</td></tr>
+    <tr><td>21</td><td>立方体、正四面体在 SE(3) 下的 Cobs 面数</td><td>数 FV、VF、EE 三类接触各有多少对。</td></tr>
+    <tr><td>22</td><td>SO(4) 的维数</td><td>\(n(n-1)/2\)。拓扑刻画是更难的部分。</td></tr>
+    <tr><td>25</td><td>Tangle 玩具</td><td>用 4.4.3 的上界 \(m-l\)：一个闭环在 \(\mathbb{R}^3\) 中，想想剪开一个转动副要补几个约束（见步骤 5）。</td></tr>
+    <tr><td>26</td><td>实现 Cobs 构造</td><td><a href="#star">星形算法互动图</a>的源码 <code>js/ch4-obstacles.js</code> 就是 (a) 的一个实现；转动 θ 看 (b)、(c)。</td></tr>
+    <tr><td>27</td><td>粘合正方形上的直线</td><td>就是<a href="#identification">粘合正方形</a>互动图。环面上：有理斜率闭合，无理斜率稠密。</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2 id="notes">脚注：原书勘误与补充说明</h2>
+<div class="box small footnotes">
+  <p id="fn1"><sup>1</sup> <b>例 4.10，补充</b>：严格地说，平面挖掉 \(n\) 个洞的基本群是 \(n\) 个生成元的<b>自由群</b> \(F_n\)，\(n\ge2\) 时不交换。\(\mathbb{Z}^n\) 是它的交换化，也就是第一同调群 \(H_1\)。绕数恰好只记录到 \(\mathbb{Z}^n\) 这一层：换位子环路 \(aba^{-1}b^{-1}\) 绕每个洞 0 圈，却不能收缩成一点。\(\pi_1(T^n)=\mathbb{Z}^n\) 本身是对的。<a href="#fn1-ref">↩</a></p>
+  <p id="fn2"><sup>2</sup> <b>式 (4.38)</b>：按字面，\(g(x-\tau)=1\) 当且仅当 \(\tau\in x-\mathcal{A}\)，所以 \(h(x)>0\) 当且仅当 \(x\in\operatorname{int}(\mathcal{O}\oplus\mathcal{A})\)。在例 4.13 中这是 \((-1,6)\)，不是 \((-2,5)\)。要得到 \(\mathcal{C}_{obs}\)，应把 \(g(x-\tau)\) 换成 \(g(\tau-x)\)（这是相关而不是卷积），或者令 \(g\) 为 \(-\mathcal{A}\) 的指示函数。参考代码第 1 部分有数值对照。<a href="#fn2-ref">↩</a></p>
+  <p id="fn3"><sup>3</sup> <b>图 4.19 第 5 行</b>（EV，\(b_3\)，边 \(a_1\)-\(a_2\)）：原书写作 \(v=[-1-x_t,\ -y_t]\)、半平面 \(-x_t-y_t-1\le0\)。实际上 \(v=b_3-a_1(q)=[-2-x_t,\ -1-y_t]\)，\(n\cdot v=-x_t-y_t-3\)，半平面应为 \(\{q\mid -x_t-y_t-3\le0\}\)。验证：\(\mathcal{O}\oplus(-\mathcal{A})\) 上 \(x+y\) 的最小值是 \(-2+(-1)=-3\)。反例：\(q=(-1.5,-1.2)\) 时 \(\mathcal{A}(q)\) 的边 \(a_1a_2\) 确实穿过正方形，按原书第 5 行却会被判为自由。其余 6 行都正确。<a href="#fn3-ref">↩</a></p>
+  <p id="fn4"><sup>4</sup> <b>式 (4.28)–(4.30) 的失效条件</b>：原书写「\(r_{12}=r_{23}=0\) 或 \(r_{13}=r_{23}=0\) 或 \(r_{12}=r_{23}=0\)」，第一和第三个重复了。分母为零当且仅当 \(r_{12},r_{13},r_{23}\) 中至少两个为零，所以第三种应为 \(r_{12}=r_{13}=0\)（绕 \(x\) 轴转 π）。参考代码第 4 部分验证了这三种情形。<a href="#fn4-ref">↩</a></p>
+  <p id="fn5"><sup>5</sup> <b>式 (4.66)、(4.67) 附近</b>：原书说「\(\mathcal{A}_2\) 中的点 \((0,1)\) 必须沿 \(x=1/8\) 和 \(x=1\) 走」。但这两个式子的左端与 (4.65) 相同，都是把 \((x,y)=(1,0)\) 代入 (4.60) 的结果，所以应是点 \((1,0)\)，也就是第二根连杆的末端。<a href="#fn5-ref">↩</a></p>
+  <p id="fn6"><sup>6</sup> <b>图 4.23b 的斜线与拓扑</b>：\(f_1=\cos\theta_1+\cos(\theta_1+\theta_2)=0\) 等价于 \(\theta_1+\theta_2=\pm(\pi-\theta_1)\)，解为 \(\theta_2=\pi\)（水平线）或 <b>\(\theta_2=\pi-2\theta_1\)</b>（斜率 −2 的直线），而不是书中写的 \(\theta_2=\pi-\theta_1\)：后者代入后 \(f_1=\cos\theta_1-1\)，只在 \(\theta_1=0\) 处为零。另外，梯度为零的点有两个：\((\pi,\pi)\) 和 \((0,\pi)\)。后者在正方形左右边上，因粘合而不太显眼。所以 \(f_1=0\) 的簇是两个圆交于<b>两点</b>，不是「相切于一点」。物理上，这两点都对应两根连杆完全折叠、\(p\) 在原点，只是第一根连杆分别朝右和朝左。参考代码第 5 部分做了验证。<a href="#fn6-ref">↩</a></p>
+  <p id="fn7"><sup>7</sup> <b>式 (4.70)、(4.71)</b>：原书的展开与 (4.69) 的矩阵乘积不一致。例如所有角为 0 时，原书 (4.70) 给出 4，而三根长度为 1 的连杆最远只能伸到 3。正文给出的是按 (4.69) 直接相乘的结果。参考代码第 6 部分对 500 组随机角度做了对照：原书版本最大误差约 2.18，正文版本误差为舍入级别。约束 (4.72)、(4.73) 应相应地用正确的 \(f_1,f_2\)。书中四连杆的五段参数化对正确的方程成立。<a href="#fn7-ref">↩</a></p>
+  <p id="fn8"><sup>8</sup> <b>图 4.25 的图注</b>写着「If 1 &lt; p &lt; 3, the variety is a sphere. At f1 = 0 it is a point」，与正文矛盾：\(p\) 应为 \(f_1\)；缩成一点的是 \(f_1=3\)，不是 \(f_1=0\)（\(f_1=0\) 是图 4.24 的二维流形）。<a href="#fn8-ref">↩</a></p>
+</div>
+
+<nav class="pager">
+  <a href="ch3-geometric-representations.html"><span class="dir">← 上一章</span>第 3 章 几何表示与变换</a>
+  <a class="next" href="../index.html"><span class="dir">回到首页 →</span>全书路线图与进度</a>
+</nav>
+
+<footer class="page-foot">
+  内容依据 Steven M. LaValle《Planning Algorithms》（Cambridge University Press, 2006）第 4 章整理与讲解，原书可在 <a href="https://lavalle.pl/planning/" target="_blank" rel="noopener">lavalle.pl/planning</a> 免费阅读；本地副本见 <a href="../book/ch4.pdf">book/ch4.pdf</a>。互动图为学习辅助，标「补充」的内容不是书中原文。参考实现：<a href="code/ch4_configuration_space.py">code/ch4_configuration_space.py</a>。
+</footer>
+
+</main>
+</div>
+</body>
+</html>

@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Planning Algorithms 学习站</title>
+<meta name="description" content="跟着 LaValle《Planning Algorithms》逐章学习：中文讲解、互动图和参考代码。">
+<link rel="stylesheet" href="assets/style.css">
+<script src="assets/common.js"></script>
+<script defer src="assets/roadmap.js"></script>
+<style>
+  .hero { padding: 36px 0 8px; }
+  .hero h1 { font-size: 2.4rem; margin-bottom: .2em; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 20px 80px; }
+  .chapter-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; margin: 16px 0 8px; }
+  .chapter-card { display: block; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); padding: 16px 18px; color: var(--text); box-shadow: var(--shadow); }
+  .chapter-card:hover { border-color: var(--accent); text-decoration: none; }
+  .chapter-card .num { font-size: 12.5px; color: var(--accent-text); font-weight: 650; letter-spacing: .05em; }
+  .chapter-card h3 { margin: 2px 0 6px; font-size: 1.2rem; }
+  .chapter-card p { margin: 4px 0 10px; color: var(--text-2); font-size: 14.5px; line-height: 1.65; }
+  .chapter-card .tags { display: flex; flex-wrap: wrap; gap: 5px; }
+  .tree { font-family: var(--mono); font-size: 13px; line-height: 1.7; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 16px; overflow-x: auto; white-space: pre; }
+  .tree .c { color: var(--muted); }
+  h2 { border-top: 0; margin-top: 2em; }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <span class="brand">Planning Algorithms 学习站</span>
+  <span class="crumbs">LaValle · Planning Algorithms（2006）</span>
+  <button class="icon-btn" id="theme-toggle" type="button" aria-label="切换深浅色">☾</button>
+</header>
+
+<div class="wrap">
+  <section class="hero">
+    <p class="kicker">学习主页</p>
+    <h1>Planning Algorithms 学习站</h1>
+    <p class="lede">跟着 Steven M. LaValle 的《Planning Algorithms》一章一章读下去：每章有中文讲解（关键术语保留英文）、嵌在正文里的互动图，以及可以运行的参考代码。</p>
+  </section>
+
+  <h2>Part I · 入门材料（已完成）</h2>
+  <div class="chapter-cards">
+    <a class="chapter-card" href="part1/ch1-introduction.html">
+      <div class="num">第 1 章</div>
+      <h3>引言 <span class="en">Introduction</span></h3>
+      <p>机器人学、控制论、AI 眼中的「规划」；1.2 节的应用示例；规划的六个基本要素；算法、规划器与计划的关系；全书结构。</p>
+      <div class="tags"><span class="tag blue">应用示例筛选</span><span class="tag blue">六要素对照表</span><span class="tag blue">机器 / 环境边界</span><span class="tag blue">全书路线图</span></div>
+    </a>
+    <a class="chapter-card" href="part1/ch2-discrete-planning.html">
+      <div class="num">第 2 章</div>
+      <h3>离散规划 <span class="en">Discrete Planning</span></h3>
+      <p>状态空间与状态转移图；BFS、DFS、Dijkstra、A*、Best-first、迭代加深、双向搜索；值迭代与 Dijkstra 的关系；STRIPS、部分计划、规划图、SAT。</p>
+      <div class="tags"><span class="tag blue">搜索实验室</span><span class="tag blue">值迭代实验室</span><span class="tag blue">手电筒 STRIPS</span><span class="tag blue">规划图互斥</span><span class="tag blue">SAT 编码</span></div>
+    </a>
+  </div>
+  <p class="small muted">配套代码：<a href="part1/code/discrete_planning.py"><code>part1/code/discrete_planning.py</code></a>（运行后会打印书中图 2.9、2.12、2.14、2.15 的表）。原书 PDF：<a href="book/par1.pdf">本地副本</a> · <a href="https://lavalle.pl/planning/" target="_blank" rel="noopener">作者主页 ↗</a></p>
+
+  <h2>Part II · 运动规划（进行中）</h2>
+  <div class="chapter-cards">
+    <a class="chapter-card" href="part2/ch3-geometric-representations.html">
+      <div class="num">第 3 章</div>
+      <h3>几何表示与变换 <span class="en">Geometric Representations and Transformations</span></h3>
+      <p>世界 W、障碍 O 与机器人 A 的几何建模（半平面、半代数原语、谓词）；2D/3D 刚体变换与齐次矩阵；运动链与 DH 参数（PUMA 560、辛烷）；运动树的分叉约束与闭环；非刚体变换。</p>
+      <div class="tags"><span class="tag blue">半平面交</span><span class="tag blue">姜饼人脸</span><span class="tag blue">齐次矩阵</span><span class="tag blue">Yaw-Pitch-Roll</span><span class="tag blue">DH 参数</span><span class="tag blue">PUMA 560</span><span class="tag blue">闭环求解</span></div>
+    </a>
+    <a class="chapter-card" href="part2/ch4-configuration-space.html">
+      <div class="num">第 4 章</div>
+      <h3>配置空间 <span class="en">The Configuration Space</span></h3>
+      <p>开集、同胚、流形与粘合、同伦与基本群；SE(2) = ℝ²×S¹，SE(3) = ℝ³×ℝP³ 与四元数；C-space 障碍、Minkowski 差与星形算法、钢琴搬运工问题；闭链的代数簇与 Grübler 公式。</p>
+      <div class="tags"><span class="tag blue">内点/边界点</span><span class="tag blue">拓扑检查器</span><span class="tag blue">流形检测</span><span class="tag blue">粘合正方形</span><span class="tag blue">同伦与基本群</span><span class="tag blue">O(2) 两个圆</span><span class="tag blue">柱面规划</span><span class="tag blue">四元数</span><span class="tag blue">Minkowski 差</span><span class="tag blue">星形算法</span><span class="tag blue">机械臂 C-space</span><span class="tag blue">两/三连杆簇</span><span class="tag blue">连杆图</span></div>
+    </a>
+    <a class="chapter-card" href="part2/ch5-sampling-based-planning.html">
+      <div class="num">第 5 章</div>
+      <h3>基于采样的运动规划 <span class="en">Sampling-Based Motion Planning</span></h3>
+      <p>度量、Haar 测度与均匀随机旋转；van der Corput、Sukharev、Halton 与分散度 / 差异；层次与增量碰撞检测、路径段检查；网格搜索与随机势场；RRT/RDT、Kd 树与双向 RRT；PRM、可见性路线图与采样启发式。</p>
+      <div class="tags"><span class="tag blue">Lp 度量</span><span class="tag blue">SO(2) 距离</span><span class="tag blue">位移度量</span><span class="tag blue">球面 / SO(3) 采样</span><span class="tag blue">van der Corput</span><span class="tag blue">采样方法对比</span><span class="tag blue">维数灾难</span><span class="tag blue">包围体层次</span><span class="tag blue">特征 Voronoi</span><span class="tag blue">路径段检查</span><span class="tag blue">连杆 Lipschitz</span><span class="tag blue">网格 A*</span><span class="tag blue">随机势场</span><span class="tag blue">RDT 探索</span><span class="tag blue">Kd 树</span><span class="tag blue">RRT 规划器</span><span class="tag blue">PRM</span><span class="tag blue">可见性路线图</span><span class="tag blue">采样启发式</span></div>
+    </a>
+  </div>
+
+  <h2>全书路线图 &amp; 我的进度</h2>
+  <div class="widget" data-widget="roadmap" data-base="" data-progress="true"></div>
+
+  <h2>这个文件夹的组织方式</h2>
+  <div class="tree">Planning Algorithm/
+├── index.html              <span class="c"># 你在这里：学习主页</span>
+├── README.md               <span class="c"># 文件夹说明（怎么打开、怎么扩展）</span>
+├── assets/                 <span class="c"># 所有页面共用的样式和脚本</span>
+│   ├── style.css
+│   ├── common.js           <span class="c"># 深色模式、目录高亮、公式渲染、小工具</span>
+│   └── roadmap.js          <span class="c"># 全书路线图（章节数据也在这里）</span>
+├── book/
+│   └── par1.pdf            <span class="c"># 原书 Part I</span>
+├── part1/
+│   ├── ch1-introduction.html
+│   ├── ch2-discrete-planning.html
+│   ├── js/                 <span class="c"># 本部分的互动组件</span>
+│   └── code/               <span class="c"># 可运行的参考实现</span>
+└── part2/ part3/ part4/    <span class="c"># 以后学到哪里就加到哪里</span></div>
+  <p class="small">直接用浏览器打开 <code>index.html</code> 就能用（公式渲染需要联网加载 KaTeX）。「我已读完」的勾选只保存在当前浏览器里。</p>
+
+  <footer class="page-foot">
+    原书：Steven M. LaValle, <i>Planning Algorithms</i>, Cambridge University Press, 2006 ·
+    <a href="https://lavalle.pl/planning/par1.pdf" target="_blank" rel="noopener">Part I</a> ·
+    <a href="https://lavalle.pl/planning/par2.pdf" target="_blank" rel="noopener">Part II</a> ·
+    <a href="https://lavalle.pl/planning/par3.pdf" target="_blank" rel="noopener">Part III</a> ·
+    <a href="https://lavalle.pl/planning/par4.pdf" target="_blank" rel="noopener">Part IV</a>
+  </footer>
+</div>
+</body>
+</html>

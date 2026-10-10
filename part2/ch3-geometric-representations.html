@@ -1,0 +1,1478 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>第3章 几何表示与变换</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;700&family=Noto+Sans+SC:wght@400;500;700&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* 布局：左侧固定目录 + 720px 正文列；每个 Lab 为全宽卡片，画布在左、控件在右 */
+:root{
+  --bg:#f3f5f8; --surface:#ffffff; --fg:#17202b; --muted:#5d6975; --line:#d9dfe7;
+  --accent:#c9432a;        /* 机器人 A */
+  --world:#1f5fa8;         /* 世界坐标系 / 链接 */
+  --obs:#2f7d57;           /* 障碍 O */
+  --warn:#9a6a12;
+  --code-bg:#eaeef3; --canvas:#fbfcfd; --grid:#e3e8ee; --grid-axis:#b8c2cd;
+  --ax-x:#d2402e; --ax-y:#2e9e5b; --ax-z:#2a6fd6;
+  --shade:rgba(47,125,87,.14); --shade-robot:rgba(201,67,42,.16);
+  --font-display:"Noto Serif SC","Songti SC","STSong",Georgia,serif;
+  --font-body:"Source Sans 3","Noto Sans SC",-apple-system,"PingFang SC","Hiragino Sans GB",sans-serif;
+  --font-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f141a; --surface:#171d25; --fg:#e6ebf0; --muted:#9aa7b4; --line:#2a333e;
+    --accent:#ff7f63; --world:#6aa6ff; --obs:#5fc08f; --warn:#e0b25a;
+    --code-bg:#1e2630; --canvas:#121820; --grid:#1f2730; --grid-axis:#3a4552;
+    --ax-x:#ff6b57; --ax-y:#4fd38a; --ax-z:#6aa6ff;
+    --shade:rgba(95,192,143,.18); --shade-robot:rgba(255,127,99,.2);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f141a; --surface:#171d25; --fg:#e6ebf0; --muted:#9aa7b4; --line:#2a333e;
+  --accent:#ff7f63; --world:#6aa6ff; --obs:#5fc08f; --warn:#e0b25a;
+  --code-bg:#1e2630; --canvas:#121820; --grid:#1f2730; --grid-axis:#3a4552;
+  --ax-x:#ff6b57; --ax-y:#4fd38a; --ax-z:#6aa6ff;
+  --shade:rgba(95,192,143,.18); --shade-robot:rgba(255,127,99,.2);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:16.5px;line-height:1.75;-webkit-font-smoothing:antialiased}
+.page{max-width:1180px;margin:0 auto;padding-block:28px 80px;padding-inline:20px;display:grid;grid-template-columns:218px minmax(0,1fr);gap:44px}
+@media (max-width:900px){.page{grid-template-columns:minmax(0,1fr);gap:20px}}
+main{min-width:0;max-width:760px}
+/* 目录 */
+.toc{position:sticky;top:calc(env(safe-area-inset-top,0px) + 16px);align-self:start;font-size:13.5px;line-height:1.5;max-height:calc(100vh - 40px);overflow:auto;padding-right:6px}
+.toc-head{font-family:var(--font-display);font-weight:700;font-size:15px;margin-bottom:12px;color:var(--fg)}
+.toc-head span{display:block;font-family:var(--font-body);font-weight:400;color:var(--muted);font-size:12.5px;letter-spacing:.04em}
+.toc ol{list-style:none;margin:0;padding:0}
+.toc li{margin:0}
+.toc a{display:block;padding:4px 8px;border-left:2px solid var(--line);color:var(--muted);text-decoration:none}
+.toc a:hover{color:var(--fg);border-color:var(--world)}
+.toc li.sub a{padding-left:20px;font-size:12.5px}
+.toc li.toclab a::before{content:"⚙ ";opacity:.6}
+@media (max-width:900px){.toc{position:static;max-height:none;border:1px solid var(--line);border-radius:8px;padding:12px;background:var(--surface)}.toc ol{columns:2;column-gap:12px}}
+/* 排版 */
+h1,h2,h3,h4{font-family:var(--font-display);text-wrap:balance;line-height:1.3;margin:0}
+h1{font-size:40px;font-weight:700;letter-spacing:-.01em}
+h2{font-size:26px;margin-top:64px;padding-top:20px;border-top:1px solid var(--line)}
+h2 .num{color:var(--world);font-family:var(--font-mono);font-weight:500;font-size:15px;display:block;margin-bottom:6px;letter-spacing:.06em}
+h3{font-size:20px;margin-top:40px}
+h3 .num{color:var(--muted);font-family:var(--font-mono);font-weight:500;font-size:13px;margin-right:8px}
+h4{font-size:17px;margin-top:28px;font-family:var(--font-body);font-weight:700}
+p{margin:14px 0}
+.eyebrow{font-family:var(--font-mono);font-size:12.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--world);margin:0 0 14px}
+.lede{font-size:19px;line-height:1.65;color:var(--fg);margin-top:18px}
+.meta{font-size:13px;color:var(--muted);font-family:var(--font-mono);margin-top:14px}
+a{color:var(--world)}
+strong{font-weight:600}
+em.term{font-style:normal;font-weight:600;color:var(--fg)}
+code,kbd{font-family:var(--font-mono);font-size:.9em;background:var(--code-bg);padding:1px 5px;border-radius:4px}
+pre{background:var(--code-bg);padding:14px 16px;border-radius:8px;overflow-x:auto;font-family:var(--font-mono);font-size:13.5px;line-height:1.55}
+pre code{background:none;padding:0}
+ul,ol{padding-left:1.4em}
+li{margin:5px 0}
+hr{border:0;border-top:1px solid var(--line);margin:40px 0}
+table{border-collapse:collapse;width:100%;font-size:14.5px;margin:16px 0;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-weight:600;color:var(--muted);font-size:13px;letter-spacing:.03em}
+.tbl-wrap{overflow-x:auto}
+mjx-container[display="true"]{margin:14px 0 !important;overflow-x:auto;overflow-y:hidden;padding:2px 0}
+mjx-container{font-size:105%}
+/* 提示框 */
+.note,.pit,.why{border-left:3px solid var(--world);background:var(--surface);padding:12px 16px;margin:20px 0;border-radius:0 8px 8px 0;font-size:15.5px}
+.pit{border-color:var(--accent)}
+.why{border-color:var(--obs)}
+.note b,.pit b,.why b{display:block;font-size:12.5px;letter-spacing:.06em;text-transform:uppercase;font-family:var(--font-mono);margin-bottom:4px}
+.note b{color:var(--world)}.pit b{color:var(--accent)}.why b{color:var(--obs)}
+.note p,.pit p,.why p{margin:6px 0}
+/* 图 */
+figure{margin:24px 0}
+figure svg{max-width:100%;height:auto;display:block;margin:0 auto}
+figcaption{font-size:13.5px;color:var(--muted);text-align:center;margin-top:8px;line-height:1.5}
+.svgfig{color:var(--fg)}
+/* Lab 卡片 */
+.lab{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;margin:24px 0;display:grid;grid-template-columns:minmax(0,3fr) minmax(230px,2fr);gap:16px}
+@media (max-width:760px){.lab{grid-template-columns:minmax(0,1fr)}}
+.lab-head{grid-column:1/-1;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.lab-head .tag{font-family:var(--font-mono);font-size:11.5px;letter-spacing:.08em;color:var(--accent);border:1px solid currentColor;border-radius:999px;padding:1px 8px}
+.lab-head h4{margin:0;font-size:16px}
+.lab-head .hint{flex-basis:100%;font-size:13.5px;color:var(--muted);margin:0}
+.lab canvas{width:100%;max-width:100%;aspect-ratio:4/3;display:block;border-radius:8px;background:var(--canvas);touch-action:none;border:1px solid var(--line);cursor:crosshair}
+.lab canvas.orbit{cursor:grab}
+.ctl{display:flex;flex-direction:column;gap:8px;min-width:0;font-size:13.5px}
+.ctl label{display:grid;grid-template-columns:minmax(64px,auto) 1fr 52px;gap:8px;align-items:center}
+.ctl label span{color:var(--fg);font-family:var(--font-mono);font-size:13px;white-space:nowrap}
+.ctl output{font-family:var(--font-mono);font-size:12.5px;text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
+.ctl input[type=range]{width:100%;min-width:0;accent-color:var(--world);margin:0}
+.ctl input[type=number]{width:100%;font-family:var(--font-mono);font-size:13px;padding:3px 6px;border:1px solid var(--line);border-radius:6px;background:var(--canvas);color:var(--fg)}
+.ctl .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.ctl .chk{display:flex;gap:6px;align-items:center;font-family:var(--font-mono);font-size:12.5px}
+.ctl .chk input{accent-color:var(--obs);margin:0}
+.ctl .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex-wrap:wrap}
+.ctl .seg button{border:0;background:transparent;color:var(--muted);padding:5px 10px;font:inherit;font-size:12.5px;cursor:pointer;font-family:var(--font-mono)}
+.ctl .seg button[aria-pressed="true"]{background:var(--world);color:#fff}
+.ctl button.btn{border:1px solid var(--line);background:var(--canvas);color:var(--fg);border-radius:8px;padding:5px 10px;font:inherit;font-size:13px;cursor:pointer}
+.ctl button.btn:hover{border-color:var(--world)}
+.ctl .readout{font-family:var(--font-mono);font-size:12.5px;line-height:1.6;color:var(--fg);background:var(--code-bg);border-radius:8px;padding:8px 10px;white-space:pre-wrap;word-break:break-word}
+.ctl .readout .ok{color:var(--obs)} .ctl .readout .no{color:var(--accent)} .ctl .readout .dim{color:var(--muted)}
+.ctl .sub{font-size:12px;color:var(--muted);line-height:1.5}
+.mat{display:inline-grid;gap:1px 12px;font-family:var(--font-mono);font-size:12.5px;padding:4px 10px;border-left:2px solid var(--muted);border-right:2px solid var(--muted);border-radius:7px;font-variant-numeric:tabular-nums;justify-items:end}
+.mat span{min-width:3.6em;text-align:right}
+.mat .hi{color:var(--accent)}
+.mat .hb{color:var(--world)}
+.matrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-family:var(--font-mono);font-size:13px}
+button:focus-visible,input:focus-visible,a:focus-visible,canvas:focus-visible{outline:2px solid var(--world);outline-offset:2px}
+/* 速查表 */
+.cheat{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin:20px 0}
+.cheat .card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px;font-size:14.5px;min-width:0}
+.cheat .card h4{margin:0 0 8px;font-size:15px}
+.cheat .card mjx-container[display="true"]{margin:8px 0 !important}
+.gloss{font-size:14.5px}
+.gloss td:first-child{font-family:var(--font-mono);white-space:nowrap}
+footer{margin-top:60px;font-size:13px;color:var(--muted);line-height:1.6}
+/* 与学习主页一致的顶栏（主页在 ../index.html） */
+.topbar{position:sticky;top:env(safe-area-inset-top,0px);z-index:50;display:flex;align-items:center;gap:12px;padding:10px 20px;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);font-size:14px}
+.topbar .brand{font-weight:650;color:var(--fg);white-space:nowrap;text-decoration:none}
+.topbar .crumbs{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+.topbar .crumbs a{color:var(--muted)}
+.topbar .icon-btn{border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:8px;height:32px;min-width:32px;padding:0 8px;cursor:pointer;font:inherit}
+@media (prefers-reduced-motion: reduce){*{animation:none !important;transition:none !important}}
+</style>
+<script>
+window.MathJax={tex:{inlineMath:[['$','$'],['\\(','\\)']],displayMath:[['$$','$$'],['\\[','\\]']],tags:'none'},svg:{fontCache:'global'},options:{skipHtmlTags:['script','noscript','style','textarea','pre','code','canvas'],ignoreHtmlClass:'nomath'}};
+</script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js"></script>
+</head>
+<body>
+<!-- hub-topbar-start -->
+<script>
+/* 与主页共用同一个深浅色设置（localStorage 键 pa-theme，与 assets/common.js 一致） */
+(function(){try{const t=JSON.parse(localStorage.getItem('pa-theme'));if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);}catch(e){}})();
+</script>
+<header class="topbar">
+  <a class="brand" href="../index.html">Planning Algorithms 学习站</a>
+  <span class="crumbs"><a href="../index.html">首页</a> › Part II › 第 3 章 几何表示与变换</span>
+  <button class="icon-btn" id="theme-toggle" type="button" aria-label="切换深浅色">☾</button>
+</header>
+<script>
+(function(){const b=document.getElementById('theme-toggle');if(!b)return;const cur=()=>document.documentElement.getAttribute('data-theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');const label=()=>{b.textContent=cur()==='dark'?'☀︎':'☾';};label();b.addEventListener('click',()=>{const n=cur()==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',n);try{localStorage.setItem('pa-theme',JSON.stringify(n));}catch(e){}label();});})();
+</script>
+<!-- hub-topbar-end -->
+<div class="page">
+<nav class="toc" aria-label="目录">
+  <div class="toc-head">Planning Algorithms<span>LaValle · 第 3 章 · 学习笔记</span></div>
+  <ol>
+    <li><a href="#intro">导读：这一章在干什么</a></li>
+    <li><a href="#s31">3.1 几何建模</a></li>
+    <li class="sub"><a href="#s311">3.1.1 多边形与多面体</a></li>
+    <li class="sub toclab"><a href="#lab-halfplane">Lab 1 半平面的交</a></li>
+    <li class="sub"><a href="#s312">3.1.2 半代数模型</a></li>
+    <li class="sub toclab"><a href="#lab-ginger">Lab 2 姜饼人脸</a></li>
+    <li class="sub"><a href="#s313">3.1.3 其他模型</a></li>
+    <li class="sub toclab"><a href="#lab-super">Lab 3 超椭圆</a></li>
+    <li><a href="#s32">3.2 刚体变换</a></li>
+    <li class="sub"><a href="#s321">3.2.1 一般概念</a></li>
+    <li class="sub"><a href="#s322">3.2.2 2D 变换</a></li>
+    <li class="sub toclab"><a href="#lab-rigid2d">Lab 4 齐次变换矩阵</a></li>
+    <li class="sub"><a href="#s323">3.2.3 3D 变换</a></li>
+    <li class="sub toclab"><a href="#lab-ypr">Lab 5 Yaw-Pitch-Roll</a></li>
+    <li><a href="#s33">3.3 运动链</a></li>
+    <li class="sub"><a href="#s331">3.3.1 2D 运动链</a></li>
+    <li class="sub toclab"><a href="#lab-chain">Lab 6 三连杆分步变换</a></li>
+    <li class="sub"><a href="#s332">3.3.2 3D 运动链与 DH 参数</a></li>
+    <li class="sub toclab"><a href="#lab-dh">Lab 7 DH 四参数</a></li>
+    <li class="sub toclab"><a href="#lab-puma">Lab 8 PUMA 560</a></li>
+    <li class="sub toclab"><a href="#lab-octane">Lab 9 辛烷分子</a></li>
+    <li><a href="#s34">3.4 运动树</a></li>
+    <li class="sub toclab"><a href="#lab-tree">Lab 10 带分叉的树</a></li>
+    <li class="sub toclab"><a href="#lab-loop">Lab 11 闭环与闭合约束</a></li>
+    <li><a href="#s35">3.5 非刚体变换</a></li>
+    <li class="sub toclab"><a href="#lab-linear">Lab 12 缩放·镜像·剪切</a></li>
+    <li><a href="#summary">速查表与常见陷阱</a></li>
+    <li><a href="#exercises">习题导引</a></li>
+  </ol>
+</nav>
+<main>
+<header class="hero">
+  <p class="eyebrow">Planning Algorithms · Steven M. LaValle · Chapter 3</p>
+  <h1>几何表示与变换</h1>
+  <p class="lede">运动规划要回答的问题是「机器人能不能从这里走到那里」。在回答之前，必须先用数学把两件事说清楚：<strong>世界里有什么</strong>（障碍和机器人长什么样），以及<strong>机器人怎么动</strong>（一个姿态参数 $q$ 如何决定机器人占据空间的哪一块）。第 3 章就是这两件事的全部基础。</p>
+  <p class="meta">对应原书 pp. 81–126 · 3.1 建模 → 3.2 单刚体 → 3.3 链 → 3.4 树与环 → 3.5 非刚体 · 12 个可交互图（拖动画布、拉动滑杆）</p>
+</header>
+
+<section id="intro">
+<h2><span class="num">导读</span>这一章在干什么</h2>
+<p>全书 Part II 讨论运动规划，而规划算法要操作的对象，是「几何体 + 变换」。本章用一句话概括：</p>
+<div class="note"><b>一句话总结</b>
+<p>障碍区域 $\mathcal O \subseteq \mathcal W$ 用若干<em class="term">原语</em>（primitive）的布尔组合表示；机器人 $\mathcal A$ 先在自己的<em class="term">体坐标系</em>（body frame）里定义，再由参数 $q$ 决定的<em class="term">刚体变换</em> $h(q,\cdot)$ 放进世界 $\mathcal W$；多个刚体靠齐次变换矩阵连乘 $T_1T_2\cdots T_m$ 串起来；有分叉就走树，有环就加闭合约束。</p></div>
+
+<figure>
+<svg class="svgfig" viewBox="0 0 720 230" role="img" aria-label="章节路线图：3.1 建模描述障碍和机器人，3.2 到 3.4 描述越来越复杂的物体如何运动，3.5 放松刚体假设；3.1 主要服务第 6 章，3.2 和 3.3 服务整个第二部分，第 4 章接着研究构型空间">
+  <defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker></defs>
+  <g font-family="JetBrains Mono, monospace" font-size="12" fill="currentColor">
+    <rect x="20" y="60" width="130" height="70" rx="8" fill="none" stroke="currentColor"/>
+    <text x="85" y="86" text-anchor="middle" font-weight="600">3.1 几何建模</text>
+    <text x="85" y="106" text-anchor="middle" font-size="11">O 和 A 长什么样</text>
+    <rect x="190" y="60" width="130" height="70" rx="8" fill="none" stroke="currentColor"/>
+    <text x="255" y="86" text-anchor="middle" font-weight="600">3.2 单刚体</text>
+    <text x="255" y="106" text-anchor="middle" font-size="11">T = 旋转 + 平移</text>
+    <rect x="360" y="60" width="130" height="70" rx="8" fill="none" stroke="currentColor"/>
+    <text x="425" y="86" text-anchor="middle" font-weight="600">3.3 运动链</text>
+    <text x="425" y="106" text-anchor="middle" font-size="11">T₁T₂…Tₘ · DH 参数</text>
+    <rect x="530" y="60" width="130" height="70" rx="8" fill="none" stroke="currentColor"/>
+    <text x="595" y="86" text-anchor="middle" font-weight="600">3.4 运动树</text>
+    <text x="595" y="106" text-anchor="middle" font-size="11">分叉约束 · 闭环</text>
+    <line x1="150" y1="95" x2="188" y2="95" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+    <line x1="320" y1="95" x2="358" y2="95" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+    <line x1="490" y1="95" x2="528" y2="95" stroke="currentColor" stroke-width="1.5" marker-end="url(#arr)"/>
+    <text x="85" y="40" text-anchor="middle" font-size="11" fill="#2f7d57">描述「有什么」</text>
+    <text x="425" y="40" text-anchor="middle" font-size="11" fill="#1f5fa8">描述「怎么动」（越来越复杂的物体）</text>
+    <path d="M190 32 H660" stroke="#1f5fa8" stroke-width="1" stroke-dasharray="3 3" fill="none"/>
+    <rect x="360" y="160" width="130" height="44" rx="8" fill="none" stroke="currentColor" stroke-dasharray="4 3"/>
+    <text x="425" y="187" text-anchor="middle">3.5 非刚体：放松假设</text>
+    <line x1="85" y1="130" x2="85" y2="200" stroke="#2f7d57" stroke-width="1.2" marker-end="url(#arr)"/>
+    <text x="90" y="215" font-size="11" fill="#2f7d57">→ 第 6 章 组合规划（半代数模型）</text>
+    <line x1="595" y1="130" x2="595" y2="200" stroke="#1f5fa8" stroke-width="1.2" marker-end="url(#arr)"/>
+    <text x="590" y="215" font-size="11" fill="#1f5fa8" text-anchor="end">→ 第 4 章 构型空间 C</text>
+  </g>
+</svg>
+<figcaption>本章路线图。3.1 主要为第 6 章的组合方法服务；3.2、3.3 是整个 Part II 的必备基础；若先学第 5 章（采样规划），半代数模型可以略读。</figcaption>
+</figure>
+
+<h4>怎么读这份教程</h4>
+<ul>
+  <li>每一节先给<strong>直觉</strong>，再给书上的<strong>公式和编号</strong>（如 (3.35)），方便对照原文。</li>
+  <li>带 <span style="font-family:var(--font-mono);color:var(--accent);font-size:12px">LAB</span> 标记的卡片是可交互图：拖动画布上的点、拉动滑杆、切换按钮。每个 Lab 下方「试一试」给出了几个值得观察的现象。</li>
+  <li>三种颜色贯穿全文：<span style="color:var(--obs);font-weight:600">绿色是障碍 $\mathcal O$</span>，<span style="color:var(--accent);font-weight:600">红色是机器人 $\mathcal A$</span>，<span style="color:var(--world);font-weight:600">蓝色是坐标系与结构</span>。3D 图里 x/y/z 轴按惯例是红/绿/蓝。</li>
+  <li>文末有<a href="#summary">速查表与常见陷阱</a>和<a href="#exercises">习题导引</a>。</li>
+</ul>
+</section>
+
+<!-- ============================ 3.1 ============================ -->
+<section id="s31">
+<h2><span class="num">3.1</span>几何建模 Geometric Modeling</h2>
+<p>先定义<em class="term">世界</em> $\mathcal W$：要么 $\mathcal W=\mathbb R^2$（2D），要么 $\mathcal W=\mathbb R^3$（3D）。世界里有两类东西：</p>
+<ol>
+  <li><em class="term">障碍</em>（obstacles）：永久占据的部分，比如建筑物的墙。所有障碍点的集合记为<strong>障碍区域</strong> $\mathcal O\subseteq\mathcal W$。</li>
+  <li><em class="term">机器人</em>（robots）：有几何模型、可以被运动规划控制的物体，记为 $\mathcal A$。</li>
+</ol>
+<p>「机器人」是个泛称：可以是真机器人，也可以是柔性分子（障碍是折叠的蛋白质），或者游戏里的虚拟人。两者都当作 $\mathcal W$ 的<strong>闭子集</strong>（包含边界）。</p>
+<p>描述一个几何体有两条路：</p>
+<div class="tbl-wrap"><table>
+<tr><th>方式</th><th>思想</th><th>行星的例子</th><th>多边形的例子</th></tr>
+<tr><td><em class="term">边界表示</em> boundary representation</td><td>写出表面方程/边界元素</td><td>一个和地表重合的球面方程</td><td>按逆时针列出顶点序列</td></tr>
+<tr><td><em class="term">实体表示</em> solid representation</td><td>描述「所有被包含的点」构成的集合</td><td>球面内所有点的集合</td><td>若干半平面的交集</td></tr>
+</table></div>
+<p>本节的主线是实体表示：用容易计算的<em class="term">原语</em> $H_i$ 做有限次并、交、差，拼出复杂的 $\mathcal O$。</p>
+
+<h3 id="s311"><span class="num">3.1.1</span>多边形与多面体模型</h3>
+<h4>凸集</h4>
+<p>$X\subset\mathbb R^n$ 是<em class="term">凸</em>的，当且仅当任意两点间的线段都在 $X$ 内：对任意 $x_1,x_2\in X$ 和 $\lambda\in[0,1]$，</p>
+$$\lambda x_1+(1-\lambda)x_2\in X. \tag{3.1}$$
+<p>直觉：没有「坑」和「缩进」。不凸的集合叫 <em class="term">nonconvex</em>（书里特意不叫 concave，那个词更适合描述透镜）。</p>
+
+<h4>凸多边形 = 半平面的交</h4>
+<p>一个 $m$ 边凸多边形的边界表示是逆时针顺序的 $m$ 个顶点 $(x_1,y_1),\dots,(x_m,y_m)$。它的实体表示则是 $m$ 个<em class="term">半平面</em>的交。关键工具是一条直线对应的函数</p>
+$$f(x,y)=ax+by+c,$$
+<p>它在直线一侧为负、另一侧为正、线上为零，并且可以理解为到直线的带符号距离（差一个比例）。约定：<strong>沿边 $(x_i,y_i)\to(x_{i+1},y_{i+1})$ 的方向，左侧 $f<0$</strong>（如果不是，就把 $f$ 乘上 $-1$）。由于顶点逆时针排列，多边形内部始终在每条边的左侧。</p>
+<div class="note"><b>书里略过的一步：由两点求 a, b, c</b>
+<p>设边从 $p_1=(x_1,y_1)$ 到 $p_2=(x_2,y_2)$。取
+$f(x,y)=(y_2-y_1)(x-x_1)-(x_2-x_1)(y-y_1)$，
+即 $a=y_2-y_1$，$b=-(x_2-x_1)$，$c=-(ax_1+by_1)$。它就是叉积 $(p_2-p_1)\times(p-p_1)$ 的相反数，所以 $p$ 在左侧时 $f<0$。</p></div>
+<p>每条边定义一个原语</p>
+$$H_i=\{(x,y)\in\mathcal W\mid f_i(x,y)\le 0\}, \tag{3.2}$$
+<p>凸多边形障碍就是它们的交</p>
+$$\mathcal O=H_1\cap H_2\cap\cdots\cap H_m. \tag{3.3}$$
+
+<div class="lab" id="lab-halfplane">
+  <div class="lab-head"><span class="tag">LAB 1</span><h4>半平面的交 = 凸多边形（对应 Fig 3.1、3.2）</h4>
+  <p class="hint">拖动圆点测试任意位置；把鼠标悬停在某条边上，会显示这条边对应的半平面 $H_i$（$f_i\le 0$ 的一侧）。右侧实时给出每个 $f_i$ 的值和谓词 $\alpha=e_1\wedge\cdots\wedge e_5$ 的结果。</p></div>
+  <canvas tabindex="0" aria-label="五边形与半平面交互图"></canvas>
+  <div class="ctl">
+    <div class="row"><label class="chk"><input type="checkbox" data-k="all"> 同时显示全部 5 个半平面</label></div>
+    <div class="row"><label class="chk"><input type="checkbox" data-k="signs" checked> 显示各边的 ± 符号</label></div>
+    <div class="readout" data-k="out"></div>
+    <div class="sub">试一试：① 把点拖到多边形外，看哪些 $e_i$ 变成 ✗，是否恰好对应「点在那条边右侧」。② 勾选全部半平面，观察 5 个半平面的交集正好是五边形，而每个单独的半平面都是无限大的。③ 把点放到边界上，$f_i\approx 0$，仍算在 $\mathcal O$ 内（闭集）。</div>
+  </div>
+</div>
+
+<h4>非凸多边形 = 凸多边形的并</h4>
+<p>凸的假设太受限。非凸的多边形区域写成</p>
+$$\mathcal O=\mathcal O_1\cup\mathcal O_2\cup\cdots\cup\mathcal O_n, \tag{3.4}$$
+<p>每个 $\mathcal O_i$ 是按 (3.3) 表示的凸多边形，<strong>彼此允许重叠</strong>。几点说明：</p>
+<ul>
+  <li>分解不唯一。用最少的原语做分解看起来很美，但自动化地求最优分解可能是 NP-hard 的（6.5.1 节）。实用的做法是第 6.2.2 节的垂直单元分解。</li>
+  <li><strong>集合差可以消掉</strong>：要「挖掉」原语 $H_i=\{f_i<0\}$，等价于保留 $f_i\ge0$，即 $-f_i\le0$，这又是一个新原语 $H'_i$。所以任意由并、交、差组成的表达式，用布尔代数都能化成「若干交的并」。</li>
+</ul>
+
+<h4>从集合到逻辑谓词：一个 O(n) 的碰撞检测器</h4>
+<p>这套表示的价值在哪？它直接给出一个<em class="term">谓词</em>（predicate）$\phi:\mathcal W\to\{\text{true},\text{false}\}$，判断点是否在障碍里。令 $e_i(x,y)$ 在 $f_i(x,y)\le0$ 时为真。凸多边形对应合取（AND）：</p>
+$$\alpha(x,y)=e_1(x,y)\wedge e_2(x,y)\wedge\cdots\wedge e_m(x,y), \tag{3.5}$$
+<p>$n$ 个凸块的并对应析取（OR）：</p>
+$$\phi(x,y)=\alpha_1(x,y)\vee\alpha_2(x,y)\vee\cdots\vee\alpha_n(x,y). \tag{3.6}$$
+<p>每个原语常数时间可算，所以点碰撞检测是 $O(n)$，$n$ 是原语总数。集合论的 $\cap,\cup$ 与逻辑的 $\wedge,\vee$ 一一对应；「任何逻辑式都能化为析取范式（sum of products）」正是「$\mathcal O$ 总能写成交的并」的另一种说法。</p>
+
+<h4>多面体模型（3D）</h4>
+<p>把多边形换成多面体，半平面换成<em class="term">半空间</em>，一切类比成立。边界表示有三种特征：顶点、边、面。一个常用数据结构是<em class="term">双向连接边表</em>（doubly connected edge list，DCEL）：</p>
+<figure>
+<svg class="svgfig" viewBox="0 0 560 220" role="img" aria-label="两个相邻的面共享一条边，这条边存成两条方向相反的半边，互为 twin；每条半边记录起点、所属面、同一面上的下一条和上一条半边">
+  <defs><marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker></defs>
+  <g font-family="JetBrains Mono, monospace" font-size="12" fill="currentColor" stroke="currentColor">
+    <polygon points="60,40 240,40 240,180 60,180" fill="rgba(47,125,87,.12)" stroke-width="1"/>
+    <polygon points="240,40 420,40 420,180 240,180" fill="rgba(31,95,168,.10)" stroke-width="1"/>
+    <text x="150" y="115" text-anchor="middle" stroke="none" font-weight="600">face F₁</text>
+    <text x="330" y="115" text-anchor="middle" stroke="none" font-weight="600">face F₂</text>
+    <line x1="232" y1="170" x2="232" y2="60" stroke="#2f7d57" stroke-width="2" marker-end="url(#arr2)"/>
+    <line x1="248" y1="50" x2="248" y2="160" stroke="#1f5fa8" stroke-width="2" marker-end="url(#arr2)"/>
+    <text x="225" y="115" text-anchor="end" stroke="none" fill="#2f7d57">h</text>
+    <text x="256" y="115" stroke="none" fill="#1f5fa8">twin(h)</text>
+    <line x1="70" y1="48" x2="225" y2="48" stroke="#2f7d57" stroke-width="1.2" marker-end="url(#arr2)"/>
+    <line x1="68" y1="60" x2="68" y2="170" stroke="#2f7d57" stroke-width="1.2" marker-start="url(#arr2)"/>
+    <line x1="80" y1="172" x2="225" y2="172" stroke="#2f7d57" stroke-width="1.2" marker-start="url(#arr2)"/>
+    <text x="150" y="36" text-anchor="middle" stroke="none" font-size="11" fill="#2f7d57">prev(h)</text>
+    <text x="150" y="190" text-anchor="middle" stroke="none" font-size="11" fill="#2f7d57">next(h)</text>
+    <circle cx="240" cy="180" r="4" fill="currentColor"/>
+    <text x="240" y="205" text-anchor="middle" stroke="none" font-size="11">origin(h)</text>
+    <text x="470" y="70" stroke="none" font-size="11.5">每条半边记录 5 个指针：</text>
+    <text x="470" y="90" stroke="none" font-size="11.5">origin · twin · face</text>
+    <text x="470" y="110" stroke="none" font-size="11.5">next · prev</text>
+    <text x="470" y="140" stroke="none" font-size="11.5">每个面：沿外法向看</text>
+    <text x="470" y="160" stroke="none" font-size="11.5">逆时针的半边环</text>
+  </g>
+</svg>
+<figcaption>DCEL 的核心是「半边」（half-edge）：每条真实的边存成两条方向相反、互为 twin 的半边，分别属于相邻的两个面。有了 origin/twin/face/next/prev 五个指针，就能沿多面体表面任意「行走」。</figcaption>
+</figure>
+<p>实体表示：每个面确定一个平面 $ax+by+cz+d=0$，令 $f(x,y,z)=ax+by+cz+d$，半空间 $H_i=\{f_i\le0\}$，凸多面体 $\mathcal O=\bigcap H_i$，非凸多面体是凸多面体的并。怎样保证 $f_i$ 在多面体内部为负？2D 时靠逆时针顺序；3D 时用半边结构取出每个面逆时针（相对外法向）的顶点环，取连续三个不共线的顶点 $p_1,p_2,p_3$，令 $v_{12}=p_2-p_1,\ v_{23}=p_3-p_2$，则叉积</p>
+$$v=v_{12}\times v_{23}$$
+<p>必定<strong>指向多面体外侧</strong>且垂直于面。取 $a=v[1],b=v[2],c=v[3]$，内部就满足 $f\le0$。</p>
+
+<h3 id="s312"><span class="num">3.1.2</span>半代数模型 Semi-Algebraic Models</h3>
+<p>到目前为止 $f$ 都是一次函数。把 $f$ 放宽为<strong>任意实系数多项式</strong>，就得到半代数模型：</p>
+$$H=\{(x,y)\in\mathcal W\mid f(x,y)\le0\}. \tag{3.10}$$
+<ul>
+  <li>单个多项式原语确定的点集叫<em class="term">代数集</em>（algebraic set）；代数集经有限次并、交得到的叫<em class="term">半代数集</em>（semi-algebraic set）。多边形/多面体模型是一次多项式的特例。</li>
+  <li>例：$f=x^2+y^2-4$ 给出以原点为心、半径 2 的圆盘。</li>
+  <li>与多边形不同，<strong>半代数原语的交不一定凸</strong>。</li>
+  <li>谓词 $\phi$ 照样可以建，碰撞检测仍然是原语个数的线性时间：评估一个多项式就行。</li>
+</ul>
+<p><strong>例 3.1（姜饼人脸）</strong>：外圆半径 $r_1$ 在原点；两只眼睛半径 $r_2,r_3$ 在 $(x_2,y_2),(x_3,y_3)$；嘴是中心 $(0,y_4)$、半轴 $a,b$ 的椭圆。</p>
+$$\begin{aligned}
+f_1&=x^2+y^2-r_1^2,\\
+f_2&=-\big((x-x_2)^2+(y-y_2)^2-r_2^2\big),\\
+f_3&=-\big((x-x_3)^2+(y-y_3)^2-r_3^2\big),\\
+f_4&=-\big(x^2/a^2+(y-y_4)^2/b^2-1\big),
+\end{aligned}\tag{3.11}$$
+$$\mathcal O=H_1\cap H_2\cap H_3\cap H_4. \tag{3.12}$$
+<p>$f_2,f_3,f_4$ 前的负号是精髓：圆/椭圆方程本来 $\le0$ 表示「内部」，乘 $-1$ 后 $\le0$ 表示「外部」，于是「与外部求交」就等于「挖掉」。</p>
+
+<div class="lab" id="lab-ginger">
+  <div class="lab-head"><span class="tag">LAB 2</span><h4>姜饼人脸：四个代数原语的交（对应 Fig 3.4b、例 3.1）</h4>
+  <p class="hint">着色区域是当前的 $\mathcal O$。每个原语可以从交集中「移除」，也可以把它的符号翻转。拖动探针点查看四个 $f_i$ 的取值。</p></div>
+  <canvas tabindex="0" aria-label="姜饼人脸半代数模型交互图"></canvas>
+  <div class="ctl">
+    <div class="sub">参与交集 / 翻转符号：</div>
+    <div class="row"><label class="chk"><input type="checkbox" data-k="in1" checked> H₁ 外圆</label><label class="chk"><input type="checkbox" data-k="fl1"> 翻转 f₁</label></div>
+    <div class="row"><label class="chk"><input type="checkbox" data-k="in2" checked> H₂ 左眼</label><label class="chk"><input type="checkbox" data-k="fl2"> 翻转 f₂</label></div>
+    <div class="row"><label class="chk"><input type="checkbox" data-k="in3" checked> H₃ 右眼</label><label class="chk"><input type="checkbox" data-k="fl3"> 翻转 f₃</label></div>
+    <div class="row"><label class="chk"><input type="checkbox" data-k="in4" checked> H₄ 嘴</label><label class="chk"><input type="checkbox" data-k="fl4"> 翻转 f₄</label></div>
+    <label><span>r₁ 外圆</span><input type="range" data-k="r1" min="1.2" max="2.6" step="0.05" value="2" data-dec="2"><output></output></label>
+    <label><span>r₂ 眼睛</span><input type="range" data-k="r2" min="0.1" max="0.7" step="0.02" value="0.3" data-dec="2"><output></output></label>
+    <label><span>a 嘴宽</span><input type="range" data-k="a" min="0.3" max="1.6" step="0.05" value="1" data-dec="2"><output></output></label>
+    <label><span>b 嘴高</span><input type="range" data-k="b" min="0.1" max="0.9" step="0.05" value="0.35" data-dec="2"><output></output></label>
+    <div class="readout" data-k="out"></div>
+    <div class="sub">试一试：① 翻转 $f_2$：左眼从「挖掉的洞」变成「只剩眼睛那个圆盘」（因为此时要求点同时在外圆内、左眼内）。② 取消 H₁：脸没有外边界了，$\mathcal O$ 变成整个平面挖掉三个洞，说明交集里的每个原语都在「收紧」区域。③ 把 r₂ 调大到眼睛探出外圆，边界上照样处理得干净，这是隐式表示的好处。</div>
+  </div>
+</div>
+
+<h4>哪些关系真的增加了表达力？</h4>
+<p>除了 $f\le0$，还可以定义 $f\ge0,\ f=0,\ f<0,\ f\ne0$ 等原语，但大多数并不扩大能表示的模型类，只是用着方便：</p>
+<ul>
+  <li>$\{f\ge0\}$ 等价于 $\{-f\le0\}$，换个多项式即可。</li>
+  <li>$\{f=0\}=\{f\le0\}\cap\{-f\le0\}$，两个原语的交。</li>
+  <li><strong>$\{f<0\}$ 确实增加了表达力</strong>：它能表示不含边界的<em class="term">开集</em>（比如球面内部但不含球面），这在第 4 章会用到。等价地，保留 $\le$ 但允许集合补运算也行。</li>
+</ul>
+
+<h3 id="s313"><span class="num">3.1.3</span>其他模型</h3>
+<div class="why"><b>为什么模型的选择重要</b>
+<p>第 6 章的<strong>组合规划</strong>方法直接在表示上做几何运算，表示方式是算法的一部分。第 5 章的<strong>采样规划</strong>方法只通过「碰撞检测」这个黑箱接触几何，表示方式对规划器几乎不可见。所以下面这些模型更多出现在采样方法里，但别彻底忘了表示的存在。</p></div>
+<h4>非凸多边形/多面体的直接边界表示</h4>
+<p>不必拆成凸块，直接按逆时针列出顶点 $(x_1,y_1),\dots,(x_m,y_m)$，相邻点之间（以及首尾之间）有边。顶点应选得使多边形<em class="term">简单</em>（边不相交），这样内部是良定义的：<strong>每条边的左侧</strong>。</p>
+<figure>
+<svg class="svgfig" viewBox="0 0 520 220" role="img" aria-label="外边界顶点逆时针排列，孔的边界顶点顺时针排列，沿着箭头走，阴影区域总在左边">
+  <defs><marker id="arr3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker></defs>
+  <g font-family="JetBrains Mono, monospace" font-size="12" fill="currentColor">
+    <path d="M60 180 L300 190 L330 60 L180 30 L40 80 Z M150 90 L230 85 L240 150 L160 160 Z" fill="rgba(47,125,87,.18)" fill-rule="evenodd" stroke="currentColor" stroke-width="1.5"/>
+    <line x1="60" y1="180" x2="170" y2="184.5" stroke="#2f7d57" stroke-width="2.2" marker-end="url(#arr3)"/>
+    <line x1="300" y1="190" x2="314" y2="128" stroke="#2f7d57" stroke-width="2.2" marker-end="url(#arr3)"/>
+    <line x1="330" y1="60" x2="260" y2="46" stroke="#2f7d57" stroke-width="2.2" marker-end="url(#arr3)"/>
+    <line x1="180" y1="30" x2="115" y2="53" stroke="#2f7d57" stroke-width="2.2" marker-end="url(#arr3)"/>
+    <line x1="40" y1="80" x2="50" y2="130" stroke="#2f7d57" stroke-width="2.2" marker-end="url(#arr3)"/>
+    <line x1="150" y1="90" x2="192" y2="87.5" stroke="#c9432a" stroke-width="2.2" marker-end="url(#arr3)"/>
+    <line x1="230" y1="85" x2="235" y2="120" stroke="#c9432a" stroke-width="2.2" marker-end="url(#arr3)"/>
+    <line x1="240" y1="150" x2="198" y2="155" stroke="#c9432a" stroke-width="2.2" marker-end="url(#arr3)"/>
+    <line x1="160" y1="160" x2="155" y2="123" stroke="#c9432a" stroke-width="2.2" marker-end="url(#arr3)"/>
+    <text x="380" y="80" fill="#2f7d57">外边界：逆时针</text>
+    <text x="380" y="105" fill="#c9432a">孔边界：顺时针</text>
+    <text x="380" y="140" font-size="11.5">沿箭头走，阴影</text>
+    <text x="380" y="158" font-size="11.5">永远在左手边</text>
+  </g>
+</svg>
+<figcaption>Fig 3.5 的要点：带孔多边形用<strong>方向</strong>区分外边界与孔。外边界逆时针，孔顺时针，于是「内部在左侧」这一规则对所有边都成立。3D 多面体同理，用相反的定向表示孔。</figcaption>
+</figure>
+<h4>3D 三角形网格</h4>
+<p>每个三角形由三个点给出，是图形学中最常用的模型（显卡原生支持）。规定三角形内部属于模型，两个三角形「碰撞」指一个戳进了另一个。优点是毫无约束，缺点也是毫无约束：没有一致性可以利用，很难判断一个点在 3D 障碍「里面」还是「外面」。为了去掉共享顶点的冗余，有<em class="term">三角形带</em>（triangle strip，相邻三角形共享一条边）和<em class="term">三角形扇</em>（triangle fan，所有三角形共享一个顶点）。</p>
+<figure>
+<svg class="svgfig" viewBox="0 0 560 150" role="img" aria-label="左侧三角形带：顶点交替上下排列，每个新顶点和前两个组成一个三角形；右侧三角形扇：所有三角形共享中心顶点">
+  <g fill="rgba(31,95,168,.12)" stroke="currentColor" stroke-width="1.3" font-family="JetBrains Mono, monospace" font-size="12">
+    <polygon points="20,110 60,30 100,110"/><polygon points="60,30 100,110 140,30"/><polygon points="100,110 140,30 180,110"/><polygon points="140,30 180,110 220,30"/><polygon points="180,110 220,30 260,110"/>
+    <g fill="currentColor" stroke="none"><text x="20" y="128" text-anchor="middle">1</text><text x="60" y="22" text-anchor="middle">2</text><text x="100" y="128" text-anchor="middle">3</text><text x="140" y="22" text-anchor="middle">4</text><text x="180" y="128" text-anchor="middle">5</text><text x="220" y="22" text-anchor="middle">6</text><text x="260" y="128" text-anchor="middle">7</text><text x="140" y="145" text-anchor="middle" font-size="11">triangle strip：7 个点 5 个三角形</text></g>
+    <polygon points="420,80 340,60 360,20"/><polygon points="420,80 360,20 420,10"/><polygon points="420,80 420,10 480,25"/><polygon points="420,80 480,25 500,70"/><polygon points="420,80 500,70 470,120"/>
+    <g fill="currentColor" stroke="none"><circle cx="420" cy="80" r="3"/><text x="420" y="145" text-anchor="middle" font-size="11">triangle fan：共享中心顶点</text></g>
+  </g>
+</svg>
+<figcaption>Fig 3.6：带和扇都是在「有一些连贯性」时减少重复顶点的编码方式。</figcaption>
+</figure>
+<h4>NURBS（非均匀有理 B 样条）</h4>
+<p>工程设计系统（飞机、汽车车身）常用。它和半代数模型的本质区别是：半代数是<em class="term">隐式</em>方程 $f(x,y)\le0$，样条是<em class="term">参数</em>方程 $C(u)$。参数形式渲染容易、碰撞检测难。2D 曲线写成</p>
+$$C(u)=\frac{\sum_{i=0}^{n}w_iP_iN_{i,k}(u)}{\sum_{i=0}^{n}w_iN_{i,k}(u)}, \tag{3.18}$$
+<p>$w_i$ 是权重，$P_i$ 是控制点，$N_{i,k}$ 是 $k$ 次基函数，由节点向量 $\{t_0,\dots,t_m\}$（非减序列）递归定义：</p>
+$$N_{i,k}(u)=\Big(\frac{u-t_i}{t_{i+k}-t_i}\Big)N_{i,k-1}(u)+\Big(\frac{t_{i+k+1}-u}{t_{i+k+1}-t_{i+1}}\Big)N_{i+1,k-1}(u), \tag{3.19}$$
+<p>递归基：$N_{i,0}(u)=1$ 若 $t_i\le u<t_{i+1}$，否则为 0。</p>
+<h4>位图与占据栅格</h4>
+<p>把有界区域离散成矩形格子，每格 1 表示含有 $\mathcal O$ 的点、0 表示不含。分辩率决定格子数和近似质量。它不优雅，却在应用中到处出现：移动机器人用传感器建的地图就是位图。推广为<em class="term">占据栅格</em>（occupancy grid）：每格存一个数，比如「有障碍的概率」或「穿越代价」（行星车地形图）。</p>
+<h4>超二次曲面</h4>
+<p>$f_i$ 不一定要是多项式。<em class="term">超椭球</em>（superellipsoid）在 3D 里是</p>
+$$\big(|x/a|^{n_1}+|y/b|^{n_2}\big)^{n_1/n_2}+|z/c|^{n_1}-1\le0,\qquad n_1,n_2\ge2. \tag{3.20}$$
+<p>$n_1=n_2=2$ 时是椭球；指数越大越像圆角盒子。</p>
+
+<div class="lab" id="lab-super">
+  <div class="lab-head"><span class="tag">LAB 3</span><h4>超椭圆：一个参数从椭圆连续变到方盒</h4>
+  <p class="hint">2D 截面 $|x/a|^{n}+|y/b|^{n}\le1$。拉动 $n$，看一个原语就能表达的形状家族。</p></div>
+  <canvas aria-label="超椭圆形状随指数变化"></canvas>
+  <div class="ctl">
+    <label><span>n</span><input type="range" data-k="n" min="0.6" max="12" step="0.1" value="2" data-dec="1"><output></output></label>
+    <label><span>a</span><input type="range" data-k="a" min="0.5" max="2.5" step="0.1" value="2" data-dec="1"><output></output></label>
+    <label><span>b</span><input type="range" data-k="b" min="0.5" max="2.5" step="0.1" value="1.3" data-dec="1"><output></output></label>
+    <div class="readout" data-k="out"></div>
+    <div class="sub">$n=2$ 椭圆；$n\to\infty$ 趋向矩形；$n<2$ 时「凹进去」变成星形（书中要求 $n\ge2$ 以保证凸性，这里放开让你看看为什么）。</div>
+  </div>
+</div>
+
+<h4>广义圆柱</h4>
+<p>普通圆柱的中轴是直线、半径是常数；<em class="term">广义圆柱</em>把中轴换成一条脊线 $(x(s),y(s),z(s))$，$s\in[0,1]$，半径换成函数 $r(s)$。在 $s$ 处的截面是垂直于脊线切向、半径 $r(s)$ 的圆。</p>
+</section>
+<!-- ============================ 3.2 ============================ -->
+<section id="s32">
+<h2><span class="num">3.2</span>刚体变换 Rigid-Body Transformations</h2>
+<p>3.1 节的任何方法都可以同时用来定义障碍 $\mathcal O$ 和机器人 $\mathcal A$。区别在于：$\mathcal O$ 在 $\mathcal W$ 里固定不动，而规划问题要让 $\mathcal A$「动起来」。</p>
+
+<h3 id="s321"><span class="num">3.2.1</span>一般概念</h3>
+<p>机器人 $\mathcal A$ 定义为 $\mathbb R^2$ 或 $\mathbb R^3$ 的子集（维度与 $\mathcal W$ 一致）。一个<em class="term">刚体变换</em>是函数 $h:\mathcal A\to\mathcal W$，把 $\mathcal A$ 的每个点映射到 $\mathcal W$ 中，且满足两条：</p>
+<ol>
+  <li>任意两点间的距离保持不变；</li>
+  <li>定向保持不变（不允许「镜像」）。</li>
+</ol>
+<p>$h(a)$ 是点 $a\in\mathcal A$ 在 $\mathcal W$ 中「占据」的位置，整个机器人占据的区域是像集</p>
+$$h(\mathcal A)=\{h(a)\in\mathcal W\mid a\in\mathcal A\}. \tag{3.21}$$
+
+<h4>变换模型时，到底用 h 还是 h⁻¹？</h4>
+<p>这是本节最容易出错、也最值得搞清楚的一点。如果 $\mathcal A$ 是边界表示（一串顶点），直接对每个顶点算 $h(a)$ 就完了。但若 $\mathcal A$ 用原语 $H_i=\{a\in\mathbb R^2\mid f_i(a)\le0\}$ 定义，变换后的集合是</p>
+$$h(H_i)=\{h(a)\in\mathcal W\mid f_i(a)\le0\}. \tag{3.23}$$
+<p>这个写法以 $a$ 为变量，不方便。我们想直接用 $\mathcal W$ 中的点 $w$ 来描述。因为 $a=h^{-1}(w)$，</p>
+$$h(H_i)=\{w\in\mathcal W\mid f_i(h^{-1}(w))\le0\}. \tag{3.24}$$
+<div class="pit"><b>陷阱 1：原语里出现的是逆变换</b>
+<p>要判断世界点 $w$ 是否在变换后的机器人里，需要把 $w$「拉回」体坐标系再代入 $f_i$，所以是 $f_i(h^{-1}(w))$。顶点用 $h$ 正着推，原语用 $h^{-1}$ 倒着拉。例 3.2 会具体看到。</p></div>
+
+<h4>参数化的变换族</h4>
+<p>规划关心的不是一个变换，而是一族由参数 $q\in\mathbb R^n$ 选出的变换。于是 $h$ 接受两个变量：$h(q,a)$，整个机器人变成 $h(q,\mathcal A)\subset\mathcal W$。书中用简写</p>
+$$a(q):=h(q,a),\qquad \mathcal A(q):=h(q,\mathcal A).$$
+<p>这记法略有滥用，但很形象：调节 $q$，机器人 $\mathcal A(q)$ 在 $\mathcal W$ 里到处跑。$\mathcal A(q)$ 可以看作一个集合值函数。遇到困惑时（尤其分不清该用 $h$ 还是 $h^{-1}$），回到这里的定义。</p>
+
+<h4>坐标系</h4>
+<ul>
+  <li><em class="term">世界坐标系</em>（world frame）：$\mathcal W$ 的原点和基向量，所有 $w\in\mathcal W$ 都用它表达。作用类比牛顿力学的惯性系。</li>
+  <li><em class="term">体坐标系</em>（body frame）：定义 $\mathcal A$ 时用的 $\mathbb R^2$/$\mathbb R^3$ 的原点和基，可以想象成<strong>画在机器人身上</strong>。</li>
+</ul>
+<p>变换机器人 = 把它的模型从体坐标系换到世界坐标系，效果是把 $\mathcal A$ 以某个位置和朝向「放进」$\mathcal W$。3.3 节中每个刚体都有自己的体坐标系，变换就是把所有物体都表达到世界坐标系里。</p>
+
+<h3 id="s322"><span class="num">3.2.2</span>2D 变换</h3>
+<h4>平移</h4>
+<p>两个参数 $q=(x_t,y_t)$：</p>
+$$h(x,y)=(x+x_t,\;y+y_t). \tag{3.25}$$
+<p>边界表示：每个顶点 $(x_i,y_i)\mapsto(x_i+x_t,y_i+y_t)$。实体表示：原语 $H_i=\{f(x,y)\le0\}$ 变成</p>
+$$h(H_i)=\{(x,y)\in\mathcal W\mid f(x-x_t,\;y-y_t)\le0\}. \tag{3.27}$$
+<p><strong>例 3.2（平移圆盘）</strong>：单位圆盘 $H=\{x^2+y^2-1\le0\}$ 平移后是 $\{(x-x_t)^2+(y-y_t)^2-1\le0\}$，正是圆心在 $(x_t,y_t)$ 的圆盘方程。注意减号：这就是 $h^{-1}$。</p>
+<p>平移后的机器人记作 $\mathcal A(x_t,y_t)$；$(0,0)$ 是恒等变换。<em class="term">自由度</em>（degrees of freedom，DOF）指完全刻画变换所需的独立参数的最大个数：若 $(x_t,y_t)$ 的取值集合是 $\mathbb R^2$ 的二维子集，自由度为 2。</p>
+<div class="note"><b>每个变换有两种解释（Fig 3.7）</b>
+<p>① 世界系不动，机器人被变换；② 机器人不动，世界系被（反向）变换。前者是从固定世界看变换的效果，后者是从机器人视角看。运动规划默认用第一种，因为它建模的是「机器人在物理世界里移动」。很多坐标变换的书用第二种，导致公式看起来「反过来」。Lab 4 里有一个开关可以切换这两种视角。</p></div>
+
+<h4>旋转</h4>
+<p>绕原点逆时针转 $\theta\in[0,2\pi)$：</p>
+$$(x,y)\mapsto(x\cos\theta-y\sin\theta,\;x\sin\theta+y\cos\theta), \tag{3.30}$$
+<p>写成旋转矩阵</p>
+$$R(\theta)=\begin{pmatrix}\cos\theta&-\sin\theta\\ \sin\theta&\cos\theta\end{pmatrix}. \tag{3.31}$$
+<p>三个值得记住的观察：</p>
+<ul>
+  <li><strong>列向量 = 新基向量</strong>。$R(\theta)$ 的第一列是体坐标系 $x$ 轴转过 $\theta$ 后的方向，第二列是 $y$ 轴转后的方向。两列是单位向量且互相正交。这个解释对任意维度的旋转矩阵都成立。</li>
+  <li>旋转绕的是<strong>原点</strong>。因此定义 $\mathcal A$ 时，应把原点放在你希望它绕着转的轴上（3.3 节放在关节处）。</li>
+  <li>变换半代数原语要用逆旋转 $R(-\theta)=R(\theta)^{\mathsf T}$。</li>
+</ul>
+
+<h4>旋转 + 平移：齐次变换矩阵</h4>
+<p>先转 $\theta$、再平移 $(x_t,y_t)$，可以把机器人摆到任意位姿。每点变为</p>
+$$\begin{pmatrix}x\cos\theta-y\sin\theta+x_t\\ x\sin\theta+y\cos\theta+y_t\end{pmatrix}. \tag{3.33}$$
+<p>把坐标补一个 1，用一次矩阵乘法得到同样结果：</p>
+$$\begin{pmatrix}\cos\theta&-\sin\theta&x_t\\ \sin\theta&\cos\theta&y_t\\ 0&0&1\end{pmatrix}\begin{pmatrix}x\\y\\1\end{pmatrix}=\begin{pmatrix}x\cos\theta-y\sin\theta+x_t\\ x\sin\theta+y\cos\theta+y_t\\1\end{pmatrix}. \tag{3.34}$$
+<p>这个 $3\times3$ 矩阵</p>
+$$T=\begin{pmatrix}\cos\theta&-\sin\theta&x_t\\ \sin\theta&\cos\theta&y_t\\ 0&0&1\end{pmatrix} \tag{3.35}$$
+<p>叫<em class="term">齐次变换矩阵</em>（homogeneous transformation matrix）。它表示<strong>先旋转再平移</strong>，不是反过来。称「齐次」是因为在 $\mathbb R^3$ 里它只是一个没有平移的线性变换：升一维把平移「吸收」进线性变换，是射影几何的常见技巧。变换后的机器人记作 $\mathcal A(x_t,y_t,\theta)$，共 3 个自由度。</p>
+<div class="pit"><b>陷阱 2：平移和旋转不可交换</b>
+<p>先转再平移得到 $Rp+t$；先平移再转得到 $R(p+t)=Rp+Rt$。两者仅在 $Rt=t$ 时相同。书中约定 $T$ 永远是「先转再平移」。</p></div>
+
+<div class="lab" id="lab-rigid2d">
+  <div class="lab-head"><span class="tag">LAB 4</span><h4>2D 刚体变换与齐次矩阵（对应 (3.35)、Fig 3.7）</h4>
+  <p class="hint">红色 L 形机器人在体坐标系中定义，原点在它的角上。拉动 $x_t, y_t, \theta$，右侧矩阵实时更新；淡色轮廓是未变换的 $\mathcal A$。小圆点是体坐标 $a=(1.5,0.3)$ 的点，用来验证 $w=Ta$。</p></div>
+  <canvas tabindex="0" aria-label="二维刚体变换交互图"></canvas>
+  <div class="ctl">
+    <label><span>x<sub>t</sub></span><input type="range" data-k="xt" min="-3" max="3" step="0.05" value="1.5" data-dec="2"><output></output></label>
+    <label><span>y<sub>t</sub></span><input type="range" data-k="yt" min="-2.5" max="2.5" step="0.05" value="0.8" data-dec="2"><output></output></label>
+    <label><span>θ</span><input type="range" data-k="th" min="-180" max="180" step="1" value="35" data-unit="deg"><output></output></label>
+    <div class="row"><span class="sub">运算顺序：</span><div class="seg" data-k="order"><button aria-pressed="true" data-v="RT">先转再平移 (T)</button><button aria-pressed="false" data-v="TR">先平移再转</button></div></div>
+    <div class="row"><label class="chk"><input type="checkbox" data-k="frameview"> 视角 ②：机器人不动，移动世界系</label></div>
+    <div class="row"><label class="chk"><input type="checkbox" data-k="disc" > 叠加例 3.2 的圆盘原语</label></div>
+    <div class="readout" data-k="out"></div>
+    <div class="sub">试一试：① 固定 $\theta=90°$，切换运算顺序，看平移向量怎么被旋转「带偏」。② 勾选视角 ②：蓝色世界系按 $T^{-1}$ 移动，机器人回到原位，但两者的相对关系和视角 ① 完全一样。③ 勾选圆盘原语：世界点 $w$ 落在圆盘里当且仅当 $|R^{\mathsf T}(w-t)|\le1$，即 $f(h^{-1}(w))\le0$。</div>
+  </div>
+</div>
+
+<h3 id="s323"><span class="num">3.2.3</span>3D 变换</h3>
+<p>3D 的平移和 2D 一样简单：$(x,y,z)\mapsto(x+x_t,y+y_t,z+z_t)$，原语变为 $\{f_i(x-x_t,y-y_t,z-z_t)\le0\}$。难点全在<strong>旋转</strong>。</p>
+<h4>Yaw、Pitch、Roll</h4>
+<p>借用航空术语，绕三个正交轴的旋转分别叫：</p>
+<div class="tbl-wrap"><table>
+<tr><th>名称</th><th>绕哪个轴</th><th>角</th><th>矩阵</th><th>直觉（飞机机头朝 +x）</th></tr>
+<tr><td>Yaw 偏航</td><td>$z$ 轴</td><td>$\alpha$</td><td>$R_z(\alpha)=\begin{pmatrix}\cos\alpha&-\sin\alpha&0\\ \sin\alpha&\cos\alpha&0\\0&0&1\end{pmatrix}$ (3.39)</td><td>像开车左转</td></tr>
+<tr><td>Pitch 俯仰</td><td>$y$ 轴</td><td>$\beta$</td><td>$R_y(\beta)=\begin{pmatrix}\cos\beta&0&\sin\beta\\0&1&0\\-\sin\beta&0&\cos\beta\end{pmatrix}$ (3.40)</td><td>机头抬起/低下</td></tr>
+<tr><td>Roll 翻滚</td><td>$x$ 轴</td><td>$\gamma$</td><td>$R_x(\gamma)=\begin{pmatrix}1&0&0\\0&\cos\gamma&-\sin\gamma\\0&\sin\gamma&\cos\gamma\end{pmatrix}$ (3.41)</td><td>机翼左右倾斜</td></tr>
+</table></div>
+<p>每个矩阵都是 2D 旋转矩阵的简单扩展：$R_z(\alpha)$ 的左上 $2\times2$ 块就是 $R(\alpha)$，第三行第三列像单位阵，表示 $z$ 坐标不变。三者相乘得到一个能表示任意朝向的矩阵：</p>
+$$R(\alpha,\beta,\gamma)=R_z(\alpha)R_y(\beta)R_x(\gamma)=\begin{pmatrix}
+c\alpha\,c\beta & c\alpha\,s\beta\,s\gamma-s\alpha\,c\gamma & c\alpha\,s\beta\,c\gamma+s\alpha\,s\gamma\\
+s\alpha\,c\beta & s\alpha\,s\beta\,s\gamma+c\alpha\,c\gamma & s\alpha\,s\beta\,c\gamma-c\alpha\,s\gamma\\
+-s\beta & c\beta\,s\gamma & c\beta\,c\gamma
+\end{pmatrix} \tag{3.42}$$
+<p>（$c=\cos,\ s=\sin$。）</p>
+<div class="pit"><b>陷阱 3：顺序是 roll → pitch → yaw，而且每一步都绕「世界轴」</b>
+<p>$R(\alpha,\beta,\gamma)\,p=R_z(\alpha)\big(R_y(\beta)\big(R_x(\gamma)p\big)\big)$：最靠近 $p$ 的 $R_x$ 最先作用。换顺序会得到不同的矩阵。更微妙的是：最后施加的 yaw 是绕<strong>世界系的 $z$ 轴</strong>，不是飞机此刻的机体 $z$ 轴。若 $\beta=\gamma=0$，两者重合，yaw 感觉像转车；但 $\beta,\gamma$ 任意时，飞机已经歪了，yaw 轴和机身不再对齐。每个从左边乘进来的新矩阵都不关心机体系，它只是把 $\mathbb R^3$ 中所有点按世界系转一下。</p></div>
+<p>3D 旋转有三个参数 $\alpha,\beta,\gamma$，2D 只有一个 $\theta$。变换后的机器人记作 $\mathcal A(\alpha,\beta,\gamma)$。</p>
+<h4>从旋转矩阵反解 yaw、pitch、roll</h4>
+<p>给定任意旋转矩阵 $(r_{ij})$，与 (3.42) 逐项比较：$r_{21}/r_{11}=\tan\alpha$，$r_{32}/r_{33}=\tan\gamma$，$r_{31}=-\sin\beta$，$\sqrt{r_{32}^2+r_{33}^2}=\cos\beta$。反正切有四个象限可选，按分子分母的符号确定，这正是 C 语言 <code>atan2</code> 做的事：</p>
+$$\alpha=\operatorname{atan2}(r_{21},r_{11}),\qquad
+\beta=\operatorname{atan2}\!\Big(-r_{31},\sqrt{r_{32}^2+r_{33}^2}\Big),\qquad
+\gamma=\operatorname{atan2}(r_{32},r_{33}). \tag{3.47–3.49}$$
+<p>此法假定 $r_{11}\ne0,\ r_{33}\ne0$（$\beta=\pm\pi/2$ 时失效，即万向节死锁，见习题 2）。</p>
+
+<div class="lab" id="lab-ypr">
+  <div class="lab-head"><span class="tag">LAB 5</span><h4>Yaw-Pitch-Roll：顺序与世界轴（对应 Fig 3.8、(3.42)）</h4>
+  <p class="hint">灰色是世界系，彩色三轴是画在飞机上的体坐标系（机头 +x）。拖动画布旋转视角。右侧给出 $R(\alpha,\beta,\gamma)$ 的数值，以及用 atan2 从矩阵反解出的三个角，用来验证 (3.47–3.49)。</p></div>
+  <canvas class="orbit" tabindex="0" aria-label="三维 yaw pitch roll 交互图"></canvas>
+  <div class="ctl">
+    <label><span>α yaw</span><input type="range" data-k="al" min="-180" max="180" step="1" value="40" data-unit="deg"><output></output></label>
+    <label><span>β pitch</span><input type="range" data-k="be" min="-89" max="89" step="1" value="20" data-unit="deg"><output></output></label>
+    <label><span>γ roll</span><input type="range" data-k="ga" min="-180" max="180" step="1" value="30" data-unit="deg"><output></output></label>
+    <div class="row"><button class="btn" data-k="anim">▶ 按 roll → pitch → yaw 顺序演示</button><button class="btn" data-k="reset">归零</button></div>
+    <div class="row"><label class="chk"><input type="checkbox" data-k="bodyz" checked> 显示 yaw 的真实旋转轴（世界 z）</label></div>
+    <div class="readout" data-k="out"></div>
+    <div class="sub">试一试：① 先设 $\beta=60°,\gamma=0$，再拉 $\alpha$：飞机绕世界 $z$（竖直虚线）打转，而不是绕自己歪掉的机体 $z$ 轴。② 把 $\beta$ 推到 $\pm89°$，反解出的 $\alpha,\gamma$ 开始剧烈抖动，这是万向节死锁的前兆。③ 点「演示」，看三步依次作用的效果。</div>
+  </div>
+</div>
+
+<h4>3D 齐次变换矩阵</h4>
+<p>把 $R(\alpha,\beta,\gamma)$ 放进 $4\times4$ 矩阵的左上角，平移放最后一列：</p>
+$$T=\begin{pmatrix} R(\alpha,\beta,\gamma) & \begin{matrix}x_t\\y_t\\z_t\end{matrix}\\ \begin{matrix}0&0&0\end{matrix} & 1\end{pmatrix} \tag{3.50}$$
+<p>它表示的操作顺序是：① roll $\gamma$，② pitch $\beta$，③ yaw $\alpha$，④ 平移 $(x_t,y_t,z_t)$。能平移又能旋转的 3D 刚体有 <strong>6 个自由度</strong>，记作 $\mathcal A(x_t,y_t,z_t,\alpha,\beta,\gamma)$。</p>
+<div class="why"><b>延伸：为什么第 4 章要换成四元数</b>
+<p>yaw-pitch-roll（欧拉角的一种，共有 12 种轴序变体）最容易理解，适合做快速的 3D 动画，但它<strong>没有正确刻画旋转空间的结构</strong>：同一个旋转对应多组角，$\beta=\pm\pi/2$ 时还退化。规划算法在意的是状态空间的拓扑，所以第 4.2 节会引入四元数。两种都要会：欧拉角用来构造例子，四元数用来做规划。</p></div>
+</section>
+<!-- ============================ 3.3 ============================ -->
+<section id="s33">
+<h2><span class="num">3.3</span>运动链的变换 Transforming Kinematic Chains</h2>
+<p>多个刚体连在一起，变换就复杂了。每个刚体叫一个<em class="term">连杆</em>（link），记 $\mathcal A_1,\dots,\mathcal A_m$。对 $1\le i<m$，$\mathcal A_i$ 与 $\mathcal A_{i+1}$「连接」，使后者相对前者只能做某种受限运动（像拖车挂在车尾的挂钩，只能转）。连接起来的一组刚体叫<em class="term">连杆机构</em>（linkage）；连成一条单链的叫<em class="term">运动链</em>（kinematic chain）。</p>
+
+<h3 id="s331"><span class="num">3.3.1</span>2D 运动链</h3>
+<h4>连接会吃掉自由度</h4>
+<p>两个互不相连的 2D 刚体各有 3 个自由度，合计 6 个：$x_1,y_1,\theta_1,x_2,y_2,\theta_2$。连接处叫<em class="term">关节</em>（joint）。2D 有两种：</p>
+<ul>
+  <li><em class="term">转动关节</em>（revolute joint）：一个连杆只能相对另一个转动。</li>
+  <li><em class="term">移动关节</em>（prismatic joint）：一个连杆沿另一个滑动。</li>
+</ul>
+<p>每种关节都从这对刚体上<strong>拿掉 2 个自由度</strong>。以转动关节为例：$\mathcal A_2$ 体坐标系的原点 $(0,0)$ 永久固定在 $\mathcal A_1$ 体坐标系中的某点 $(x_a,y_a)$ 上，于是 $\mathcal A_2$ 的平移完全由 $x_a,y_a$ 决定（它们又取决于 $x_1,y_1,\theta_1$）。两杆合计 4 个自由度：$x_1,y_1,\theta_1,\theta_2$。</p>
+
+<h4>体坐标系怎么放</h4>
+<p>单刚体时，体坐标系原点决定旋转轴。对链中的连杆，为了少吃苦头，约定（Fig 3.10）：</p>
+<ul>
+  <li>$\mathcal A_i$（$i>1$）的原点放在它与 $\mathcal A_{i-1}$ 的关节处；</li>
+  <li>$x_i$ 轴沿 $\mathcal A_i$ 上两个关节的连线方向；</li>
+  <li>最后一杆 $\mathcal A_m$ 的 $x_m$ 轴可任意，原点仍在与 $\mathcal A_{m-1}$ 的关节处；</li>
+  <li>第一杆 $\mathcal A_1$ 按单刚体的考虑放置。</li>
+</ul>
+<p>令 $a_{i-1}$ 为 $\mathcal A_{i-1}$ 上两个关节之间的距离，$\theta_i$ 为 $\mathcal A_i$ 相对 $\mathcal A_{i-1}$ 的转角。</p>
+
+<h4>2D 链的齐次变换矩阵</h4>
+<p>第一杆用普通的 (3.35)：</p>
+$$T_1=\begin{pmatrix}\cos\theta_1&-\sin\theta_1&x_t\\ \sin\theta_1&\cos\theta_1&y_t\\0&0&1\end{pmatrix}. \tag{3.51}$$
+<p>其后每一杆（$1<i\le m$）：</p>
+$$T_i=\begin{pmatrix}\cos\theta_i&-\sin\theta_i&a_{i-1}\\ \sin\theta_i&\cos\theta_i&0\\0&0&1\end{pmatrix}, \tag{3.52}$$
+<p>含义是：① 逆时针转 $\theta_i$；② 沿 $x$ 轴平移 $a_{i-1}$。$T_i$ 表达的是<strong> $\mathcal A_i$ 的体坐标系相对 $\mathcal A_{i-1}$ 的体坐标系的差别</strong>：对 $\mathcal A_i$ 的点施加 $T_i$，就把它从自己的体坐标系搬到了 $\mathcal A_{i-1}$ 的体坐标系；再施加 $T_{i-1}$，又搬到 $\mathcal A_{i-2}$ 的体坐标系……一路搬到世界：</p>
+$$T_1T_2\cdots T_m\begin{pmatrix}x\\y\\1\end{pmatrix}. \tag{3.53}$$
+<div class="why"><b>为什么是从右往左、从末端往根部？</b>
+<p>$T_1T_2T_3\,p$ 先算 $T_3p$（$\mathcal A_3$ 的点 → $\mathcal A_2$ 的坐标系），再 $T_2(\cdot)$（→ $\mathcal A_1$ 的坐标系），最后 $T_1(\cdot)$（→ 世界）。每一步都只处理「相邻两杆的相对位姿」，这就是为什么把 $T_i$ 定义成「相对父杆」的差别后，乘积自然就是绝对位姿。例 3.3 和 Lab 6 把这个过程拆成四步看。</p></div>
+<p>转动关节：$a_i$ 是常数，$\theta_i$ 是变量，第 $m$ 杆写成 $\mathcal A_m(x_t,y_t,\theta_1,\dots,\theta_m)$；若第一杆固定在世界中，则只剩 $\mathcal A_m(\theta_1,\dots,\theta_m)$。移动关节则反过来：$a_i$ 是变量、$\theta_i$ 是常数。两种关节可以混在同一条链里。</p>
+
+<div class="lab" id="lab-chain">
+  <div class="lab-head"><span class="tag">LAB 6</span><h4>三连杆：一步一步把 $\mathcal A_3$ 搬进世界（对应例 3.3、Fig 3.11）</h4>
+  <p class="hint">选择「阶段」观察：$\mathcal A_3$ 在自己的体坐标系里 → 施加 $T_3$ 进入 $\mathcal A_2$ 的坐标系 → 施加 $T_2$ 进入 $\mathcal A_1$ 的坐标系 → 施加 $T_1$ 进入世界。每个阶段里，画布中央的坐标系就是「当前所在的坐标系」。末端点是 $\mathcal A_3$ 体坐标 $(a_3,0)$。</p></div>
+  <canvas tabindex="0" aria-label="三连杆运动链分步变换交互图"></canvas>
+  <div class="ctl">
+    <div class="row"><span class="sub">阶段：</span><div class="seg" data-k="stage"><button aria-pressed="false" data-v="0">A₃ 自身</button><button aria-pressed="false" data-v="1">T₃</button><button aria-pressed="false" data-v="2">T₂T₃</button><button aria-pressed="true" data-v="3">T₁T₂T₃</button></div></div>
+    <label><span>θ₁</span><input type="range" data-k="t1" min="-180" max="180" step="1" value="45" data-unit="deg"><output></output></label>
+    <label><span>θ₂</span><input type="range" data-k="t2" min="-180" max="180" step="1" value="45" data-unit="deg"><output></output></label>
+    <label><span>θ₃</span><input type="range" data-k="t3" min="-180" max="180" step="1" value="45" data-unit="deg"><output></output></label>
+    <label><span>x<sub>t</sub>, y<sub>t</sub></span><input type="range" data-k="xt" min="-2" max="2" step="0.1" value="0" data-dec="1"><output></output></label>
+    <label><span>&nbsp;</span><input type="range" data-k="yt" min="-2" max="2" step="0.1" value="0" data-dec="1"><output></output></label>
+    <div class="row"><span class="sub">杆长 a₁ a₂ a₃：</span><input type="number" data-k="a1" value="1.5" step="0.1" min="0.2" max="3" style="width:64px"><input type="number" data-k="a2" value="1.2" step="0.1" min="0.2" max="3" style="width:64px"><input type="number" data-k="a3" value="1" step="0.1" min="0.2" max="3" style="width:64px"></div>
+    <div class="readout" data-k="out"></div>
+    <div class="sub">试一试：① 在阶段「T₃」里只拉 $\theta_3$：$\mathcal A_3$ 绕 $\mathcal A_2$ 坐标系中 $(a_2,0)$ 这一点转，因为 $T_3$ 是「先转再沿 $x$ 平移 $a_2$」。② 在阶段「T₁T₂T₃」里拉 $\theta_1$，整条链一起转：$\theta_1$ 出现在最左边的矩阵里，影响后面所有连杆。③ 习题 8：把杆长设为 1, 2, 1，角度 45°, 90°, 45°，末端点应为 $(-1-\tfrac{\sqrt2}{2},\ \tfrac{3\sqrt2}{2})\approx(-1.707,\ 2.121)$。</div>
+  </div>
+</div>
+
+<h3 id="s332"><span class="num">3.3.2</span>3D 运动链与 DH 参数</h3>
+<p>3D 的难点仍然是旋转，而且关节类型更多。由两个物体之间 2D 面接触产生的关节有六种（Fig 3.12）：</p>
+<div class="tbl-wrap"><table>
+<tr><th>关节</th><th>自由度</th><th>允许的运动</th></tr>
+<tr><td>Revolute 转动</td><td>1</td><td>绕一根轴转</td></tr>
+<tr><td>Prismatic 移动</td><td>1</td><td>沿一根轴滑</td></tr>
+<tr><td>Screw 螺旋</td><td>1</td><td>绕轴转的同时按固定比例沿轴进（螺丝）</td></tr>
+<tr><td>Cylindrical 圆柱</td><td>2</td><td>绕轴转 + 沿轴滑，彼此独立</td></tr>
+<tr><td>Spherical 球</td><td>3</td><td>绕一点任意转（肩关节，受限版）</td></tr>
+<tr><td>Planar 平面</td><td>3</td><td>在平面内平移 + 转动</td></tr>
+</table></div>
+<p>主思路与 2D 完全一致，四步走：① 为每个 $\mathcal A_i$ 小心放置体坐标系；② 根据关节关系量出几个参数；③ 参数定义齐次矩阵 $T_i$；④ $\mathcal A_m$ 上任意点在世界中的位置是 $T_1T_2\cdots T_m\,p$。</p>
+
+<h4>坐标系的放法：z 轴是转轴，x 轴是公垂线</h4>
+<p>设每对相邻杆由转动关节相连。2D 时坐标系依据「连接点」，3D 时依据「<strong>转动轴</strong>」（它是连接点在 3D 的对应物）。这些轴一般是 $\mathbb R^3$ 中的<em class="term">异面直线</em>（skew lines，Fig 3.14）。</p>
+<ul>
+  <li>$z_i$ 轴：把 $\mathcal A_i$ 连到 $\mathcal A_{i-1}$ 的转动关节的转轴。</li>
+  <li>$x_i$ 轴：连接 $z_i$ 与 $z_{i+1}$ 两条轴之间最近的一对点，原点在 $z_i$ 上，方向指向 $z_{i+1}$ 上的最近点。两轴不平行时它唯一确定。</li>
+  <li>$y_i$ 轴：右手系补齐。</li>
+</ul>
+<p>这个坐标系的原点可能根本不在 $\mathcal A_i$ 的实体上，看起来别扭，但换来的是形式极简的变换矩阵。</p>
+
+<h4>四个 Denavit–Hartenberg 参数</h4>
+<p>2D 的 $T_i$ 只需 $a_{i-1},\theta_i$ 两个参数，3D 需要四个（Fig 3.15）：</p>
+<div class="tbl-wrap"><table>
+<tr><th>参数</th><th>量的是</th><th>沿/绕</th><th>Fig 3.15</th></tr>
+<tr><td>$d_i$</td><td>$x_{i-1}$ 轴与 $x_i$ 轴分别和 $z_i$ 轴相交的两点之间的<strong>带符号</strong>距离（$x_i$ 在 $x_{i-1}$「上方」为正）</td><td>沿 $z_i$</td><td>(a)</td></tr>
+<tr><td>$\theta_i$</td><td>$x_{i-1}$ 转到与 $x_i$ 重合所需的角</td><td>绕 $z_i$</td><td>(b)</td></tr>
+<tr><td>$a_{i-1}$</td><td>$z_{i-1}$ 轴与 $z_i$ 轴之间的距离（沿公垂线）</td><td>沿 $x_{i-1}$</td><td>(c)</td></tr>
+<tr><td>$\alpha_{i-1}$</td><td>$z_{i-1}$ 转到与 $z_i$ 平行所需的角</td><td>绕 $x_{i-1}$</td><td>(d)</td></tr>
+</table></div>
+<div class="pit"><b>陷阱 4：下标不对齐是故意的</b>
+<p>$d_i,\theta_i$ 带下标 $i$，描述的是绕/沿 $z_i$ 的量；$a_{i-1},\alpha_{i-1}$ 带下标 $i-1$，描述的是绕/沿 $x_{i-1}$ 的量。记住「$z$ 的量下标 $i$，$x$ 的量下标 $i-1$」就不会乱。任何参数都可以为正、零、负。</p></div>
+
+<h4>两个「螺旋」拼出 T<sub>i</sub></h4>
+<p>第一个矩阵绕 $z_i$ 转 $\theta_i$ 并沿 $z_i$ 平移 $d_i$：</p>
+$$R_i=\begin{pmatrix}\cos\theta_i&-\sin\theta_i&0&0\\ \sin\theta_i&\cos\theta_i&0&0\\0&0&1&d_i\\0&0&0&1\end{pmatrix}. \tag{3.54}$$
+<p>因为转和移都是关于同一根轴，两者<strong>可交换</strong>。关于同一根轴的转动加平移叫一个<em class="term">螺旋</em>（screw），像螺丝拧进螺母。第二个矩阵是关于 $x_{i-1}$ 的螺旋：转 $\alpha_{i-1}$、移 $a_{i-1}$：</p>
+$$Q_{i-1}=\begin{pmatrix}1&0&0&a_{i-1}\\0&\cos\alpha_{i-1}&-\sin\alpha_{i-1}&0\\0&\sin\alpha_{i-1}&\cos\alpha_{i-1}&0\\0&0&0&1\end{pmatrix}. \tag{3.55}$$
+<p>相乘得到 $1<i\le m$ 的</p>
+$$T_i=Q_{i-1}R_i=\begin{pmatrix}
+\cos\theta_i&-\sin\theta_i&0&a_{i-1}\\
+\sin\theta_i\cos\alpha_{i-1}&\cos\theta_i\cos\alpha_{i-1}&-\sin\alpha_{i-1}&-\sin\alpha_{i-1}\,d_i\\
+\sin\theta_i\sin\alpha_{i-1}&\cos\theta_i\sin\alpha_{i-1}&\cos\alpha_{i-1}&\cos\alpha_{i-1}\,d_i\\
+0&0&0&1\end{pmatrix}. \tag{3.56}$$
+<p>它是 (3.52) 的 3D 对应物，依次执行四个操作：① 沿 $z_i$ 平移 $d_i$；② 绕 $z_i$ 逆时针转 $\theta_i$；③ 沿 $x_{i-1}$ 平移 $a_{i-1}$；④ 绕 $x_{i-1}$ 逆时针转 $\alpha_{i-1}$。</p>
+<p><strong>$T_1$ 的约定</strong>：若第一杆可任意放置，用通用的 (3.50)。若它只能绕一个转动关节转，则令 $a_0=\alpha_0=0$（没有 $z_0$ 轴），$Q_0=I$，于是 $T_1=R_1$。</p>
+<p>$\mathcal A_m$ 上点 $(x,y,z)$ 的世界位置：</p>
+$$T_1T_2\cdots T_m\begin{pmatrix}x\\y\\z\\1\end{pmatrix}. \tag{3.57}$$
+<p>转动关节：只有 $\theta_i$ 是变量。移动关节：让 $a_i$ 变。更复杂的关节可拆成一串退化关节（球关节 = 三个零长度转动关节，依次 roll、pitch、yaw），或干脆放弃 DH、直接写齐次矩阵。后者在第 4 章需要保持拓扑性质时可能是必要的。</p>
+
+<div class="lab" id="lab-dh">
+  <div class="lab-head"><span class="tag">LAB 7</span><h4>DH 四参数：从坐标系 $i-1$ 到坐标系 $i$（对应 Fig 3.15、(3.56)）</h4>
+  <p class="hint">实线坐标系是 $i-1$（固定在原点），虚线坐标系是 $i$。拉动四个参数，右侧显示 (3.56) 的数值矩阵。「分步」可以只看 $Q_{i-1}$ 的效果。拖动画布旋转视角。</p></div>
+  <canvas class="orbit" tabindex="0" aria-label="DH 参数三维交互图"></canvas>
+  <div class="ctl">
+    <label><span>α<sub>i-1</sub></span><input type="range" data-k="al" min="-180" max="180" step="1" value="-60" data-unit="deg"><output></output></label>
+    <label><span>a<sub>i-1</sub></span><input type="range" data-k="a" min="0" max="2.5" step="0.05" value="1.6" data-dec="2"><output></output></label>
+    <label><span>θ<sub>i</sub></span><input type="range" data-k="th" min="-180" max="180" step="1" value="50" data-unit="deg"><output></output></label>
+    <label><span>d<sub>i</sub></span><input type="range" data-k="d" min="-2" max="2" step="0.05" value="0.9" data-dec="2"><output></output></label>
+    <div class="row"><span class="sub">显示：</span><div class="seg" data-k="stage"><button aria-pressed="false" data-v="0">仅 i−1</button><button aria-pressed="false" data-v="1">Q<sub>i−1</sub></button><button aria-pressed="true" data-v="2">T<sub>i</sub>=Q<sub>i−1</sub>R<sub>i</sub></button></div></div>
+    <div class="readout" data-k="out"></div>
+    <div class="sub">试一试：① 只动 $a_{i-1}$：坐标系 $i$ 沿红色 $x_{i-1}$ 轴滑动，这就是两条 $z$ 轴之间的公垂线长度。② 只动 $\alpha_{i-1}$：蓝色 $z_i$ 轴绕 $x_{i-1}$ 倾斜。③ 只动 $d_i$ 和 $\theta_i$：坐标系 $i$ 沿自己的 $z_i$ 轴滑动和自转，这是关节的「螺旋」自由度。④ 让 $a=0,\alpha=0$：两条 $z$ 轴重合，$T_i=R_i$，这正是 $T_1$ 的约定。</div>
+  </div>
+</div>
+
+<h4>例 3.4：PUMA 560</h4>
+<p>经典六轴机械臂。前三个关节让手（末端执行器，end-effector）在 $\mathcal W$ 中大范围移动，后三个决定手的朝向。六个自由度全部来自转动关节，所以每个 $T_i$ 只是 $\theta_i$ 的函数，记 $T_i(\theta_i)$。DH 参数表（Fig 3.17）：</p>
+<div class="tbl-wrap"><table>
+<tr><th>矩阵</th><th>$\alpha_{i-1}$</th><th>$a_{i-1}$</th><th>$\theta_i$</th><th>$d_i$</th></tr>
+<tr><td>$T_1(\theta_1)$</td><td>0</td><td>0</td><td>$\theta_1$</td><td>0</td></tr>
+<tr><td>$T_2(\theta_2)$</td><td>$-\pi/2$</td><td>0</td><td>$\theta_2$</td><td>$d_2$</td></tr>
+<tr><td>$T_3(\theta_3)$</td><td>0</td><td>$a_2$</td><td>$\theta_3$</td><td>$d_3$</td></tr>
+<tr><td>$T_4(\theta_4)$</td><td>$\pi/2$</td><td>$a_3$</td><td>$\theta_4$</td><td>$d_4$</td></tr>
+<tr><td>$T_5(\theta_5)$</td><td>$-\pi/2$</td><td>0</td><td>$\theta_5$</td><td>0</td></tr>
+<tr><td>$T_6(\theta_6)$</td><td>$\pi/2$</td><td>0</td><td>$\theta_6$</td><td>0</td></tr>
+</table></div>
+<p>注意 $a_3,d_3$ 在这个例子里是<strong>负数</strong>：它们是带符号的位移，不是距离。把表代入 (3.56)，例如</p>
+$$T_2(\theta_2)=\begin{pmatrix}\cos\theta_2&-\sin\theta_2&0&0\\0&0&1&d_2\\-\sin\theta_2&-\cos\theta_2&0&0\\0&0&0&1\end{pmatrix},\qquad
+T_4(\theta_4)=\begin{pmatrix}\cos\theta_4&-\sin\theta_4&0&a_3\\0&0&-1&-d_4\\ \sin\theta_4&\cos\theta_4&0&0\\0&0&0&1\end{pmatrix}.$$
+<p>（$\alpha=-\pi/2$ 使 $\cos\alpha=0,\sin\alpha=-1$，于是第二、三行交换并变号，自己代一遍是很好的练习。）末端连杆 $\mathcal A_6$ 上的点在世界中的位置为 $T_1(\theta_1)\cdots T_6(\theta_6)\,(x,y,z,1)^{\mathsf T}$（3.64）。</p>
+
+<div class="lab" id="lab-puma">
+  <div class="lab-head"><span class="tag">LAB 8</span><h4>PUMA 560：六个 $\theta$，一次矩阵连乘（对应例 3.4、Fig 3.16）</h4>
+  <p class="hint">直接用上面的 DH 表和 (3.56) 算出 $T_1\cdots T_6$，把每个坐标系的原点连成线就是「火柴棍」机械臂。小坐标系是各 $\mathcal A_i$ 的体坐标系，大的是末端坐标系。杆长数值为示意（$a_2=0.43,\ a_3=-0.02,\ d_2=0.15,\ d_3=-0.13,\ d_4=0.43$）。</p></div>
+  <canvas class="orbit" tabindex="0" aria-label="PUMA 560 机械臂三维交互图"></canvas>
+  <div class="ctl">
+    <label><span>θ₁ 腰</span><input type="range" data-k="t1" min="-180" max="180" step="1" value="30" data-unit="deg"><output></output></label>
+    <label><span>θ₂ 肩</span><input type="range" data-k="t2" min="-180" max="180" step="1" value="-50" data-unit="deg"><output></output></label>
+    <label><span>θ₃ 肘</span><input type="range" data-k="t3" min="-180" max="180" step="1" value="40" data-unit="deg"><output></output></label>
+    <label><span>θ₄</span><input type="range" data-k="t4" min="-180" max="180" step="1" value="0" data-unit="deg"><output></output></label>
+    <label><span>θ₅</span><input type="range" data-k="t5" min="-180" max="180" step="1" value="60" data-unit="deg"><output></output></label>
+    <label><span>θ₆</span><input type="range" data-k="t6" min="-180" max="180" step="1" value="0" data-unit="deg"><output></output></label>
+    <div class="row"><label class="chk"><input type="checkbox" data-k="frames" checked> 显示各连杆体坐标系</label><button class="btn" data-k="zero">全部归零</button></div>
+    <div class="readout" data-k="out"></div>
+    <div class="sub">试一试：① 全部归零看「零构型」，再只动 $\theta_1$：整臂绕世界 $z$ 转，因为 $T_1$ 在最左边。② 只动 $\theta_4$ 或 $\theta_6$：末端位置几乎不变、只有朝向变，这就是「后三轴管朝向」。③ 对比 $\theta_2$ 与 $\theta_3$：肘关节 $\theta_3$ 只带动前臂，肩关节带动整条臂，矩阵越靠左影响越大。</div>
+  </div>
+</div>
+
+<h4>例 3.5：辛烷分子</h4>
+<p>辛烷 C<sub>8</sub>H<sub>18</sub> 有 8 个碳原子排成一条链（忽略氢）。每根 C–C 键都可以<strong>扭转</strong>，研究分子的构型（化学上叫构象，conformation）是计算生物学的重要课题。假定有 7 个自由度，每个来自一根键的扭转。把它当成运动链，DH 参数的对应关系非常漂亮：</p>
+<ul>
+  <li>键恰好是转轴，所以 $z_i$ 轴取在键上；</li>
+  <li>相邻的键相交于原子，两条 $z$ 轴之间距离为零：<strong>$a_i=0$</strong>；</li>
+  <li>$d_i$ = 键长（相邻碳原子的距离）；</li>
+  <li>$\alpha_i$ = 相邻两轴的夹角，必须保持不变，化学上叫<strong>键角</strong>（bond angle）；</li>
+  <li>$\theta_i$ 是变量，即扭转角（dihedral/torsion angle）。</li>
+</ul>
+<p>因为 $a_i=0$，$x_i$ 轴的方向本来是不确定的（退化），但不碍事。每根键看作一个连杆 $\mathcal A_i$，原点取在 $z_i$ 与 $z_{i+1}$ 的交点（即一个原子），所以 $\mathcal A_i$ 的大部分点落在 $-z_i$ 方向（Fig 3.20）。世界系贴在第一根键上，第二个原子在原点，键沿 $-z$ 方向。$T_1=R_1$，取 $d_1=0$；其余 $i\in\{2,\dots,7\}$ 用 (3.56) 并代 $a_{i-1}=0$：</p>
+$$T_i(\theta_i)=\begin{pmatrix}\cos\theta_i&-\sin\theta_i&0&0\\ \sin\theta_i\cos\alpha_{i-1}&\cos\theta_i\cos\alpha_{i-1}&-\sin\alpha_{i-1}&-\sin\alpha_{i-1}d_i\\ \sin\theta_i\sin\alpha_{i-1}&\cos\theta_i\sin\alpha_{i-1}&\cos\alpha_{i-1}&\cos\alpha_{i-1}d_i\\0&0&0&1\end{pmatrix}. \tag{3.66}$$
+
+<div class="lab" id="lab-octane">
+  <div class="lab-head"><span class="tag">LAB 9</span><h4>辛烷骨架：$a_i=0$ 的运动链（对应例 3.5、Fig 3.19/3.20）</h4>
+  <p class="hint">8 个碳原子就是 8 个坐标系原点，7 根键沿各 $z_i$ 轴。键长 $d=1.54$ Å，键角 109.5°（对应 DH 的 $\alpha=70.5°$）。拉动扭转角看构象变化。</p></div>
+  <canvas class="orbit" tabindex="0" aria-label="辛烷分子骨架三维交互图"></canvas>
+  <div class="ctl">
+    <label><span>θ₂</span><input type="range" data-k="t2" min="-180" max="180" step="1" value="180" data-unit="deg"><output></output></label>
+    <label><span>θ₃</span><input type="range" data-k="t3" min="-180" max="180" step="1" value="180" data-unit="deg"><output></output></label>
+    <label><span>θ₄</span><input type="range" data-k="t4" min="-180" max="180" step="1" value="180" data-unit="deg"><output></output></label>
+    <label><span>θ₅</span><input type="range" data-k="t5" min="-180" max="180" step="1" value="180" data-unit="deg"><output></output></label>
+    <label><span>θ₆</span><input type="range" data-k="t6" min="-180" max="180" step="1" value="180" data-unit="deg"><output></output></label>
+    <label><span>θ₇</span><input type="range" data-k="t7" min="-180" max="180" step="1" value="180" data-unit="deg"><output></output></label>
+    <div class="row"><button class="btn" data-k="trans">全反式 (180°)</button><button class="btn" data-k="gauche">交错 ±60°</button><button class="btn" data-k="cis">全顺式 (0°)</button></div>
+    <div class="row"><label class="chk"><input type="checkbox" data-k="axes"> 显示各键的 $z_i$ 轴坐标系</label></div>
+    <div class="readout" data-k="out"></div>
+    <div class="sub">试一试：① 全反式是平面锯齿（最稳定的构象）；全顺式把链卷成一个近似的环。② 只动 $\theta_4$：中间那根键扭转，两端整体相对旋转，键长和键角始终不变，这正是 DH 中只有 $\theta$ 可变的意思。③ 勾选坐标系：每根键就是一根蓝色 $z$ 轴。</div>
+  </div>
+</div>
+</section>
+<!-- ============================ 3.4 ============================ -->
+<section id="s34">
+<h2><span class="num">3.4</span>运动树的变换 Transforming Kinematic Trees</h2>
+<p>很多有趣的系统不是一条链，而是一棵<strong>树</strong>（Fig 3.21a）：人体的四肢和头都挂在躯干上，膝、肘是转动关节，肩近似球关节；大多数有机分子也是树状的。本节假定<strong>没有环</strong>（Fig 3.21b 的情形推到第 4.4 节，本节末尾略谈）。</p>
+<div class="why"><b>为什么要在意分子</b>
+<p>药物设计要判断一个候选分子能否扭成合适的形状，低能量地「停靠」进蛋白质的空腔；蛋白质折叠问题的分子又比药物大几个数量级。两者都要在构象空间里搜索，而构象空间正是用运动树参数化的（7.5 节）。</p></div>
+
+<h4>最简单的情况</h4>
+<p>2D 树，每个连杆最多两个关节：指定一个连杆为根 $\mathcal A_1$。要变换任意 $\mathcal A_i$，沿着从 $\mathcal A_i$ 到根的那条链，直接用 3.3.1 节的方法，忽略其他连杆。每个连杆贡献一个 $\theta_i$。</p>
+
+<h4>分叉点：一个连杆挂着多个关节</h4>
+<p>麻烦出在有三个或更多关节的连杆，叫<em class="term">分叉点</em>（junction，Fig 3.22 的 $\mathcal A_7$）。</p>
+<ul>
+  <li><strong>只有一个分叉点</strong>：把它选作根就基本没事了。人形模型里躯干就是分叉点，让它当根（而不是右脚），四肢和头各是一条独立的链。唯一要处理的是各链第一杆不挂在躯干同一点上：插入一个<strong>固定的、虚拟的连杆</strong>，从躯干原点连到肢体的挂点即可。</li>
+  <li><strong>多个分叉点</strong>：以 Fig 3.22 为例，根 $\mathcal A_1$ 经一条链连到 $\mathcal A_5$。变换 $\mathcal A_9$ 用
+  $T_1\cdots T_5T_6T_7T_8T_9$ (3.68)，变换 $\mathcal A_{13}$ 用 $T_1\cdots T_5T_6T_7T_{12}T_{13}$ (3.69)。看似没问题，但 $\mathcal A_7$ 的体坐标系被<strong>定义了两次</strong>（Fig 3.23）：走上链时 $x_7$ 指向 $\mathcal A_8$ 的关节，走下链时指向 $\mathcal A_{12}$ 的关节。要强迫两者用同一个坐标系，至少一条链得放弃 3.3.1 节漂亮的坐标系约定；3D 时意味着放弃 DH。</li>
+</ul>
+
+<h4>解法：允许两个坐标系，但加一个约束</h4>
+<p>用两个坐标系没问题，只是需要一条额外信息。想象变换整棵树，$\theta_7$ 会出现两次：上链里的 $\theta_{7u}$ 和下链里的 $\theta_{7l}$。它们能独立取值吗？不能，否则相当于 $\mathcal A_7$ 被劈成两个独立转动的连杆 $\mathcal A_{7u},\mathcal A_{7l}$（Fig 3.24），忘记了它是刚体。所以把 $\theta_{7l}$ 当独立变量，并强制</p>
+$$\theta_{7u}=\theta_{7l}+\phi,$$
+<p>$\phi$ 是两个坐标系 $x$ 轴之间的固定夹角（Fig 3.23），由连杆形状决定。</p>
+<p><strong>例 3.6（2D 树）</strong>：六个连杆，$\mathcal A_2$ 是分叉点，$\phi=\pi/4$。变换 $\mathcal A_6$ 走下链：$T_1T_{2l}T_5T_6$ (3.70)；变换 $\mathcal A_4$ 走上链：$T_1T_{2u}T_3T_4$ (3.75)，其中有趣的是</p>
+$$T_{2u}=\begin{pmatrix}\cos\theta_{2u}&-\sin\theta_{2u}&a_1\\ \sin\theta_{2u}&\cos\theta_{2u}&0\\0&0&1\end{pmatrix}=\begin{pmatrix}\cos(\theta_{2l}+\pi/4)&-\sin(\theta_{2l}+\pi/4)&a_1\\ \sin(\theta_{2l}+\pi/4)&\cos(\theta_{2l}+\pi/4)&0\\0&0&1\end{pmatrix}, \tag{3.78}$$
+<p>约束 $\theta_{2u}=\theta_{2l}+\pi/4$ 体现了 $\mathcal A_2$ 是一个刚体。</p>
+
+<div class="lab" id="lab-tree">
+  <div class="lab-head"><span class="tag">LAB 10</span><h4>带分叉的树：一个连杆、两个坐标系、一条约束（对应例 3.6、Fig 3.23/3.25）</h4>
+  <p class="hint">三角形的 $\mathcal A_2$ 是分叉点。实线坐标系是走下链（→$\mathcal A_5$→$\mathcal A_6$）时的 $x_{2l}$，虚线是走上链（→$\mathcal A_3$→$\mathcal A_4$）时的 $x_{2u}$，两者夹角固定为 $\phi=45°$。你只能控制 $\theta_2=\theta_{2l}$，$\theta_{2u}$ 由约束自动算出。为了看得清楚，这里取 $a_3=1$（书中为 0）。</p></div>
+  <canvas tabindex="0" aria-label="二维运动树交互图"></canvas>
+  <div class="ctl">
+    <label><span>θ₁</span><input type="range" data-k="t1" min="-180" max="180" step="1" value="10" data-unit="deg"><output></output></label>
+    <label><span>θ₂ = θ₂ₗ</span><input type="range" data-k="t2" min="-180" max="180" step="1" value="-20" data-unit="deg"><output></output></label>
+    <label><span>θ₃ (上)</span><input type="range" data-k="t3" min="-180" max="180" step="1" value="30" data-unit="deg"><output></output></label>
+    <label><span>θ₄ (上)</span><input type="range" data-k="t4" min="-180" max="180" step="1" value="40" data-unit="deg"><output></output></label>
+    <label><span>θ₅ (下)</span><input type="range" data-k="t5" min="-180" max="180" step="1" value="20" data-unit="deg"><output></output></label>
+    <label><span>θ₆ (下)</span><input type="range" data-k="t6" min="-180" max="180" step="1" value="-50" data-unit="deg"><output></output></label>
+    <div class="row"><label class="chk"><input type="checkbox" data-k="break"> 忘记约束：让 θ₂ᵤ 独立（Fig 3.24 的错误）</label></div>
+    <label><span>θ₂ᵤ 独立值</span><input type="range" data-k="t2u" min="-180" max="180" step="1" value="25" data-unit="deg" disabled><output></output></label>
+    <div class="readout" data-k="out"></div>
+    <div class="sub">试一试：① 拉 $\theta_2$：两条链一起转，三角形保持刚性。② 勾选「忘记约束」再拉 $\theta_{2u}$：三角形被撕开成两块，这就是 Fig 3.24 里多出一个假自由度的错误。③ 数一数自由度：6 个 $\theta$，正好 6 个连杆，分叉点并没有多给自由度。</div>
+  </div>
+</div>
+
+<p>3D 树遵循同样的原则。有些情况完全不需要特殊处理，例如柔性分子：相邻转轴都相交，分叉点正好落在交点上。一般情况下，对每条链用 DH，再确定并施加适当的约束来表达树的真实自由度。Khalil–Kleinfinger 参数化是 DH 的优雅扩展，系统地解决了树（和环）的坐标系分配问题。</p>
+
+<h4>如果有环呢？</h4>
+<p>最一般的情形是连杆连成<em class="term">闭合运动链</em>（closed kinematic chain，Fig 3.26）。例子很多：人形机器人双脚着地；两台 PUMA 一起抬一个物体；移动机器人们合力搬钢琴（Fig 1.5）；大量有机分子含柔性环。</p>
+<p>难点不在变换本身，而在<strong>哪些参数值能保证环是闭的</strong>。给定一组合法的参数，变换和树一样做：假装忘掉某个关节（比如 $\mathcal A_5$–$\mathcal A_6$ 之间的），环就断成两条链（Fig 3.27）：上链 $\mathcal A_1\to\mathcal A_5$，下链 $\mathcal A_{10}\to\mathcal A_6$，从同一个最左关节出发。那个被忘掉的关节，用两条链各算一次位置：</p>
+$$T_1(\theta_1)T_2(\theta_2)T_3(\theta_3)T_4(\theta_4)T_5(\theta_5)\begin{pmatrix}a_5\\0\\1\end{pmatrix}
+=T_{10}(\theta_{10})T_9(\theta_9)T_8(\theta_8)T_7(\theta_7)T_6(\theta_6)\begin{pmatrix}a_6\\0\\1\end{pmatrix}. \tag{3.81}$$
+<p>这是一团非线性三角方程，解集可能非常复杂。不要求闭合时有 10 个自由度；要求闭合则减 2（公共关节是转动关节，只去掉 2 个），剩 <strong>8</strong>；若 $\mathcal A_5,\mathcal A_6$ 必须刚性连接则只剩 7。对大多数带环问题，解集没有漂亮的参数化。这是经典的<em class="term">逆运动学</em>（inverse kinematics）问题的一种形式。</p>
+<p>多个环就迭代地「忘掉」关节，每忘一个少一个环，直到变成树；每个被忘掉的关节贡献一条形如 (3.81) 的方程，必须同时满足。实践中的困难是：用动作捕捉得到某一时刻的参数很容易，但模型一动，就很难保证新参数仍满足闭合约束。数字演员的脚会穿过地板。更多讨论见 4.4 节。</p>
+
+<div class="lab" id="lab-loop">
+  <div class="lab-head"><span class="tag">LAB 11</span><h4>把环断成两条链：闭合约束 (3.81)（对应 Fig 3.26/3.27）</h4>
+  <p class="hint">十根等长连杆，在 $\mathcal A_5$–$\mathcal A_6$ 处断开。蓝色是上链 $\mathcal A_1\ldots\mathcal A_5$，绿色是下链 $\mathcal A_{10}\ldots\mathcal A_6$。两条链末端之间的红色虚线是「闭合误差」。初始为正十边形（闭合）。</p></div>
+  <canvas tabindex="0" aria-label="闭环连杆机构交互图"></canvas>
+  <div class="ctl">
+    <div class="sub">上链（蓝）：</div>
+    <label><span>θ₁</span><input type="range" data-k="t1" min="-180" max="180" step="1" value="72" data-unit="deg"><output></output></label>
+    <label><span>θ₂</span><input type="range" data-k="t2" min="-180" max="180" step="1" value="-36" data-unit="deg"><output></output></label>
+    <label><span>θ₃</span><input type="range" data-k="t3" min="-180" max="180" step="1" value="-36" data-unit="deg"><output></output></label>
+    <label><span>θ₄</span><input type="range" data-k="t4" min="-180" max="180" step="1" value="-36" data-unit="deg"><output></output></label>
+    <label><span>θ₅</span><input type="range" data-k="t5" min="-180" max="180" step="1" value="-36" data-unit="deg"><output></output></label>
+    <div class="sub">下链（绿）：</div>
+    <label><span>θ₁₀</span><input type="range" data-k="t10" min="-180" max="180" step="1" value="-72" data-unit="deg"><output></output></label>
+    <label><span>θ₉</span><input type="range" data-k="t9" min="-180" max="180" step="1" value="36" data-unit="deg"><output></output></label>
+    <label><span>θ₈</span><input type="range" data-k="t8" min="-180" max="180" step="1" value="36" data-unit="deg"><output></output></label>
+    <label><span>θ₇</span><input type="range" data-k="t7" min="-180" max="180" step="1" value="36" data-unit="deg"><output></output></label>
+    <label><span>θ₆</span><input type="range" data-k="t6" min="-180" max="180" step="1" value="36" data-unit="deg"><output></output></label>
+    <div class="row"><button class="btn" data-k="solve">⟲ 用 θ₄、θ₅ 闭合环（解 (3.81)）</button><button class="btn" data-k="reset">复位十边形</button></div>
+    <div class="readout" data-k="out"></div>
+    <div class="sub">试一试：① 随便动一个角，环立刻裂开（红色虚线）。② 点「闭合」：固定其余 8 个角，只调 $\theta_4,\theta_5$ 让两端重合，这就是 (3.81) 的一个两未知数特例，有两个解（肘上/肘下）或无解。③ 自由度核算：10 个角，2 个被方程吃掉，剩 8 个可以自由改。</div>
+  </div>
+</div>
+</section>
+
+<!-- ============================ 3.5 ============================ -->
+<section id="s35">
+<h2><span class="num">3.5</span>非刚体变换 Nonrigid Transformations</h2>
+<p>很容易想象对非刚体做运动规划，这超出了前面几节的变换族。简要列举几类。</p>
+<h4>线性变换</h4>
+<p>旋转是线性变换的特例。一般的线性变换由 $n\times n$ 矩阵 $M$ 给出：</p>
+$$\begin{pmatrix}m_{11}&m_{12}\\m_{21}&m_{22}\end{pmatrix}\begin{pmatrix}x\\y\end{pmatrix}. \tag{3.82}$$
+<p>$M$ 是旋转矩阵时大小形状不变。若允许变形：</p>
+<ul>
+  <li><strong>缩放</strong>：$\operatorname{diag}(m_{11},m_{22})$，沿 $x$ 放大 $m_{11}$ 倍、沿 $y$ 放大 $m_{22}$ 倍（均为正）；其中一个取负就得到<strong>镜像</strong>。(3.83)</li>
+  <li><strong>剪切</strong>：$\begin{pmatrix}1&m_{12}\\0&1\end{pmatrix}$，$m_{12}\ne0$；Fig 3.28 画的是 $m_{12}=1$。(3.84)</li>
+</ul>
+<p>缩放、剪切、旋转矩阵可以相乘，得到显式参数化各效果的一般矩阵；也可以升维到 $(n+1)\times(n+1)$ 加入平移，并直接推广到 $\mathbb R^3$。这样 3.2–3.4 节的框架就能顺带包含缩放和剪切。</p>
+
+<div class="lab" id="lab-linear">
+  <div class="lab-head"><span class="tag">LAB 12</span><h4>一般 2×2 线性变换：哪些是刚体变换？</h4>
+  <p class="hint">直接拉四个矩阵元。右侧判断：行列式（面积缩放比、负号即镜像）和 $M^{\mathsf T}M=I$ 是否成立（成立且 $\det=+1$ 才是旋转）。</p></div>
+  <canvas tabindex="0" aria-label="线性变换交互图"></canvas>
+  <div class="ctl">
+    <label><span>m₁₁</span><input type="range" data-k="m11" min="-2" max="2" step="0.05" value="1" data-dec="2"><output></output></label>
+    <label><span>m₁₂</span><input type="range" data-k="m12" min="-2" max="2" step="0.05" value="0" data-dec="2"><output></output></label>
+    <label><span>m₂₁</span><input type="range" data-k="m21" min="-2" max="2" step="0.05" value="0" data-dec="2"><output></output></label>
+    <label><span>m₂₂</span><input type="range" data-k="m22" min="-2" max="2" step="0.05" value="1" data-dec="2"><output></output></label>
+    <div class="row"><button class="btn" data-k="rot">旋转 30°</button><button class="btn" data-k="scale">缩放</button><button class="btn" data-k="mirror">镜像</button><button class="btn" data-k="shear">剪切 m₁₂=1</button><button class="btn" data-k="id">I</button></div>
+    <div class="readout" data-k="out"></div>
+    <div class="sub">试一试：① 「镜像」：$\det=-1$，字母 F 翻成了反的，距离都没变却不是刚体变换，这正是定义里「保定向」那一条的作用。② 「剪切」：面积不变（$\det=1$）但角度变了。③ 手动把矩阵调成 $\begin{pmatrix}0&-1\\1&0\end{pmatrix}$，看判定变成「旋转 90°」。</div>
+  </div>
+</div>
+
+<h4>柔性材料</h4>
+<p>把床垫搬过门：可以把床垫近似成二维的连杆阵列，但复杂度和自由度都太高。100 个转动关节的蛇形机器人用 3.3 节的方法要 100 个 $\theta$，规划起来过于笨重。替代方案是用<strong>参数化的曲线/曲面族</strong>来近似，样条最常用，因为它天生就是「少数参数控制形状」；3.1.3 节的广义圆柱、超二次曲面也可以。</p>
+<p>代价是约束变得复杂：蛇形机器人每个关节的转角范围用运动链很好表达，但「哪些样条满足这个约束」很难刻画；柔性材料还有基于弹性的约束，甚至求它在受力下的形状都要对弹性能量做积分。</p>
+</section>
+
+<!-- ============================ 总结 ============================ -->
+<section id="summary">
+<h2><span class="num">总结</span>速查表与常见陷阱</h2>
+<div class="cheat">
+  <div class="card"><h4>原语与谓词</h4>
+  $$H_i=\{f_i\le0\},\quad \mathcal O=\bigcup_j\bigcap_i H_i$$
+  $$\phi=\bigvee_j\bigwedge_i e_i,\qquad \text{点碰撞检测 }O(n)$$
+  <p>多边形：$f$ 一次、逆时针、内部在左。半代数：$f$ 任意多项式。挖洞 = 把 $f$ 乘 $-1$ 后求交。</p></div>
+  <div class="card"><h4>2D 刚体</h4>
+  $$T=\begin{pmatrix}\cos\theta&-\sin\theta&x_t\\ \sin\theta&\cos\theta&y_t\\0&0&1\end{pmatrix}$$
+  <p>先转再平移。3 DOF。顶点用 $T$，原语用 $T^{-1}$。</p></div>
+  <div class="card"><h4>3D 旋转</h4>
+  $$R=R_z(\alpha)R_y(\beta)R_x(\gamma)$$
+  <p>roll→pitch→yaw，都绕世界轴。反解：$\alpha=\operatorname{atan2}(r_{21},r_{11})$，$\beta=\operatorname{atan2}(-r_{31},\sqrt{r_{32}^2+r_{33}^2})$，$\gamma=\operatorname{atan2}(r_{32},r_{33})$。6 DOF。</p></div>
+  <div class="card"><h4>2D 链</h4>
+  $$T_i=\begin{pmatrix}\cos\theta_i&-\sin\theta_i&a_{i-1}\\ \sin\theta_i&\cos\theta_i&0\\0&0&1\end{pmatrix},\quad T_1T_2\cdots T_m\,p$$
+  <p>原点在与父杆的关节，$x_i$ 过本杆两关节。每个关节吃掉 2 DOF。</p></div>
+  <div class="card"><h4>3D 链（DH）</h4>
+  $$T_i=Q_{i-1}(\alpha_{i-1},a_{i-1})\,R_i(\theta_i,d_i)$$
+  <p>$z_i$ = 转轴，$x_i$ = $z_i,z_{i+1}$ 的公垂线。$z$ 的量下标 $i$（$d_i,\theta_i$），$x$ 的量下标 $i-1$（$a_{i-1},\alpha_{i-1}$）。$T_1=R_1$。</p></div>
+  <div class="card"><h4>树与环</h4>
+  <p>树：沿到根的链连乘；分叉点两套坐标系 + 约束 $\theta_u=\theta_l+\phi$。环：断开成链 + 闭合方程 (3.81)，每断一个转动关节 DOF 减 2。</p></div>
+</div>
+
+<h4>常见陷阱一览</h4>
+<ol>
+  <li><strong>$h$ 还是 $h^{-1}$</strong>：边界表示（顶点）正着变换；实体表示（原语里的 $f$）要把世界点拉回体坐标系，用逆变换。</li>
+  <li><strong>顺序</strong>：$T$ 是「先转再平移」；$R=R_zR_yR_x$ 是「先 roll 再 pitch 最后 yaw」；链是 $T_1T_2\cdots T_m p$ 从右往左作用。矩阵乘法不交换，但关于同一根轴的转动与平移（螺旋）交换。</li>
+  <li><strong>绕哪个轴</strong>：从左边乘进来的矩阵都绕<em>世界</em>轴转，不绕当前机体轴。</li>
+  <li><strong>定向</strong>：逆时针（外边界）vs 顺时针（孔）；叉积 $v_{12}\times v_{23}$ 给外法向。顺序弄反，整个符号就反了。</li>
+  <li><strong>DH 下标</strong>：$a_{i-1},\alpha_{i-1}$ 与 $d_i,\theta_i$ 下标不同是有意的；参数可正可负（PUMA 的 $a_3,d_3<0$）。</li>
+  <li><strong>分叉点不是新自由度</strong>：同一刚体在两条链里出现时，角度差是常数 $\phi$。</li>
+  <li><strong>欧拉角不是旋转空间的好坐标</strong>：多值、$\beta=\pm\pi/2$ 退化。构造例子可以用，做规划请看第 4 章的四元数。</li>
+</ol>
+
+<h4>术语对照</h4>
+<div class="tbl-wrap"><table class="gloss">
+<tr><th>English</th><th>中文</th><th>一句话</th></tr>
+<tr><td>boundary / solid representation</td><td>边界表示 / 实体表示</td><td>描述表面 vs 描述点集</td></tr>
+<tr><td>primitive</td><td>原语</td><td>$H=\{f\le0\}$ 这种容易计算的基本集合</td></tr>
+<tr><td>semi-algebraic set</td><td>半代数集</td><td>多项式原语的有限并/交</td></tr>
+<tr><td>predicate</td><td>谓词</td><td>返回真/假的函数，这里当碰撞检测器</td></tr>
+<tr><td>half-edge, DCEL</td><td>半边，双向连接边表</td><td>多面体表面的可遍历数据结构</td></tr>
+<tr><td>rigid-body transformation</td><td>刚体变换</td><td>保距 + 保定向的映射</td></tr>
+<tr><td>world frame / body frame</td><td>世界坐标系 / 体坐标系</td><td>固定参考系 vs 画在机器人上的坐标系</td></tr>
+<tr><td>homogeneous transformation matrix</td><td>齐次变换矩阵</td><td>升一维，把旋转和平移装进一个矩阵</td></tr>
+<tr><td>degrees of freedom (DOF)</td><td>自由度</td><td>完全刻画变换所需的独立参数个数</td></tr>
+<tr><td>yaw / pitch / roll</td><td>偏航 / 俯仰 / 翻滚</td><td>绕 $z$ / $y$ / $x$ 轴的旋转</td></tr>
+<tr><td>link, joint, linkage, kinematic chain</td><td>连杆，关节，连杆机构，运动链</td><td>刚体，连接处，连在一起的刚体，单链</td></tr>
+<tr><td>revolute / prismatic joint</td><td>转动关节 / 移动关节</td><td>只能转 / 只能滑</td></tr>
+<tr><td>Denavit–Hartenberg (DH) parameters</td><td>DH 参数</td><td>$d_i,\theta_i,a_{i-1},\alpha_{i-1}$</td></tr>
+<tr><td>screw</td><td>螺旋</td><td>关于同一根轴的转动 + 平移</td></tr>
+<tr><td>end-effector</td><td>末端执行器</td><td>机械臂的手</td></tr>
+<tr><td>conformation</td><td>构象</td><td>分子的「构型」</td></tr>
+<tr><td>junction</td><td>分叉点</td><td>挂着三个以上关节的连杆</td></tr>
+<tr><td>closed kinematic chain</td><td>闭合运动链</td><td>含环的连杆机构</td></tr>
+<tr><td>inverse kinematics</td><td>逆运动学</td><td>给末端位姿反求关节参数</td></tr>
+</table></div>
+</section>
+
+<!-- ============================ 习题 ============================ -->
+<section id="exercises">
+<h2><span class="num">习题</span>习题导引</h2>
+<p>这里只给思路和可核对的答案，完整推导留给你自己。</p>
+<ol>
+  <li><strong>挖掉三角形鼻子（半代数模型）</strong>。三角形鼻子 $N=H_a\cap H_b\cap H_c$（三条边的半平面，内部为 $\le0$）。要移除它，取补集：$\mathcal W\setminus N=\{-f_a\le0\}\cup\{-f_b\le0\}\cup\{-f_c\le0\}$（严格说用 $<$ 才去掉边界，见 3.1.1 的脚注）。于是 $\mathcal O'=\mathcal O\cap(H'_a\cup H'_b\cup H'_c)$，用分配律展开成三个交集的并。</li>
+  <li><strong>不同 $(\alpha,\beta,\gamma)$ 给出同一旋转</strong>。两类情形：① 周期性：各角加 $2\pi$ 的整数倍。② 真正的双重覆盖：$R(\alpha,\beta,\gamma)=R(\alpha+\pi,\ \pi-\beta,\ \gamma+\pi)$，可以直接代入 (3.42) 验证。③ 退化：$\beta=\pm\pi/2$ 时 $\cos\beta=0$，矩阵只依赖 $\alpha\mp\gamma$，一整条一维的角族给出同一旋转（万向节死锁）。Lab 5 里把 $\beta$ 推到 $\pm89°$ 可以感受到。</li>
+  <li><strong>2D 旋转可交换，3D 不可</strong>。2D：用和角公式证明 $R(\theta_1)R(\theta_2)=R(\theta_1+\theta_2)=R(\theta_2)R(\theta_1)$。3D：找一个反例即可，例如 $R_x(\pi/2)R_y(\pi/2)$ 和 $R_y(\pi/2)R_x(\pi/2)$ 作用在 $(1,0,0)$ 上分别得到 $(0,0,-1)$ 和 $(0,1,0)$（请自己算一遍）。</li>
+  <li><strong>ZYZ 欧拉角</strong>。(a) 直接相乘 $R_z(\alpha)R_y(\beta)R_z(\gamma)$。(b) 利用 $R_y(-\beta)=R_z(\pi)R_y(\beta)R_z(\pi)$ 和 $R_z(\pi)^2=I$。(c) 从 (a) 的矩阵读出 $r_{13}=c\alpha\,s\beta$，$r_{23}=s\alpha\,s\beta$，$r_{33}=c\beta$，$r_{31}=-s\beta\,c\gamma$，$r_{32}=s\beta\,s\gamma$，再套 atan2。</li>
+  <li><strong>12 种欧拉角</strong>。三个轴位置各选一轴，但相邻两次不能用同一轴：$3\times2\times2=12$。其中 6 种三轴互异（Tait–Bryan，如 ZYX），6 种首尾同轴（真欧拉角，如 ZYZ）。同轴连用等于一次旋转，自由度不够三。</li>
+  <li><strong>单位圆盘旋转不变</strong>。原语要用 $h^{-1}=R(-\theta)$：$f(R(-\theta)w)=\|R(-\theta)w\|^2-1=\|w\|^2-1$，因为旋转保长度。所以 $H$ 不变。</li>
+  <li><strong>三根 12×2 的杆</strong>。用 (3.51)(3.52)：$a_1=a_2=10$（关节间距），$T_1=R(\theta_1)$，$T_2=\begin{pmatrix}R(\theta_2)&(10,0)^{\mathsf T}\\0&1\end{pmatrix}$，$T_3$ 同理。杆上任意点先写成体坐标（杆沿 $x$ 轴，宽 2，所以 $y\in[-1,1]$，$x\in[-1,11]$），再乘 $T_1T_2T_3$。(b) 末端 $(10,0)\in\mathcal A_3$ 回到原点，等价于三根长 10 的连杆首尾相接构成等边三角形：$\theta_2=\theta_3=\pm2\pi/3$（两种绕向），$\theta_1$ 任意。</li>
+  <li><strong>Fig 3.30 的链</strong>。$a_1=1,\ a_2=2$，点 $(4,0)$ 在 $\mathcal A_3$ 体坐标中是 $(1,0)$。$T_1T_2T_3(1,0,1)^{\mathsf T}$ 在 $(\pi/4,\pi/2,\pi/4)$ 处等于 $\big(-1-\tfrac{\sqrt2}{2},\ \tfrac{3\sqrt2}{2}\big)\approx(-1.707,\ 2.121)$。Lab 6 可以直接验证。</li>
+  <li><strong>球关节 ≈ 三个零长转动关节</strong>。令三根短杆的转轴互相垂直，写出三个 $T_i$（$a\to0$），乘积的旋转部分趋向 $R_zR_yR_x$ 形式；对比 (3.42) 直接放一个 $3\times3$ 旋转矩阵。前者用 DH 统一处理，后者参数化更直接但要自己选旋转的参数化（又回到欧拉角 vs 四元数的问题）。</li>
+  <li><strong>线接触、点接触的关节</strong>。线接触：沿线滑（1）、绕线转（1）、绕法线转（1）等组合；点接触：三个转动 + 两个滑动 + 滚动与滑动的区分。关键是把「允许的相对运动」数出来。</li>
+  <li><strong>螺旋关节</strong>。沿 $x$ 轴转 $\theta$ 的同时前进 $d\theta/(2\pi)$：$T=\begin{pmatrix}1&0&0&d\theta/2\pi\\0&\cos\theta&-\sin\theta&0\\0&\sin\theta&\cos\theta&0\\0&0&0&1\end{pmatrix}$，只有 1 个自由度。半径 $r$ 决定螺纹上点的体坐标，不进矩阵。</li>
+  <li><strong>让例 3.6 的零构型长成 Fig 3.25 的样子</strong>。在每个 $T_i$ 的 $\theta_i$ 上加一个常数偏置 $\theta_i+\theta_i^{0}$，$\theta_i^0$ 由图中连杆方向算出；分叉点的 $\phi$ 也体现为这样的常数偏置。</li>
+  <li><strong>3D 剪切</strong>。$\begin{pmatrix}1&m_{12}&m_{13}\\0&1&m_{23}\\0&0&1\end{pmatrix}$，上三角、对角为 1，$\det=1$，体积不变。</li>
+</ol>
+<p>实现题 14–18（2D 连杆、分子球棍模型、Tinkertoy 编辑器、人体树、PUMA 模拟器）：本页的 Lab 6、9、10、8 分别是它们的最小可用版本，源码就在这个 HTML 文件里，可以当起点改。</p>
+</section>
+
+<footer>
+  <p>内容依据 Steven M. LaValle, <em>Planning Algorithms</em>, Cambridge University Press, 2006, Chapter 3（<a href="../book/ch3.pdf">本地 PDF</a> · <a href="https://lavalle.pl/planning/ch3.pdf">lavalle.pl/planning/ch3.pdf</a>）。公式编号与原书一致。本页为个人学习笔记，交互图均为原创实现。</p>
+</footer>
+</main>
+</div>
+<script>
+(function(){
+'use strict';
+// ---------- 通用工具 ----------
+const TAU=Math.PI*2, DEG=Math.PI/180;
+const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
+const tok=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const MONO='"JetBrains Mono", ui-monospace, Menlo, monospace';
+const SANS='"Source Sans 3","Noto Sans SC",-apple-system,"PingFang SC",sans-serif';
+const fmt=(v,d=2)=>{let s=(+v).toFixed(d); if(/^-0(\.0+)?$/.test(s)) s=s.slice(1); return s;};
+const deg=v=>Math.round(v)+'°';
+const norm180=a=>{a=((a+180)%360+360)%360-180; return a;};
+function hexRgb(h){h=h.replace('#','');if(h.length===3)h=h.split('').map(c=>c+c).join('');const n=parseInt(h,16);return [(n>>16)&255,(n>>8)&255,n&255];}
+const redraws=[];
+function onThemeChange(){redraws.forEach(f=>{try{f()}catch(e){console.error(e)}});}
+try{matchMedia('(prefers-color-scheme: dark)').addEventListener('change',onThemeChange);}catch(e){}
+new MutationObserver(onThemeChange).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+
+// 控件绑定：滑杆 / 数字框 / 分段按钮 / 复选 / 按钮
+function controls(root,onChange){
+  const S={};
+  $$('input[type=range],input[type=number]',root).forEach(el=>{
+    const k=el.dataset.k; const out=el.parentElement.querySelector('output');
+    const upd=()=>{S[k]=+el.value; if(out) out.textContent=el.dataset.unit==='deg'?deg(el.value):fmt(el.value,+(el.dataset.dec||1));};
+    el.addEventListener('input',()=>{upd();onChange(k);}); upd();
+    S['_el_'+k]=el;
+  });
+  $$('input[type=checkbox]',root).forEach(el=>{const k=el.dataset.k; S[k]=el.checked; el.addEventListener('change',()=>{S[k]=el.checked;onChange(k);});});
+  $$('.seg',root).forEach(seg=>{const k=seg.dataset.k; const bs=$$('button',seg); S[k]=(bs.find(b=>b.getAttribute('aria-pressed')==='true')||bs[0]).dataset.v;
+    bs.forEach(b=>b.addEventListener('click',()=>{bs.forEach(x=>x.setAttribute('aria-pressed','false'));b.setAttribute('aria-pressed','true');S[k]=b.dataset.v;onChange(k);}));});
+  S.set=(k,v)=>{const el=S['_el_'+k]; if(el){el.value=v; el.dispatchEvent(new Event('input'));}};
+  S.btn=(k,fn)=>{const b=$(`button[data-k="${k}"]`,root); if(b) b.addEventListener('click',fn);};
+  S.out=$('[data-k="out"]',root);
+  return S;
+}
+const html=(strings,...vals)=>strings.map((s,i)=>s+(vals[i]??'')).join('');
+function matHTML(M,n,opts={}){ // M: 行主序数组, n 列
+  const cells=M.map((v,i)=>{const cls=(opts.hi&&opts.hi(i))?' class="hi"':(opts.hb&&opts.hb(i))?' class="hb"':''; return `<span${cls}>${fmt(v,opts.dec??2)}</span>`;}).join('');
+  return `<span class="mat" style="grid-template-columns:repeat(${n},auto)">${cells}</span>`;
+}
+
+// ---------- 2D 画布 ----------
+class C2{
+  constructor(el,o={}){this.el=el;this.ctx=el.getContext('2d');this.uw=o.unitsWide||8;this.cx=o.cx||0;this.cy=o.cy||0;this.onDraw=null;
+    new ResizeObserver(()=>this.draw()).observe(el); redraws.push(()=>this.draw());}
+  fit(){const d=window.devicePixelRatio||1,w=this.el.clientWidth,h=this.el.clientHeight;if(!w||!h)return false;const W=Math.round(w*d),H=Math.round(h*d);if(this.el.width!==W||this.el.height!==H){this.el.width=W;this.el.height=H;}this.w=w;this.h=h;this.s=w/this.uw;this.ctx.setTransform(d,0,0,d,0,0);return true;}
+  X(x){return this.w/2+(x-this.cx)*this.s} Y(y){return this.h/2-(y-this.cy)*this.s}
+  wx(px){return (px-this.w/2)/this.s+this.cx} wy(py){return (this.h/2-py)/this.s+this.cy}
+  pt(e){const r=this.el.getBoundingClientRect();return [this.wx(e.clientX-r.left),this.wy(e.clientY-r.top)];}
+  draw(){if(!this.fit())return;const c=this.ctx;c.clearRect(0,0,this.w,this.h);c.fillStyle=tok('--canvas');c.fillRect(0,0,this.w,this.h);if(this.onDraw)this.onDraw(c,this);}
+  grid(step=1){const c=this.ctx;c.save();c.lineWidth=1;c.strokeStyle=tok('--grid');const x0=Math.floor(this.wx(0)),x1=Math.ceil(this.wx(this.w)),y0=Math.floor(this.wy(this.h)),y1=Math.ceil(this.wy(0));c.beginPath();for(let x=x0;x<=x1;x+=step){c.moveTo(this.X(x),0);c.lineTo(this.X(x),this.h);}for(let y=y0;y<=y1;y+=step){c.moveTo(0,this.Y(y));c.lineTo(this.w,this.Y(y));}c.stroke();c.strokeStyle=tok('--grid-axis');c.beginPath();c.moveTo(this.X(0),0);c.lineTo(this.X(0),this.h);c.moveTo(0,this.Y(0));c.lineTo(this.w,this.Y(0));c.stroke();c.restore();}
+  poly(pts,o={}){const c=this.ctx;if(!pts.length)return;c.save();c.beginPath();pts.forEach((p,i)=>i?c.lineTo(this.X(p[0]),this.Y(p[1])):c.moveTo(this.X(p[0]),this.Y(p[1])));if(o.close!==false)c.closePath();if(o.fill){c.fillStyle=o.fill;c.fill();}if(o.stroke){c.strokeStyle=o.stroke;c.lineWidth=o.width||2;c.setLineDash(o.dash||[]);c.lineJoin='round';c.lineCap='round';c.stroke();}c.restore();}
+  line(a,b,o={}){this.poly([a,b],Object.assign({},o,{close:false}));}
+  arrow(a,b,o={}){const c=this.ctx;const ax=this.X(a[0]),ay=this.Y(a[1]),bx=this.X(b[0]),by=this.Y(b[1]);const ang=Math.atan2(by-ay,bx-ax);const hl=o.head||9;c.save();c.strokeStyle=o.color||tok('--fg');c.fillStyle=c.strokeStyle;c.lineWidth=o.width||2;c.setLineDash(o.dash||[]);c.lineCap='round';c.beginPath();c.moveTo(ax,ay);c.lineTo(bx-Math.cos(ang)*hl*0.6,by-Math.sin(ang)*hl*0.6);c.stroke();c.setLineDash([]);c.beginPath();c.moveTo(bx,by);c.lineTo(bx-hl*Math.cos(ang-0.42),by-hl*Math.sin(ang-0.42));c.lineTo(bx-hl*Math.cos(ang+0.42),by-hl*Math.sin(ang+0.42));c.closePath();c.fill();c.restore();}
+  frame(x,y,th,len,o={}){const ct=Math.cos(th),st=Math.sin(th);const cx=o.color||tok('--ax-x'),cy=o.color2||tok('--ax-y');this.arrow([x,y],[x+len*ct,y+len*st],{color:cx,width:o.width||2,dash:o.dash});this.arrow([x,y],[x-len*st,y+len*ct],{color:cy,width:o.width||2,dash:o.dash});if(o.labels){this.text(o.labels[0],x+len*ct*1.22,y+len*st*1.22,{color:cx,font:o.font});this.text(o.labels[1],x-len*st*1.22,y+len*ct*1.22,{color:cy,font:o.font});}}
+  dot(x,y,r,o={}){const c=this.ctx;c.save();c.beginPath();c.arc(this.X(x),this.Y(y),r,0,TAU);if(o.fill){c.fillStyle=o.fill;c.fill();}if(o.stroke){c.strokeStyle=o.stroke;c.lineWidth=o.width||2;c.stroke();}c.restore();}
+  text(s,x,y,o={}){this.textPx(s,this.X(x)+(o.dx||0),this.Y(y)+(o.dy||0),o);}
+  textPx(s,px,py,o={}){const c=this.ctx;c.save();c.fillStyle=o.color||tok('--fg');c.font=(o.font||'12px')+' '+(o.sans?SANS:MONO);c.textAlign=o.align||'center';c.textBaseline=o.base||'middle';if(o.bg){const m=c.measureText(s);c.fillStyle=o.bg;c.fillRect(px-(o.align==='left'?0:o.align==='right'?m.width:m.width/2)-3,py-8,m.width+6,16);c.fillStyle=o.color||tok('--fg');}c.fillText(s,px,py);c.restore();}
+  capsule(a,b,r,o={}){ // 2D 连杆：圆角长条
+    const c=this.ctx;const ax=this.X(a[0]),ay=this.Y(a[1]),bx=this.X(b[0]),by=this.Y(b[1]);const R=r*this.s;const ang=Math.atan2(by-ay,bx-ax);c.save();c.beginPath();c.arc(ax,ay,R,ang+Math.PI/2,ang-Math.PI/2);c.arc(bx,by,R,ang-Math.PI/2,ang+Math.PI/2);c.closePath();if(o.fill){c.fillStyle=o.fill;c.fill();}if(o.stroke){c.strokeStyle=o.stroke;c.lineWidth=o.width||1.5;c.setLineDash(o.dash||[]);c.stroke();}c.restore();}
+}
+function dragger(c,{hit,move,hover,end}){let active=false;const el=c.el;
+  el.addEventListener('pointerdown',e=>{const p=c.pt(e);if(hit(p)){active=true;el.setPointerCapture(e.pointerId);move(p);e.preventDefault();}});
+  el.addEventListener('pointermove',e=>{const p=c.pt(e);if(active)move(p);else if(hover)hover(p);});
+  const stop=()=>{if(active&&end)end();active=false;};el.addEventListener('pointerup',stop);el.addEventListener('pointercancel',stop);el.addEventListener('pointerleave',()=>{if(!active&&hover)hover(null);});}
+
+// 2D 齐次矩阵 (3×3, 行主序)
+const M3={
+  I:()=>[1,0,0,0,1,0,0,0,1],
+  mul(A,B){const R=new Array(9);for(let i=0;i<3;i++)for(let j=0;j<3;j++){let s=0;for(let k=0;k<3;k++)s+=A[i*3+k]*B[k*3+j];R[i*3+j]=s;}return R;},
+  chain(...Ms){return Ms.reduce((a,b)=>M3.mul(a,b),M3.I());},
+  T(th,x,y){const c=Math.cos(th),s=Math.sin(th);return [c,-s,x,s,c,y,0,0,1];},  // (3.35)：先转再平移
+  ap(M,p){return [M[0]*p[0]+M[1]*p[1]+M[2],M[3]*p[0]+M[4]*p[1]+M[5]];},
+  inv(M){const c=M[0],s=M[3],x=M[2],y=M[5];return [c,s,-(c*x+s*y),-s,c,s*x-c*y,0,0,1];},
+  ang:M=>Math.atan2(M[3],M[0]),
+};
+
+// ---------- 3D ----------
+const V={sub:(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]],add:(a,b)=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]],mul:(a,k)=>[a[0]*k,a[1]*k,a[2]*k],dot:(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2],
+  cross:(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]],len:a=>Math.hypot(a[0],a[1],a[2]),norm:a=>{const l=Math.hypot(a[0],a[1],a[2])||1;return [a[0]/l,a[1]/l,a[2]/l];}};
+const M4={
+  I:()=>[1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1],
+  mul(A,B){const R=new Array(16);for(let i=0;i<4;i++)for(let j=0;j<4;j++){let s=0;for(let k=0;k<4;k++)s+=A[i*4+k]*B[k*4+j];R[i*4+j]=s;}return R;},
+  chain(...Ms){return Ms.reduce((a,b)=>M4.mul(a,b),M4.I());},
+  T:(x,y,z)=>[1,0,0,x,0,1,0,y,0,0,1,z,0,0,0,1],
+  Rx:a=>{const c=Math.cos(a),s=Math.sin(a);return [1,0,0,0,0,c,-s,0,0,s,c,0,0,0,0,1]},
+  Ry:a=>{const c=Math.cos(a),s=Math.sin(a);return [c,0,s,0,0,1,0,0,-s,0,c,0,0,0,0,1]},
+  Rz:a=>{const c=Math.cos(a),s=Math.sin(a);return [c,-s,0,0,s,c,0,0,0,0,1,0,0,0,0,1]},
+  // (3.56)  T_i = Q_{i-1}(alpha,a) R_i(theta,d)
+  DH(al,a,th,d){const ct=Math.cos(th),st=Math.sin(th),ca=Math.cos(al),sa=Math.sin(al);return [ct,-st,0,a, st*ca,ct*ca,-sa,-sa*d, st*sa,ct*sa,ca,ca*d, 0,0,0,1];},
+  Q:(al,a)=>{const c=Math.cos(al),s=Math.sin(al);return [1,0,0,a,0,c,-s,0,0,s,c,0,0,0,0,1]},
+  R:(th,d)=>{const c=Math.cos(th),s=Math.sin(th);return [c,-s,0,0,s,c,0,0,0,0,1,d,0,0,0,1]},
+  ap(M,p){const [x,y,z]=p;return [M[0]*x+M[1]*y+M[2]*z+M[3],M[4]*x+M[5]*y+M[6]*z+M[7],M[8]*x+M[9]*y+M[10]*z+M[11]];},
+  o:M=>[M[3],M[7],M[11]],
+  col:(M,j)=>[M[j],M[4+j],M[8+j]],
+  rot3:M=>[M[0],M[1],M[2],M[4],M[5],M[6],M[8],M[9],M[10]],
+};
+class C3{
+  constructor(el,o={}){this.el=el;this.ctx=el.getContext('2d');this.az=(o.az??-55)*DEG;this.elv=(o.el??26)*DEG;this.dist=o.dist||9;this.focal=o.focal||1.0;this.center=o.center||[0,0,0];this.onDraw=null;
+    new ResizeObserver(()=>this.draw()).observe(el);redraws.push(()=>this.draw());this.orbit();}
+  fit(){const d=window.devicePixelRatio||1,w=this.el.clientWidth,h=this.el.clientHeight;if(!w||!h)return false;const W=Math.round(w*d),H=Math.round(h*d);if(this.el.width!==W||this.el.height!==H){this.el.width=W;this.el.height=H;}this.w=w;this.h=h;this.ctx.setTransform(d,0,0,d,0,0);return true;}
+  cam(){const ce=Math.cos(this.elv),se=Math.sin(this.elv),ca=Math.cos(this.az),sa=Math.sin(this.az);this.C=[this.center[0]+this.dist*ce*ca,this.center[1]+this.dist*ce*sa,this.center[2]+this.dist*se];this.f=V.norm(V.sub(this.center,this.C));this.r=V.norm(V.cross(this.f,[0,0,1]));this.u=V.cross(this.r,this.f);}
+  P(p){const d=V.sub(p,this.C);const z=V.dot(d,this.f);const k=this.focal*this.w/Math.max(z,0.3);return [this.w/2+V.dot(d,this.r)*k,this.h/2-V.dot(d,this.u)*k,z,k];}
+  draw(){if(!this.fit())return;this.cam();const c=this.ctx;c.clearRect(0,0,this.w,this.h);c.fillStyle=tok('--canvas');c.fillRect(0,0,this.w,this.h);if(this.onDraw)this.onDraw(c,this);}
+  orbit(){let last=null;const el=this.el;el.classList.add('orbit');
+    el.addEventListener('pointerdown',e=>{last=[e.clientX,e.clientY];el.setPointerCapture(e.pointerId);el.style.cursor='grabbing';});
+    el.addEventListener('pointermove',e=>{if(!last)return;this.az-=(e.clientX-last[0])*0.01;this.elv=Math.max(-1.45,Math.min(1.45,this.elv+(e.clientY-last[1])*0.01));last=[e.clientX,e.clientY];this.draw();});
+    const stop=()=>{last=null;el.style.cursor='';};el.addEventListener('pointerup',stop);el.addEventListener('pointercancel',stop);}
+  line3(p,q,o={}){const a=this.P(p),b=this.P(q);const c=this.ctx;c.save();c.strokeStyle=o.color||tok('--fg');c.lineWidth=o.width||1.5;c.setLineDash(o.dash||[]);c.lineCap='round';c.beginPath();c.moveTo(a[0],a[1]);c.lineTo(b[0],b[1]);c.stroke();c.restore();}
+  poly3(pts,o={}){const c=this.ctx;c.save();c.beginPath();pts.forEach((p,i)=>{const s=this.P(p);i?c.lineTo(s[0],s[1]):c.moveTo(s[0],s[1]);});if(o.close!==false)c.closePath();if(o.fill){c.fillStyle=o.fill;c.fill();}if(o.stroke){c.strokeStyle=o.stroke;c.lineWidth=o.width||1.5;c.setLineDash(o.dash||[]);c.lineJoin='round';c.stroke();}c.restore();}
+  arrow3(p,q,o={}){const a=this.P(p),b=this.P(q);const c=this.ctx;const ang=Math.atan2(b[1]-a[1],b[0]-a[0]);const hl=o.head||8;c.save();c.strokeStyle=o.color||tok('--fg');c.fillStyle=c.strokeStyle;c.lineWidth=o.width||2;c.setLineDash(o.dash||[]);c.lineCap='round';c.beginPath();c.moveTo(a[0],a[1]);c.lineTo(b[0]-Math.cos(ang)*hl*0.6,b[1]-Math.sin(ang)*hl*0.6);c.stroke();c.setLineDash([]);c.beginPath();c.moveTo(b[0],b[1]);c.lineTo(b[0]-hl*Math.cos(ang-0.42),b[1]-hl*Math.sin(ang-0.42));c.lineTo(b[0]-hl*Math.cos(ang+0.42),b[1]-hl*Math.sin(ang+0.42));c.closePath();c.fill();if(o.label){c.fillStyle=c.strokeStyle;c.font='12px '+MONO;c.textAlign='center';c.textBaseline='middle';const ex=b[0]+Math.cos(ang)*12,ey=b[1]+Math.sin(ang)*12;c.fillText(o.label,ex,ey);}c.restore();}
+  dot3(p,r,o={}){const s=this.P(p);const c=this.ctx;c.save();c.beginPath();c.arc(s[0],s[1],r*(o.persp?s[3]/(this.focal*this.w)*this.dist:1),0,TAU);if(o.fill){c.fillStyle=o.fill;c.fill();}if(o.stroke){c.strokeStyle=o.stroke;c.lineWidth=o.width||1.5;c.stroke();}c.restore();}
+  text3(s,p,o={}){const q=this.P(p);const c=this.ctx;c.save();c.fillStyle=o.color||tok('--fg');c.font=(o.font||'12px')+' '+MONO;c.textAlign=o.align||'center';c.textBaseline='middle';c.fillText(s,q[0]+(o.dx||0),q[1]+(o.dy||0));c.restore();}
+  frame3(M,len,o={}){const org=M4.o(M);const names=o.labels||['x','y','z'];const cols=[tok('--ax-x'),tok('--ax-y'),tok('--ax-z')];for(let j=0;j<3;j++){const d=M4.col(M,j);const tip=V.add(org,V.mul(d,len));this.arrow3(org,tip,{color:cols[j],width:o.width||2,dash:o.dash,label:o.labels===false?null:names[j],head:o.head});}if(o.dotColor!==false)this.dot3(org,3,{fill:o.dotColor||tok('--fg')});}
+  grid3(n=4,step=1,z=0){const c=tok('--grid');for(let i=-n;i<=n;i+=step){this.line3([-n,i,z],[n,i,z],{color:c,width:1});this.line3([i,-n,z],[i,n,z],{color:c,width:1});}}
+  worldAxes(len=1.2){const g=tok('--grid-axis');this.arrow3([0,0,0],[len,0,0],{color:g,label:'X'});this.arrow3([0,0,0],[0,len,0],{color:g,label:'Y'});this.arrow3([0,0,0],[0,0,len],{color:g,label:'Z'});}
+}
+// 暴露给后续脚本块
+window.__PA={TAU,DEG,$,$$,tok,MONO,SANS,fmt,deg,norm180,hexRgb,controls,html,matHTML,C2,dragger,M3,V,M4,C3,redraws};
+})();
+</script>
+<script>
+(function(){
+'use strict';
+const {TAU,DEG,$,$$,tok,fmt,deg,hexRgb,controls,html,matHTML,C2,dragger,M3}=window.__PA;
+
+/* ================= LAB 1：半平面的交 ================= */
+(function(){
+  const el=$('#lab-halfplane'); if(!el) return;
+  const cv=new C2($('canvas',el),{unitsWide:8,cx:0.2,cy:0.2});
+  const P=[[-2.2,-1.4],[1.6,-1.9],[2.5,0.5],[0.4,2.1],[-2.3,1.0]]; // 逆时针
+  let q=[0.3,0.2], hover=-1;
+  const f=(i,x,y)=>{const [x1,y1]=P[i],[x2,y2]=P[(i+1)%P.length];return (y2-y1)*(x-x1)-(x2-x1)*(y-y1);};
+  const S=controls(el,()=>cv.draw());
+  function shadeHalf(c,i){const [x1,y1]=P[i],[x2,y2]=P[(i+1)%P.length];const dx=x2-x1,dy=y2-y1,L=40;const nx=-dy,ny=dx; // 左法向
+    cv.poly([[x1-dx*L,y1-dy*L],[x2+dx*L,y2+dy*L],[x2+dx*L+nx*L,y2+dy*L+ny*L],[x1-dx*L+nx*L,y1-dy*L+ny*L]],{fill:tok('--shade')});
+    const ex=cv.X(x1),ey=cv.Y(y1);
+    cv.line([x1-dx*L,y1-dy*L],[x2+dx*L,y2+dy*L],{stroke:tok('--obs'),width:1.2,dash:[6,5]});}
+  cv.onDraw=(c)=>{
+    cv.grid();
+    const act=S.all?P.map((_,i)=>i):(hover>=0?[hover]:[]);
+    act.forEach(i=>shadeHalf(c,i));
+    cv.poly(P,{fill:act.length?'transparent':tok('--shade'),stroke:tok('--obs'),width:2.2});
+    P.forEach((p,i)=>{const p2=P[(i+1)%P.length];const mx=(p[0]+p2[0])/2,my=(p[1]+p2[1])/2;const dx=p2[0]-p[0],dy=p2[1]-p[1];const l=Math.hypot(dx,dy);const rx=dy/l,ry=-dx/l; // 右法向（外侧）
+      if(i===hover) cv.line(p,p2,{stroke:tok('--obs'),width:5});
+      cv.text('e'+(i+1),mx+rx*0.42,my+ry*0.42,{color:tok('--obs'),font:'bold 12px'});
+      if(S.signs){cv.text('+',mx+rx*0.2,my+ry*0.2,{color:tok('--muted'),font:'11px'});cv.text('−',mx-rx*0.2,my-ry*0.2,{color:tok('--muted'),font:'11px'});}
+      cv.dot(p[0],p[1],3,{fill:tok('--obs')});
+      cv.arrow([mx-dx*0.18,my-dy*0.18],[mx+dx*0.18,my+dy*0.18],{color:tok('--obs'),width:1.5,head:7});
+    });
+    cv.text('O = H₁ ∩ H₂ ∩ H₃ ∩ H₄ ∩ H₅',-1.2,-0.9,{color:tok('--obs'),font:'12px'});
+    const vals=P.map((_,i)=>f(i,q[0],q[1]));const inside=vals.every(v=>v<=1e-9);
+    cv.dot(q[0],q[1],7,{fill:inside?tok('--obs'):tok('--canvas'),stroke:inside?tok('--obs'):tok('--fg'),width:2});
+    cv.text(`(${fmt(q[0])}, ${fmt(q[1])})`,q[0],q[1],{dy:-16,font:'11px'});
+    S.out.innerHTML=vals.map((v,i)=>`e${i+1}: f${i+1} = ${v<0?'':' '}${fmt(v,2).padStart(6)}  ${v<=1e-9?'<span class="ok">✓ ≤0</span>':'<span class="no">✗ >0</span>'}`).join('\n')
+      +`\n────────────\nα = e₁∧e₂∧e₃∧e₄∧e₅ = ${inside?'<span class="ok">true</span>':'<span class="no">false</span>'}\n点 ${inside?'<span class="ok">∈ O（碰撞）</span>':'<span class="dim">∉ O</span>'}`;
+  };
+  const distSeg=(p,a,b)=>{const dx=b[0]-a[0],dy=b[1]-a[1];const t=Math.max(0,Math.min(1,((p[0]-a[0])*dx+(p[1]-a[1])*dy)/(dx*dx+dy*dy)));return Math.hypot(p[0]-a[0]-t*dx,p[1]-a[1]-t*dy);};
+  dragger(cv,{hit:p=>Math.hypot(p[0]-q[0],p[1]-q[1])<0.45||true,move:p=>{q=p;cv.draw();},
+    hover:p=>{let h=-1;if(p){P.forEach((a,i)=>{if(distSeg(p,a,P[(i+1)%P.length])<0.18)h=i;});}if(h!==hover){hover=h;cv.draw();}}});
+  cv.draw();
+})();
+
+/* ================= LAB 2：姜饼人脸 ================= */
+(function(){
+  const el=$('#lab-ginger'); if(!el) return;
+  const cv=new C2($('canvas',el),{unitsWide:6.4});
+  const S=controls(el,()=>cv.draw());
+  let q=[0.9,0.9];
+  const eye=[[-0.7,0.6],[0.7,0.6]], y4=-0.7;
+  const F=[
+    (x,y)=>x*x+y*y-S.r1*S.r1,
+    (x,y)=>-((x-eye[0][0])**2+(y-eye[0][1])**2-S.r2*S.r2),
+    (x,y)=>-((x-eye[1][0])**2+(y-eye[1][1])**2-S.r2*S.r2),
+    (x,y)=>-(x*x/(S.a*S.a)+(y-y4)**2/(S.b*S.b)-1),
+  ];
+  const val=(i,x,y)=>{let v=F[i](x,y);if(S['fl'+(i+1)])v=-v;return v;};
+  const inside=(x,y)=>{for(let i=0;i<4;i++){if(!S['in'+(i+1)])continue;if(val(i,x,y)>0)return false;}return true;};
+  const off=document.createElement('canvas');
+  cv.onDraw=(c)=>{
+    cv.grid();
+    const step=2,W=Math.ceil(cv.w/step),H=Math.ceil(cv.h/step);off.width=W;off.height=H;const oc=off.getContext('2d');const img=oc.createImageData(W,H);const [r,g,b]=hexRgb(tok('--obs'));
+    for(let j=0;j<H;j++){const y=cv.wy(j*step+step/2);for(let i=0;i<W;i++){const x=cv.wx(i*step+step/2);if(inside(x,y)){const k=(j*W+i)*4;img.data[k]=r;img.data[k+1]=g;img.data[k+2]=b;img.data[k+3]=120;}}}
+    oc.putImageData(img,0,0);c.save();c.imageSmoothingEnabled=false;c.drawImage(off,0,0,W*step,H*step);c.restore();
+    // 边界曲线
+    const circ=(cx,cy,R,col,dash)=>{c.save();c.beginPath();c.arc(cv.X(cx),cv.Y(cy),R*cv.s,0,TAU);c.strokeStyle=col;c.lineWidth=1.8;c.setLineDash(dash||[]);c.stroke();c.restore();};
+    const cols=[tok('--obs'),tok('--world'),tok('--world'),tok('--accent')];
+    circ(0,0,S.r1,cols[0],S.in1?[]:[4,4]);circ(eye[0][0],eye[0][1],S.r2,cols[1],S.in2?[]:[4,4]);circ(eye[1][0],eye[1][1],S.r2,cols[2],S.in3?[]:[4,4]);
+    c.save();c.beginPath();c.ellipse(cv.X(0),cv.Y(y4),S.a*cv.s,S.b*cv.s,0,0,TAU);c.strokeStyle=cols[3];c.lineWidth=1.8;c.setLineDash(S.in4?[]:[4,4]);c.stroke();c.restore();
+    cv.text('f₁=0',S.r1*0.72,S.r1*0.72,{color:cols[0],dy:-10,font:'11px'});cv.text('f₂=0',eye[0][0],eye[0][1]+S.r2,{color:cols[1],dy:-9,font:'11px'});cv.text('f₃=0',eye[1][0],eye[1][1]+S.r2,{color:cols[2],dy:-9,font:'11px'});cv.text('f₄=0',0,y4-S.b,{color:cols[3],dy:11,font:'11px'});
+    const inQ=inside(q[0],q[1]);
+    cv.dot(q[0],q[1],7,{fill:inQ?tok('--obs'):tok('--canvas'),stroke:inQ?tok('--obs'):tok('--fg'),width:2});
+    cv.text(`(${fmt(q[0])}, ${fmt(q[1])})`,q[0],q[1],{dy:-16,font:'11px'});
+    const names=['f₁ 外圆','f₂ 左眼','f₃ 右眼','f₄ 嘴  '];
+    S.out.innerHTML=names.map((n,i)=>{const v=val(i,q[0],q[1]);const inc=S['in'+(i+1)];const fl=S['fl'+(i+1)];return `${inc?' ':'<span class="dim">×</span>'} ${n}${fl?'(翻转)':'      '} = ${fmt(v,2).padStart(6)} ${inc?(v<=0?'<span class="ok">✓</span>':'<span class="no">✗</span>'):'<span class="dim">忽略</span>'}`;}).join('\n')
+      +`\n────────────\n点 ${inQ?'<span class="ok">∈ O</span>':'<span class="dim">∉ O</span>'}   O = ${['H₁','H₂','H₃','H₄'].filter((_,i)=>S['in'+(i+1)]).join(' ∩ ')||'W'}`;
+  };
+  dragger(cv,{hit:()=>true,move:p=>{q=p;cv.draw();}});
+  cv.draw();
+})();
+
+/* ================= LAB 3：超椭圆 ================= */
+(function(){
+  const el=$('#lab-super'); if(!el) return;
+  const cv=new C2($('canvas',el),{unitsWide:7});
+  const S=controls(el,()=>cv.draw());
+  cv.onDraw=(c)=>{
+    cv.grid();const n=S.n,a=S.a,b=S.b;const pts=[];const sg=v=>v<0?-1:1;
+    for(let k=0;k<=360;k++){const t=k*DEG;const ct=Math.cos(t),st=Math.sin(t);pts.push([a*sg(ct)*Math.pow(Math.abs(ct),2/n),b*sg(st)*Math.pow(Math.abs(st),2/n)]);}
+    cv.poly(pts,{fill:tok('--shade'),stroke:tok('--obs'),width:2.2});
+    cv.poly([[-a,-b],[a,-b],[a,b],[-a,b]],{stroke:tok('--grid-axis'),width:1,dash:[5,5]});
+    cv.text(`|x/${fmt(a,1)}|^${fmt(n,1)} + |y/${fmt(b,1)}|^${fmt(n,1)} ≤ 1`,0,-b-0.5,{color:tok('--obs')});
+    S.out.innerHTML=`n = ${fmt(n,1)}   ${n>=1?'<span class="ok">凸</span>':'<span class="no">非凸</span>'}${Math.abs(n-2)<0.05?'  ← 椭圆':n>8?'  ← 接近矩形（虚线）':''}`;
+  };
+  cv.draw();
+})();
+
+/* ================= LAB 4：2D 刚体变换 ================= */
+(function(){
+  const el=$('#lab-rigid2d'); if(!el) return;
+  const cv=new C2($('canvas',el),{unitsWide:9,cx:0.6,cy:0.6});
+  const S=controls(el,()=>cv.draw());
+  const A=[[0,0],[2,0],[2,0.6],[0.6,0.6],[0.6,1.6],[0,1.6]];const a=[1.5,0.3];
+  cv.onDraw=(c)=>{
+    cv.grid();const th=S.th*DEG,ct=Math.cos(th),st=Math.sin(th);
+    let T;if(S.order==='RT')T=M3.T(th,S.xt,S.yt);else T=[ct,-st,ct*S.xt-st*S.yt,st,ct,st*S.xt+ct*S.yt,0,0,1];
+    const Tinv=M3.inv(T);
+    if(!S.frameview){
+      cv.frame(0,0,0,1,{color:tok('--world'),color2:tok('--world'),labels:['X','Y'],width:2.2});
+      cv.poly(A,{stroke:tok('--muted'),width:1.2,dash:[5,4]});
+      const Ap=A.map(p=>M3.ap(T,p));cv.poly(Ap,{fill:tok('--shade-robot'),stroke:tok('--accent'),width:2.2});
+      const o=M3.ap(T,[0,0]);cv.frame(o[0],o[1],th,0.9,{labels:['x_b','y_b']});
+      if(S.disc){cv.dot(o[0],o[1],cv.s,{fill:tok('--shade-robot'),stroke:tok('--accent'),width:1.2});cv.text('(x−xₜ)²+(y−yₜ)²−1 ≤ 0',o[0],o[1]-1.15,{color:tok('--accent'),font:'11px'});}
+      if(S.order==='RT'){cv.arrow([0,0],[S.xt,S.yt],{color:tok('--muted'),width:1.5,dash:[3,3]});cv.text('t',S.xt/2,S.yt/2,{color:tok('--muted'),dx:8,dy:-8,font:'11px'});}
+      const w=M3.ap(T,a);cv.dot(w[0],w[1],4,{fill:tok('--fg')});cv.text(`w=(${fmt(w[0])}, ${fmt(w[1])})`,w[0],w[1],{dy:-13,font:'11px'});
+      cv.dot(a[0],a[1],3,{stroke:tok('--muted'),width:1.2});cv.text('a=(1.5,0.3)',a[0],a[1],{dy:12,font:'11px',color:tok('--muted')});
+    }else{
+      cv.poly(A,{fill:tok('--shade-robot'),stroke:tok('--accent'),width:2.2});cv.frame(0,0,0,0.9,{labels:['x_b','y_b']});
+      const o=M3.ap(Tinv,[0,0]);cv.frame(o[0],o[1],M3.ang(Tinv),1,{color:tok('--world'),color2:tok('--world'),labels:['X','Y'],width:2.2});
+      cv.text('世界系按 T⁻¹ 移动，机器人不动',0.6,-1.3,{color:tok('--muted'),font:'12px',sans:true});
+      cv.dot(a[0],a[1],4,{fill:tok('--fg')});
+    }
+    const w=M3.ap(T,a);
+    S.out.innerHTML=`${S.order==='RT'?'T = [R | t]（先转再平移）':'T = [R | R·t]（先平移再转）'}\n`+matHTML(T,3,{hi:i=>i===2||i===5,hb:i=>i<2||(i>2&&i<5)})
+      +`\n<span class="dim">cos θ=${fmt(ct,3)}  sin θ=${fmt(st,3)}</span>\nT·(1.5, 0.3, 1)ᵀ = (${fmt(w[0])}, ${fmt(w[1])}, 1)ᵀ\n自由度：3  (xₜ, yₜ, θ)`;
+  };
+  cv.draw();
+})();
+})();
+</script>
+<script>
+(function(){
+'use strict';
+const {TAU,DEG,$,$$,tok,fmt,deg,controls,html,matHTML,C2,dragger,M3,V,M4,C3}=window.__PA;
+
+/* ================= LAB 5：Yaw-Pitch-Roll ================= */
+(function(){
+  const el=$('#lab-ypr'); if(!el) return;
+  const cv=new C3($('canvas',el),{dist:7.5,az:-50,el:22,focal:1.05});
+  const S=controls(el,()=>cv.draw());
+  const fus=[[-1.5,0,0],[1.7,0,0]];
+  const wing=[[0.5,0,0],[-0.3,1.8,0.05],[-0.7,1.8,0.05],[-0.5,0,0]];
+  const wingM=wing.map(p=>[p[0],-p[1],p[2]]);
+  const fin=[[-1.1,0,0],[-1.5,0,0.75],[-1.15,0,0.75]];
+  const stab=[[-1.2,0,0],[-1.5,0.75,0],[-1.5,-0.75,0]];
+  let anim=null;
+  cv.onDraw=(c)=>{
+    cv.grid3(3,1,-1.2);cv.worldAxes(2.4);
+    const R=M4.chain(M4.Rz(S.al*DEG),M4.Ry(S.be*DEG),M4.Rx(S.ga*DEG));
+    if(S.bodyz){cv.line3([0,0,-2.6],[0,0,2.6],{color:tok('--ax-z'),width:1.2,dash:[6,5]});cv.text3('yaw 轴 = 世界 z',[0,0,2.75],{color:tok('--ax-z'),font:'11px'});}
+    const tf=pts=>pts.map(p=>M4.ap(R,p));
+    const fill=tok('--shade-robot'),st=tok('--accent');
+    cv.poly3(tf(wing),{fill,stroke:st});cv.poly3(tf(wingM),{fill,stroke:st});cv.poly3(tf(stab),{fill,stroke:st});cv.poly3(tf(fin),{fill,stroke:st});
+    cv.line3(...tf(fus),{color:st,width:4});cv.dot3(M4.ap(R,fus[1]),4,{fill:st});
+    cv.frame3(R,1.6,{labels:['x_b','y_b','z_b'],width:2.4});
+    const r=M4.rot3(R);
+    const al2=Math.atan2(r[3],r[0])/DEG,be2=Math.atan2(-r[6],Math.hypot(r[7],r[8]))/DEG,ga2=Math.atan2(r[7],r[8])/DEG;
+    S.out.innerHTML=`R = R_z(α) R_y(β) R_x(γ)\n`+matHTML(r,3,{dec:3})+`\n────────────\n从 R 反解 (3.47–3.49)：\nα = atan2(r₂₁,r₁₁) = ${deg(al2)}\nβ = atan2(−r₃₁,√(r₃₂²+r₃₃²)) = ${deg(be2)}\nγ = atan2(r₃₂,r₃₃) = ${deg(ga2)}\n<span class="dim">列向量 = 变换后的体坐标轴</span>`;
+  };
+  S.btn('reset',()=>{if(anim)cancelAnimationFrame(anim);anim=null;['al','be','ga'].forEach(k=>S.set(k,0));});
+  S.btn('anim',()=>{if(anim){cancelAnimationFrame(anim);anim=null;}
+    const tgt={ga:S.ga,be:S.be,al:S.al};if(!tgt.ga&&!tgt.be&&!tgt.al){tgt.ga=30;tgt.be=20;tgt.al=40;}
+    ['al','be','ga'].forEach(k=>S.set(k,0));const t0=performance.now(),dur=1100;
+    const step=now=>{const t=(now-t0)/dur;const ph=Math.min(2,Math.floor(t)),u=Math.min(1,t-ph);const ease=x=>x<0.5?2*x*x:1-Math.pow(-2*x+2,2)/2;
+      const order=['ga','be','al'];order.forEach((k,i)=>{S.set(k,i<ph?tgt[k]:i===ph?Math.round(tgt[k]*ease(u)):0);});
+      if(t<3)anim=requestAnimationFrame(step);else{order.forEach(k=>S.set(k,tgt[k]));anim=null;}};
+    anim=requestAnimationFrame(step);});
+  cv.draw();
+})();
+
+/* ================= LAB 6：三连杆分步 ================= */
+(function(){
+  const el=$('#lab-chain'); if(!el) return;
+  const cv=new C2($('canvas',el),{unitsWide:9,cx:1.2,cy:0.8});
+  const S=controls(el,()=>cv.draw());
+  const cap=(M,len,fill,stroke,dash)=>{const a=M3.ap(M,[0,0]),b=M3.ap(M,[len,0]);cv.capsule(a,b,0.16,{fill,stroke,width:1.6,dash});cv.dot(a[0],a[1],4,{fill:tok('--canvas'),stroke:stroke,width:1.6});};
+  cv.onDraw=(c)=>{
+    cv.grid();const k=+S.stage;const a1=S.a1||1,a2=S.a2||1,a3=S.a3||1;
+    const T1=M3.T(S.t1*DEG,S.xt,S.yt),T2=M3.T(S.t2*DEG,a1,0),T3=M3.T(S.t3*DEG,a2,0),I=M3.I();
+    const lbl=[['x₃','y₃'],['x₂','y₂'],['x₁','y₁'],['X','Y']][k];
+    cv.frame(0,0,0,1,{color:tok('--world'),color2:tok('--world'),labels:lbl,width:2.2});
+    cv.text(['A₃ 的体坐标系','A₂ 的体坐标系','A₁ 的体坐标系','世界坐标系 W'][k],0,-0.55,{color:tok('--world'),font:'12px',sans:true,align:'left',dx:-10});
+    const linkCol=tok('--world'),linkFill=tok('--surface');
+    let M3f,M2f,M1f;
+    if(k===0){M3f=I;}
+    else if(k===1){M2f=I;M3f=T3;}
+    else if(k===2){M1f=I;M2f=T2;M3f=M3.mul(T2,T3);}
+    else{M1f=T1;M2f=M3.mul(T1,T2);M3f=M3.chain(T1,T2,T3);}
+    if(M1f){cap(M1f,a1,linkFill,linkCol);const o=M3.ap(M1f,[0,0]);cv.text('A₁',o[0],o[1],{dy:-22,color:linkCol});}
+    if(M2f){cap(M2f,a2,linkFill,linkCol);const o=M3.ap(M2f,[0,0]);cv.text('A₂',o[0],o[1],{dy:-22,color:linkCol});if(k>=1)cv.frame(o[0],o[1],M3.ang(M2f),0.6,{dash:[3,3],width:1.4});}
+    cap(M3f,a3,tok('--shade-robot'),tok('--accent'));const o3=M3.ap(M3f,[0,0]);cv.text('A₃',o3[0],o3[1],{dy:-22,color:tok('--accent')});
+    cv.frame(o3[0],o3[1],M3.ang(M3f),0.6,{dash:[3,3],width:1.4});
+    const tip=M3.ap(M3f,[a3,0]);cv.dot(tip[0],tip[1],5,{fill:tok('--accent')});cv.text(`(${fmt(tip[0])}, ${fmt(tip[1])})`,tip[0],tip[1],{dy:-14,font:'11px'});
+    const names=['I','T₃','T₂T₃','T₁T₂T₃'][k];
+    S.out.innerHTML=`当前作用在 A₃ 上的矩阵 ${names}：\n`+matHTML(M3f,3,{hi:i=>i===2||i===5})+`\n末端 ${names}·(a₃,0,1)ᵀ = (${fmt(tip[0])}, ${fmt(tip[1])})\n<span class="dim">T₁=T(θ₁,xₜ,yₜ)  T₂=T(θ₂,a₁,0)  T₃=T(θ₃,a₂,0)</span>`;
+  };
+  cv.draw();
+})();
+
+/* ================= LAB 7：DH 参数 ================= */
+(function(){
+  const el=$('#lab-dh'); if(!el) return;
+  const cv=new C3($('canvas',el),{dist:8.5,az:-40,el:24,center:[0.6,0,0.3]});
+  const S=controls(el,()=>cv.draw());
+  cv.onDraw=(c)=>{
+    cv.grid3(3,1,-1.5);
+    const al=S.al*DEG,a=S.a,th=S.th*DEG,d=S.d;const stage=+S.stage;
+    const Q=M4.Q(al,a),R=M4.R(th,d),T=M4.mul(Q,R),I=M4.I();
+    cv.line3([0,0,-2.4],[0,0,2.4],{color:tok('--ax-z'),width:1,dash:[5,5]});
+    cv.frame3(I,1.3,{labels:['x_{i−1}','y_{i−1}','z_{i−1}'],width:2.4});
+    if(stage>=1){
+      cv.line3([0,0,0],[a,0,0],{color:tok('--fg'),width:3});cv.text3('a_{i−1}',[a/2,0,-0.25],{color:tok('--fg'),font:'11px'});
+      cv.frame3(Q,0.8,{labels:stage===1?['x','y','z_i'] :false,dash:[3,3],width:1.4,dotColor:tok('--muted')});
+      const zQ=M4.col(Q,2),oQ=M4.o(Q);cv.line3(V.add(oQ,V.mul(zQ,-2.4)),V.add(oQ,V.mul(zQ,2.4)),{color:tok('--ax-z'),width:1,dash:[5,5]});
+    }
+    if(stage>=2){
+      const oQ=M4.o(Q),oT=M4.o(T);cv.line3(oQ,oT,{color:tok('--fg'),width:3});cv.text3('d_i',V.add(V.mul(V.add(oQ,oT),0.5),[0.22,0,0]),{color:tok('--fg'),font:'11px'});
+      cv.frame3(T,1.3,{labels:['x_i','y_i','z_i'],width:2.4});
+      cv.text3('θ_i',V.add(oT,V.mul(M4.col(T,0),0.55)),{color:tok('--ax-x'),font:'11px',dy:14});
+    }
+    S.out.innerHTML=`T_i = Q_{i−1} R_i  (3.56)：\n`+matHTML(T,4,{dec:2,hi:i=>i%4===3&&i<12})+`\n────────────\n① 沿 z_i 平移 d_i = ${fmt(d)}\n② 绕 z_i 转 θ_i = ${deg(S.th)}\n③ 沿 x_{i−1} 平移 a_{i−1} = ${fmt(a)}\n④ 绕 x_{i−1} 转 α_{i−1} = ${deg(S.al)}\n<span class="dim">坐标系 i 的原点 = (a, −sinα·d, cosα·d)</span>`;
+  };
+  cv.draw();
+})();
+
+/* ================= LAB 8：PUMA 560 ================= */
+(function(){
+  const el=$('#lab-puma'); if(!el) return;
+  const cv=new C3($('canvas',el),{dist:2.3,az:-35,el:20,center:[0.15,0.05,0.15],focal:1.1});
+  const S=controls(el,()=>cv.draw());
+  const d2=0.15,a2=0.43,d3=-0.13,a3=-0.02,d4=0.43;
+  cv.onDraw=(c)=>{
+    cv.grid3(1,0.25,-0.55);
+    const th=[S.t1,S.t2,S.t3,S.t4,S.t5,S.t6].map(v=>v*DEG);
+    const Ts=[M4.DH(0,0,th[0],0),M4.DH(-Math.PI/2,0,th[1],d2),M4.DH(0,a2,th[2],d3),M4.DH(Math.PI/2,a3,th[3],d4),M4.DH(-Math.PI/2,0,th[4],0),M4.DH(Math.PI/2,0,th[5],0)];
+    const A=[];let M=M4.I();Ts.forEach(T=>{M=M4.mul(M,T);A.push(M);});
+    const os=[[0,0,0],...A.map(M4.o)];
+    cv.line3([0,0,-0.55],[0,0,0],{color:tok('--muted'),width:8});
+    cv.poly3([[-0.18,-0.18,-0.55],[0.18,-0.18,-0.55],[0.18,0.18,-0.55],[-0.18,0.18,-0.55]],{fill:tok('--code-bg'),stroke:tok('--muted')});
+    for(let i=0;i<6;i++){cv.line3(os[i],os[i+1],{color:tok('--world'),width:i<4?7:4});}
+    cv.worldAxes(0.3);
+    if(S.frames)A.forEach((M,i)=>{if(i<5)cv.frame3(M,0.12,{labels:false,width:1.3,head:5,dotColor:tok('--fg')});});
+    cv.frame3(A[5],0.22,{labels:['x₆','y₆','z₆'],width:2.4});
+    os.forEach((o,i)=>{if(i>0&&i<6)cv.dot3(o,4,{fill:tok('--canvas'),stroke:tok('--world'),width:2});});
+    const e=M4.o(A[5]);
+    S.out.innerHTML=`末端原点 T₁⋯T₆·(0,0,0,1)ᵀ：\n(${fmt(e[0],3)}, ${fmt(e[1],3)}, ${fmt(e[2],3)})\n末端朝向 R（T₁⋯T₆ 左上 3×3）：\n`+matHTML(M4.rot3(A[5]),3,{dec:2})+`\n<span class="dim">θ₁ 在最左边的矩阵里，改变它会移动所有连杆；θ₆ 在最右边，只改变末端自转。</span>`;
+  };
+  S.btn('zero',()=>['t1','t2','t3','t4','t5','t6'].forEach(k=>S.set(k,0)));
+  cv.draw();
+})();
+
+/* ================= LAB 9：辛烷 ================= */
+(function(){
+  const el=$('#lab-octane'); if(!el) return;
+  const cv=new C3($('canvas',el),{dist:13,az:-70,el:18,focal:1.0});
+  const S=controls(el,()=>cv.draw());
+  const d=1.54,al=70.5*DEG;
+  cv.onDraw=(c)=>{
+    const th=[0,S.t2,S.t3,S.t4,S.t5,S.t6,S.t7].map(v=>v*DEG);
+    const frames=[];let M=M4.R(th[0],0);frames.push(M);
+    for(let i=1;i<7;i++){M=M4.mul(M,M4.DH(al,0,th[i],d));frames.push(M);}
+    const atoms=[[0,0,-d],...frames.map(M4.o)];
+    const cen=atoms.reduce((s,p)=>V.add(s,p),[0,0,0]).map(v=>v/atoms.length);cv.center=cen;cv.cam();
+    cv.grid3(5,1,Math.min(...atoms.map(p=>p[2]))-1.2);
+    // 按深度排序绘制
+    const items=[];for(let i=0;i<7;i++)items.push({z:(cv.P(atoms[i])[2]+cv.P(atoms[i+1])[2])/2,draw:()=>cv.line3(atoms[i],atoms[i+1],{color:tok('--muted'),width:7})});
+    atoms.forEach((p,i)=>items.push({z:cv.P(p)[2]-0.01,draw:()=>{cv.dot3(p,0.42,{fill:tok('--fg'),stroke:tok('--canvas'),width:2,persp:true});cv.text3('C'+(i+1),p,{color:tok('--canvas'),font:'bold 11px'});}}));
+    items.sort((a,b)=>b.z-a.z).forEach(it=>it.draw());
+    if(S.axes)frames.forEach((F,i)=>cv.frame3(F,0.9,{labels:i===3?['x','y','z_i']:false,width:1.4,head:5,dotColor:false}));
+    const e2e=V.len(V.sub(atoms[7],atoms[0]));
+    S.out.innerHTML=`DH：a_i = 0，d_i = ${d} Å，α_i = 70.5°（键角 109.5°）\n变量：θ₂…θ₇（扭转角）\nC₁–C₈ 端到端距离 = ${fmt(e2e,2)} Å\nC₈ 位置 = (${fmt(atoms[7][0],2)}, ${fmt(atoms[7][1],2)}, ${fmt(atoms[7][2],2)})\n<span class="dim">全反式 ≈ 8.9 Å 是最长的构象</span>`;
+  };
+  const setAll=v=>['t2','t3','t4','t5','t6','t7'].forEach((k,i)=>S.set(k,typeof v==='function'?v(i):v));
+  S.btn('trans',()=>setAll(180));S.btn('cis',()=>setAll(0));S.btn('gauche',()=>setAll(i=>i%2?-60:60));
+  cv.draw();
+})();
+})();
+</script>
+<script>
+(function(){
+'use strict';
+const {TAU,DEG,$,$$,tok,fmt,deg,norm180,controls,html,matHTML,C2,dragger,M3}=window.__PA;
+
+/* ================= LAB 10：运动树 ================= */
+(function(){
+  const el=$('#lab-tree'); if(!el) return;
+  const cv=new C2($('canvas',el),{unitsWide:10,cx:2,cy:0.6});
+  const S=controls(el,k=>{if(k==='break'){S['_el_t2u'].disabled=!S.break;}cv.draw();});
+  const r2=Math.SQRT2,phi=45;
+  const cap=(M,len,fill,stroke,name)=>{const a=M3.ap(M,[0,0]),b=M3.ap(M,[len,0]);cv.capsule(a,b,0.14,{fill,stroke,width:1.6});cv.dot(a[0],a[1],4,{fill:tok('--canvas'),stroke,width:1.6});if(name){const m=[(a[0]+b[0])/2,(a[1]+b[1])/2];cv.text(name,m[0],m[1],{dy:-18,color:stroke});}};
+  cv.onDraw=(c)=>{
+    cv.grid();
+    const t2u=S.break?S.t2u:S.t2+phi;
+    const T1=M3.T(S.t1*DEG,0,0),T2l=M3.T(S.t2*DEG,1,0),T2u=M3.T(t2u*DEG,1,0),T5=M3.T(S.t5*DEG,r2,0),T6=M3.T(S.t6*DEG,1,0),T3=M3.T(S.t3*DEG,r2,0),T4=M3.T(S.t4*DEG,1,0);
+    const Ml=M3.mul(T1,T2l),Mu=M3.mul(T1,T2u);
+    const blue=tok('--world'),fill=tok('--surface');
+    cv.frame(0,0,0,0.8,{color:blue,color2:blue,labels:['X','Y'],width:2});
+    cap(T1,1,fill,blue,'A₁');
+    // A₂ 分叉点
+    if(!S.break){const tri=[[0,0],[r2,0],[1,1]].map(p=>M3.ap(Ml,p));cv.poly(tri,{fill:tok('--shade-robot'),stroke:tok('--accent'),width:2});const o=M3.ap(Ml,[0,0]);cv.dot(o[0],o[1],4,{fill:tok('--canvas'),stroke:tok('--accent'),width:1.6});cv.text('A₂',tri[2][0],tri[2][1],{dy:-14,color:tok('--accent')});}
+    else{cap(Ml,r2,tok('--shade-robot'),tok('--accent'),'A₂ₗ');cap(Mu,r2,tok('--shade-robot'),tok('--accent'),'A₂ᵤ');}
+    // 两套坐标系
+    const o2=M3.ap(Ml,[0,0]);cv.frame(o2[0],o2[1],M3.ang(Ml),0.7,{width:1.6,labels:['x₂ₗ','']});cv.frame(o2[0],o2[1],M3.ang(Mu),0.7,{width:1.6,dash:[3,3],labels:['x₂ᵤ','']});
+    // 下链
+    const M5=M3.mul(Ml,T5),M6=M3.mul(M5,T6);cap(M5,1,fill,blue,'A₅');cap(M6,1,fill,blue,'A₆');
+    // 上链
+    const Mb=M3.mul(Mu,T3),M4_=M3.mul(Mb,T4);cap(Mb,1,fill,blue,'A₃');cap(M4_,1,fill,blue,'A₄');
+    const e6=M3.ap(M6,[1,0]),e4=M3.ap(M4_,[1,0]);cv.dot(e6[0],e6[1],5,{fill:blue});cv.dot(e4[0],e4[1],5,{fill:blue});
+    S.out.innerHTML=`约束：θ₂ᵤ = θ₂ₗ + φ = ${deg(S.t2)} + 45° = ${deg(S.t2+phi)}${S.break?`\n<span class="no">已忽略约束：θ₂ᵤ = ${deg(S.t2u)}（A₂ 被撕成两块）</span>`:''}\n────────────\nA₆ 末端 = T₁T₂ₗT₅T₆·(1,0,1)ᵀ\n       = (${fmt(e6[0])}, ${fmt(e6[1])})\nA₄ 末端 = T₁T₂ᵤT₃T₄·(1,0,1)ᵀ\n       = (${fmt(e4[0])}, ${fmt(e4[1])})\n<span class="dim">a₁=1, a₂=√2（两条臂）, a₃=1, a₅=1</span>`;
+  };
+  S['_el_t2u'].disabled=true;
+  cv.draw();
+})();
+
+/* ================= LAB 11：闭环 ================= */
+(function(){
+  const el=$('#lab-loop'); if(!el) return;
+  const cv=new C2($('canvas',el),{unitsWide:5.2,cx:1.55,cy:0});
+  const S=controls(el,()=>cv.draw());
+  const U=['t1','t2','t3','t4','t5'],L=['t10','t9','t8','t7','t6'];
+  const init={t1:72,t2:-36,t3:-36,t4:-36,t5:-36,t10:-72,t9:36,t8:36,t7:36,t6:36};
+  function chain(keys){const Ms=[];let M=M3.I();keys.forEach((k,i)=>{M=M3.mul(M,M3.T(S[k]*DEG,i?1:0,0));Ms.push(M);});return Ms;}
+  const capM=(M,fill,stroke,name)=>{const a=M3.ap(M,[0,0]),b=M3.ap(M,[1,0]);cv.capsule(a,b,0.11,{fill,stroke,width:1.6});cv.dot(a[0],a[1],3.5,{fill:tok('--canvas'),stroke,width:1.5});const m=[(a[0]+b[0])/2,(a[1]+b[1])/2];cv.text(name,m[0],m[1],{dy:-15,color:stroke,font:'11px'});};
+  cv.onDraw=(c)=>{
+    cv.grid(0.5);
+    const Um=chain(U),Lm=chain(L);
+    Um.forEach((M,i)=>capM(M,tok('--surface'),tok('--world'),'A'+(i+1)));
+    Lm.forEach((M,i)=>capM(M,tok('--surface'),tok('--obs'),'A'+(10-i)));
+    const eu=M3.ap(Um[4],[1,0]),elw=M3.ap(Lm[4],[1,0]);const gap=Math.hypot(eu[0]-elw[0],eu[1]-elw[1]);
+    cv.dot(eu[0],eu[1],5,{fill:tok('--world')});cv.dot(elw[0],elw[1],5,{fill:tok('--obs')});
+    if(gap>0.02){cv.line(eu,elw,{stroke:tok('--accent'),width:2,dash:[5,4]});cv.text(`gap = ${fmt(gap)}`,(eu[0]+elw[0])/2,(eu[1]+elw[1])/2,{color:tok('--accent'),dy:-14,font:'11px'});}
+    else cv.dot(eu[0],eu[1],9,{stroke:tok('--accent'),width:2});
+    cv.dot(0,0,5,{fill:tok('--fg')});
+    S.out.innerHTML=`上链末端 T₁⋯T₅(a₅,0,1)ᵀ = (${fmt(eu[0])}, ${fmt(eu[1])})\n下链末端 T₁₀⋯T₆(a₆,0,1)ᵀ = (${fmt(elw[0])}, ${fmt(elw[1])})\n闭合误差 ‖Δ‖ = ${fmt(gap,3)}  ${gap<=0.02?'<span class="ok">✓ 环闭合</span>':'<span class="no">✗ 环断开</span>'}\n自由度：10 − 2 = 8`;
+    return {eu,elw};
+  };
+  S.btn('reset',()=>Object.entries(init).forEach(([k,v])=>S.set(k,v)));
+  S.btn('solve',()=>{
+    const Lm=chain(L);const Q=M3.ap(Lm[4],[1,0]);
+    const Um=chain(U);const P3=M3.ap(Um[2],[1,0]);const phi3=(S.t1+S.t2+S.t3)*DEG;
+    const D=[Q[0]-P3[0],Q[1]-P3[1]];const dist=Math.hypot(D[0],D[1]);
+    if(dist>2+1e-9){S.out.innerHTML+=`\n<span class="no">无解：A₃ 末端到下链末端距离 ${fmt(dist)} > a₄+a₅ = 2，θ₄、θ₅ 怎么调都够不着。</span>`;return;}
+    const c5=Math.max(-1,Math.min(1,(dist*dist-2)/2));let t5=Math.acos(c5);
+    if(Math.abs(norm180(-t5/DEG-S.t5))<Math.abs(norm180(t5/DEG-S.t5)))t5=-t5;
+    const psi=Math.atan2(D[1],D[0])-Math.atan2(Math.sin(t5),1+Math.cos(t5));const t4=psi-phi3;
+    S.set('t4',Math.round(norm180(t4/DEG)*10)/10);S.set('t5',Math.round(norm180(t5/DEG)*10)/10);
+  });
+  cv.draw();
+})();
+
+/* ================= LAB 12：线性变换 ================= */
+(function(){
+  const el=$('#lab-linear'); if(!el) return;
+  const cv=new C2($('canvas',el),{unitsWide:7.5,cx:0.4,cy:0.6});
+  const S=controls(el,()=>cv.draw());
+  const F=[[0,0],[0,2],[1.4,2],[1.4,1.6],[0.5,1.6],[0.5,1.1],[1.1,1.1],[1.1,0.7],[0.5,0.7],[0.5,0]];
+  cv.onDraw=(c)=>{
+    cv.grid();const M=[S.m11,S.m12,S.m21,S.m22];const ap=p=>[M[0]*p[0]+M[1]*p[1],M[2]*p[0]+M[3]*p[1]];
+    cv.poly(F,{stroke:tok('--muted'),width:1.2,dash:[5,4]});
+    cv.poly(F.map(ap),{fill:tok('--shade-robot'),stroke:tok('--accent'),width:2.2});
+    cv.arrow([0,0],[M[0],M[2]],{color:tok('--ax-x'),width:2.4});cv.text('M·e₁',M[0],M[2],{color:tok('--ax-x'),dy:-12,font:'11px'});
+    cv.arrow([0,0],[M[1],M[3]],{color:tok('--ax-y'),width:2.4});cv.text('M·e₂',M[1],M[3],{color:tok('--ax-y'),dy:-12,font:'11px'});
+    const det=M[0]*M[3]-M[1]*M[2];
+    const g11=M[0]*M[0]+M[2]*M[2],g12=M[0]*M[1]+M[2]*M[3],g22=M[1]*M[1]+M[3]*M[3];
+    const ortho=Math.abs(g11-1)<2e-2&&Math.abs(g22-1)<2e-2&&Math.abs(g12)<2e-2;
+    let cls;if(ortho&&det>0)cls=`<span class="ok">旋转 θ = ${deg(Math.atan2(M[2],M[0])/DEG)}（刚体变换）</span>`;else if(ortho)cls=`<span class="no">反射（保距但不保定向，不是刚体变换）</span>`;else if(Math.abs(M[1])<1e-9&&Math.abs(M[2])<1e-9)cls=det<0?'<span class="no">缩放 + 镜像</span>':'缩放';else if(Math.abs(det-1)<2e-2)cls='剪切类（面积不变）';else cls='一般线性变换';
+    S.out.innerHTML=`M = `+matHTML(M,2)+`\ndet M = ${fmt(det,3)}  ${det<0?'<span class="no">（负：镜像）</span>':''}\n面积缩放 |det| = ${fmt(Math.abs(det),3)}\nMᵀM = I ? ${ortho?'<span class="ok">是</span>':'<span class="no">否</span>'}\n判定：${cls}\n<span class="dim">M 的两列 = e₁、e₂ 变换后的位置</span>`;
+  };
+  const set=(a,b,c,d)=>{S.set('m11',a);S.set('m12',b);S.set('m21',c);S.set('m22',d);};
+  S.btn('rot',()=>set(Math.cos(30*DEG).toFixed(2),(-Math.sin(30*DEG)).toFixed(2),Math.sin(30*DEG).toFixed(2),Math.cos(30*DEG).toFixed(2)));
+  S.btn('scale',()=>set(1.5,0,0,0.6));S.btn('mirror',()=>set(-1,0,0,1));S.btn('shear',()=>set(1,1,0,1));S.btn('id',()=>set(1,0,0,1));
+  cv.draw();
+})();
+})();
+</script>
+</body>
+</html>

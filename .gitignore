@@ -1,0 +1,7 @@
+.DS_Store
+__pycache__/
+*.pyc
+.venv/
+venv/
+# 原书 PDF 版权属于 Cambridge University Press，不进主分支；需要时从 https://lavalle.pl/planning/ 下载
+book/

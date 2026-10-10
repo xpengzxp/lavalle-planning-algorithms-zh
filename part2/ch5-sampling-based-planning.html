@@ -1,0 +1,861 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>基于采样的运动规划 · 第 5 章</title>
+<meta name="description" content="LaValle《Planning Algorithms》第 5 章的中文互动教程：度量与 Haar 测度、van der Corput / Halton / Sukharev 采样、分散度与差异、层次与增量碰撞检测、路径段检查、随机势场、RRT/RDT、Kd 树、PRM 与可见性路线图。">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+<link rel="stylesheet" href="../assets/style.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"></script>
+<script src="../assets/common.js"></script>
+<script defer src="js/ch5-lib.js"></script>
+<script defer src="js/ch5-metric.js"></script>
+<script defer src="js/ch5-sampling.js"></script>
+<script defer src="js/ch5-collision.js"></script>
+<script defer src="js/ch5-search.js"></script>
+<script defer src="js/ch5-rdt.js"></script>
+<script defer src="js/ch5-roadmap.js"></script>
+<style>
+  .ch5-stage { width: 100%; }
+  .ch5-stage canvas { margin: 0 auto; border-radius: 6px; }
+  .box.intuition ul { margin: 0; padding-left: 1.2em; }
+  .fig51 { max-width: 640px; margin: 0 auto; display: block; }
+  .complete-grid td:first-child { white-space: nowrap; }
+  .fn { font-size: .8em; }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <a class="brand" href="../index.html">Planning Algorithms 学习站</a>
+  <span class="crumbs"><a href="../index.html">首页</a> › Part II › 第 5 章 基于采样的运动规划</span>
+  <button class="icon-btn" id="theme-toggle" type="button" aria-label="切换深浅色">☾</button>
+</header>
+
+<div class="layout">
+<nav class="toc" aria-label="目录">
+  <p class="toc-title">本章目录</p>
+  <ol>
+    <li><a href="#overview">本章导读</a></li>
+    <li><a href="#s5-1">5.1 C-space 中的距离与体积</a>
+      <ol>
+        <li><a href="#s5-1-1">度量空间</a></li>
+        <li><a href="#s5-1-2">运动规划常用的度量</a></li>
+        <li><a href="#s5-1-3">测度论的基本定义</a></li>
+        <li><a href="#s5-1-4">用对测度：Haar 测度</a></li>
+      </ol>
+    </li>
+    <li><a href="#s5-2">5.2 采样理论</a>
+      <ol>
+        <li><a href="#s5-2-1">动机、稠密性、van der Corput</a></li>
+        <li><a href="#s5-2-2">随机采样</a></li>
+        <li><a href="#s5-2-3">低分散度采样</a></li>
+        <li><a href="#s5-2-4">低差异采样</a></li>
+      </ol>
+    </li>
+    <li><a href="#s5-3">5.3 碰撞检测</a>
+      <ol>
+        <li><a href="#s5-3-1">基本概念</a></li>
+        <li><a href="#s5-3-2">层次方法</a></li>
+        <li><a href="#s5-3-3">增量方法</a></li>
+        <li><a href="#s5-3-4">检查一条路径段</a></li>
+      </ol>
+    </li>
+    <li><a href="#s5-4">5.4 增量采样与搜索</a>
+      <ol>
+        <li><a href="#s5-4-1">通用框架</a></li>
+        <li><a href="#s5-4-2">改造离散搜索算法</a></li>
+        <li><a href="#s5-4-3">随机势场</a></li>
+        <li><a href="#s5-4-4">其它方法</a></li>
+      </ol>
+    </li>
+    <li><a href="#s5-5">5.5 快速探索稠密树</a>
+      <ol>
+        <li><a href="#s5-5-1">探索算法</a></li>
+        <li><a href="#s5-5-2">高效找最近点</a></li>
+        <li><a href="#s5-5-3">用树来规划</a></li>
+      </ol>
+    </li>
+    <li><a href="#s5-6">5.6 多查询的路线图方法</a>
+      <ol>
+        <li><a href="#s5-6-1">基本方法</a></li>
+        <li><a href="#s5-6-2">可见性路线图</a></li>
+        <li><a href="#s5-6-3">改进路线图的启发式</a></li>
+      </ol>
+    </li>
+    <li><a href="#cheatsheet">本章速查表</a></li>
+    <li><a href="#pitfalls">常见陷阱</a></li>
+    <li><a href="#exercises">习题导引</a></li>
+    <li><a href="#notes">脚注</a></li>
+  </ol>
+</nav>
+
+<main class="content">
+
+<p class="kicker">Part II · 第 5 章</p>
+<h1>基于采样的运动规划 <span class="en">Sampling-Based Motion Planning</span></h1>
+<p class="lede">第 4 章把运动规划写成了 Formulation 4.1：在配置空间 \(\mathcal{C}\) 里找一条从 \(q_I\) 到 \(q_G\)、完全落在 \(\mathcal{C}_{free}\) 中的路径。解决它有两大思路。这一章讲其中一种——<b>基于采样的运动规划</b>：不去显式构造 \(\mathcal{C}_{obs}\)，而是用一个采样方案去「探测」\(\mathcal{C}\)，把碰撞检测当作<b>黑盒 black box</b>。另一种思路（组合方法）在第 6 章。</p>
+
+<section id="overview">
+<h2 style="border-top:0;margin-top:1em">本章导读</h2>
+
+<svg class="fig51" viewBox="0 0 640 210" role="img" aria-label="图 5.1：基于采样的规划哲学">
+  <defs><marker id="f51a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker></defs>
+  <rect x="10" y="74" width="130" height="56" rx="10" fill="var(--surface-2)" stroke="var(--border-strong)"/>
+  <text x="75" y="99" text-anchor="middle" font-size="14" fill="var(--text)">几何模型</text>
+  <text x="75" y="118" text-anchor="middle" font-size="11.5" fill="var(--muted)">Geometric Models</text>
+  <rect x="190" y="74" width="150" height="56" rx="10" fill="var(--warn-soft)" stroke="var(--warn)"/>
+  <text x="265" y="99" text-anchor="middle" font-size="14" fill="var(--text)">碰撞检测</text>
+  <text x="265" y="118" text-anchor="middle" font-size="11.5" fill="var(--muted)">「黑盒」</text>
+  <rect x="390" y="18" width="240" height="174" rx="12" fill="var(--accent-soft)" stroke="var(--accent)"/>
+  <text x="510" y="44" text-anchor="middle" font-size="14" font-weight="650" fill="var(--accent-text)">基于采样的规划算法</text>
+  <rect x="410" y="62" width="200" height="50" rx="8" fill="var(--surface)" stroke="var(--border-strong)"/>
+  <text x="510" y="84" text-anchor="middle" font-size="13" fill="var(--text)">C-space 采样</text>
+  <text x="510" y="101" text-anchor="middle" font-size="11" fill="var(--muted)">5.2 节</text>
+  <rect x="410" y="124" width="200" height="50" rx="8" fill="var(--surface)" stroke="var(--border-strong)"/>
+  <text x="510" y="146" text-anchor="middle" font-size="13" fill="var(--text)">离散搜索</text>
+  <text x="510" y="163" text-anchor="middle" font-size="11" fill="var(--muted)">第 2 章、5.4–5.6 节</text>
+  <path d="M140 102 L186 102" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#f51a)"/>
+  <path d="M340 92 L386 82" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#f51a)"/>
+  <path d="M386 128 L344 114" stroke="var(--muted)" stroke-width="1.6" marker-end="url(#f51a)"/>
+  <text x="362" y="72" text-anchor="middle" font-size="10.5" fill="var(--muted)">q 自由吗？</text>
+  <text x="362" y="142" text-anchor="middle" font-size="10.5" fill="var(--muted)">查询 q</text>
+</svg>
+<p class="small muted" style="text-align:center">图 5.1 的重画：碰撞检测模块把规划算法和具体的几何、运动学模型隔开。规划算法只做两件事——在 C-space 里采样，以及（离散地）搜索。</p>
+
+<p>这种「黑盒」分工的好处是：规划算法<b>与几何模型的具体形式无关</b>。模型是半代数集、三维三角形还是非凸多面体，全由碰撞检测模块去操心。正因为如此，这类方法在机器人、制造、生物等领域解决了由成千上万、甚至上百万个几何图元构成的问题——这些问题如果要显式表示 \(\mathcal{C}_{obs}\)，几乎不可能解。</p>
+
+<h3 id="completeness">几种「完备性」</h3>
+<p>代价是更弱的保证。书中区分了三种完备性：</p>
+<div class="table-wrap">
+<table class="data complete-grid">
+  <tr><th>名称</th><th>含义</th><th>谁能做到</th></tr>
+  <tr><td>完备 <span class="en">complete</span></td><td>对任何输入，在有限时间内正确报告是否有解；有解就在有限时间内返回一个。</td><td>第 6 章的组合方法</td></tr>
+  <tr><td>分辨率完备 <span class="en">resolution complete</span></td><td>确定性地<b>稠密</b>采样：有解则有限时间内找到；无解可能永远跑下去。</td><td>用稠密确定性序列（网格、van der Corput、Halton…）的算法</td></tr>
+  <tr><td>概率完备 <span class="en">probabilistically complete</span></td><td>随机采样以概率 1 稠密：点足够多时，找到（存在的）解的概率趋于 1。</td><td>RRT、PRM 等用随机采样的算法</td></tr>
+</table>
+</div>
+<p>书中特别提醒：真正有用的是<b>收敛速度</b>，而这通常非常难确定。</p>
+
+<div class="box">
+  <div class="box-title">本章地图与读法</div>
+  <ul style="margin:0">
+    <li><b>5.1 度量与测度</b>：几乎所有采样算法都要一个距离函数（度量空间），很多还需要「体积」（测度空间）；优先用不变测度（Haar 测度）。</li>
+    <li><b>5.2 采样理论</b>：稠密、均匀、分散度、差异——衡量「样本撒得好不好」的标准。</li>
+    <li><b>5.3 碰撞检测</b>：黑盒里面是什么、要付出多大计算代价；以及怎样检查一整段路径。</li>
+    <li><b>5.4 增量采样与搜索</b>：<b>单查询 single-query</b> 算法的通用模板，把采样和第 2 章的搜索结合。</li>
+    <li><b>5.5 RDT / RRT</b>：不需要调参的高效单查询规划器。</li>
+    <li><b>5.6 路线图</b>：<b>多查询 multiple-query</b>，先花大力气预处理一张路线图（PRM），之后每次查询都很快（假设障碍 \(\mathcal{O}\) 不变）。</li>
+  </ul>
+  <p style="margin:.6em 0 0">前置知识：第 4 章的 \(\mathcal{C}\)、\(\mathcal{C}_{obs}\)、拓扑等同（4.1、4.2、4.3.1 节，见 <a href="ch4-configuration-space.html">第 4 章教程</a>）以及第 2 章的搜索（<a href="../part1/ch2-discrete-planning.html">2.2 节</a>）。只想尽快会用的话，可以先读 5.1.1–5.1.2、5.2.1–5.2.3、5.3.4、5.4.1、5.5、5.6.1；5.1.3 的测度论可以先略读。</p>
+</div>
+<p class="small muted">本页所有 2D 互动图都直接画在 C-space 里：一个点就是一个位形，黑灰色区域就是 \(\mathcal{C}_{obs}\)。参考代码 <a href="code/ch5_sampling.py"><code>part2/code/ch5_sampling.py</code></a> 用来核对页面上出现的数值。</p>
+</section>
+
+<!-- ============================================================ 5.1 -->
+<section id="s5-1">
+<h2>5.1 C-space 中的距离与体积 <span class="en">Distance and Volume in C-Space</span></h2>
+<p>几乎所有基于采样的规划算法都需要一个度量 \(\mathcal{C}\) 中两点距离的函数，大多数情况下这会得到一个<b>度量空间 metric space</b>（5.1.1）。很多算法还要定义 \(\mathcal{C}\) 的子集的「体积」，这需要<b>测度空间 measure space</b>（5.1.3）。只要可能，就应该用<b>不变测度</b>（5.1.4）。</p>
+
+<h3 id="s5-1-1">5.1.1 度量空间</h3>
+<div class="box def">
+  <div class="box-title">定义：度量空间 \((X, \rho)\)</div>
+  <p>拓扑空间 \(X\) 配上函数 \(\rho : X \times X \to \mathbb{R}\)，使得对任意 \(a, b, c \in X\)：</p>
+  <ol style="margin:0">
+    <li><b>非负性</b>：\(\rho(a,b) \ge 0\)；</li>
+    <li><b>自反性</b>：\(\rho(a,b) = 0\) 当且仅当 \(a = b\)；</li>
+    <li><b>对称性</b>：\(\rho(a,b) = \rho(b,a)\)；</li>
+    <li><b>三角不等式</b>：\(\rho(a,b) + \rho(b,c) \ge \rho(a,c)\)。</li>
+  </ol>
+</div>
+<p>最后一条说明 \(\rho\) 是「最优」的：从 \(a\) 绕道 \(b\) 再到 \(c\)，不会比直接去更近。书中脚注提到，有些拓扑空间不可度量化（metrizable），但运动规划里出现的空间几乎都可以。</p>
+
+<h4>\(L_p\) 度量</h4>
+<p>\(\mathbb{R}^n\) 上最重要的一族度量，对任何 \(p \ge 1\)：</p>
+<div class="eq">$$\rho(x,x') = \Big(\sum_{i=1}^{n} |x_i - x'_i|^p\Big)^{1/p}. \tag{5.1}$$</div>
+<ul>
+  <li><b>\(L_2\)</b>：欧氏度量 Euclidean metric，就是平常的直线距离。</li>
+  <li><b>\(L_1\)</b>：曼哈顿度量 Manhattan metric——沿轴向网格走的路程。例如 \((0,0)\) 到 \((2,5)\)：「向东两个街区，再向北五个街区」，距离 7。</li>
+  <li><b>\(L_\infty\)</b>：要对 (5.1) 取 \(p \to \infty\) 的极限：
+    <div class="eq">$$L_\infty(x,x') = \max_{1\le i\le n}\{|x_i - x'_i|\}. \tag{5.2}$$</div>
+    直觉：\(p\) 越大，和式里最大的那一项越占主导。</li>
+</ul>
+<p>\(L_p\) 度量可以由 \(L_p\) 范数导出：\(\|x\|_p = \big(\sum_{i} |x_i|^p\big)^{1/p}\) <span class="eqno">(5.3)</span>，于是 \(\rho(x,y) = \|x-y\|\)，用向量减法写起来很方便。</p>
+
+<div class="widget" data-widget="lp-metric"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>把 a 放在 (0,0)、b 放在 (2,5) 附近（按比例缩小即可），看 L1 恰好是 |Δx| + |Δy|，而 L∞ 只取较大的那个分量。</li>
+  <li>把 p 从 1 拖到 ∞：「球」从菱形变成圆再变成正方形；三个数值始终满足 L∞ ≤ L2 ≤ L1。</li>
+  <li>让 a、b 在同一条水平线上：三种度量完全相等——差别只在斜方向上出现。</li>
+</ul></div>
+
+<h4>度量子空间与笛卡儿积</h4>
+<p><b>子空间</b>：度量空间 \((X,\rho)\) 的任何子集 \(Y\)，把 \(\rho\) 限制到 \(Y \times Y\) 上仍是度量空间。所以第 4 章的流形、簇只要嵌在 \(\mathbb{R}^m\) 里，直接用 \(\mathbb{R}^m\) 的 \(L_p\) 度量即可。</p>
+<p><b>笛卡儿积</b>：C-space 常常是积空间（尤其是多个物体）。给定 \((X,\rho_x)\)、\((Y,\rho_y)\)，对 \(Z = X\times Y\)、\(z = (x,y)\) 定义</p>
+<div class="eq">$$\rho_z(z,z') = \rho_z(x,y,x',y') = c_1\,\rho_x(x,x') + c_2\,\rho_y(y,y'), \tag{5.4}$$</div>
+<p>其中 \(c_1, c_2 > 0\) 是任意正常数。其它组合也行，例如对任意正整数 \(p\)：</p>
+<div class="eq">$$\rho_z(z,z') = \big(c_1[\rho_x(x,x')]^p + c_2[\rho_y(y,y')]^p\big)^{1/p}. \tag{5.5}$$</div>
+<p>重点：<b>选择很多，并不一定存在「正确」的那一个</b>。常数 \(c_1, c_2\) 的选择会在下面的例 5.5 里变得棘手。</p>
+
+<h3 id="s5-1-2">5.1.2 运动规划常用的度量</h3>
+<p><b>例 5.1（用复数表示 SO(2)）</b>：SO(2) 是 \(\{(a,b)\in\mathbb{R}^2 \mid a^2+b^2=1\}\)。直接用 \(\mathbb{R}^2\) 的欧氏度量：</p>
+<div class="eq">$$\rho(a_1,b_1,a_2,b_2) = \sqrt{(a_1-a_2)^2 + (b_1-b_2)^2}. \tag{5.6}$$</div>
+<p><b>例 5.2（比较角度）</b>：(5.6) 量的是弦长，不是沿圆周走的距离，这种扭曲可能不受欢迎。直接比较角度时要处理等同 \(0 \sim 2\pi\)——从 \(\theta_1\) 到 \(\theta_2\) 有两个方向可走，所以出现 min：</p>
+<div class="eq">$$\rho(\theta_1,\theta_2) = \min\big\{|\theta_1-\theta_2|,\ 2\pi - |\theta_1-\theta_2|\big\}, \tag{5.7}$$</div>
+<p>其中 \(\theta_1,\theta_2 \in [0,2\pi]/\sim\)。用复数表示，它也就是两个单位向量的夹角：</p>
+<div class="eq">$$\rho(a_1,b_1,a_2,b_2) = \cos^{-1}(a_1a_2 + b_1b_2). \tag{5.8}$$</div>
+<p><b>例 5.3（SE(2)）</b>：用复数表示旋转，SE(2) 的元素就是 \((x_t, y_t, a, b) \in \mathbb{R}^4\)，直接套用 \(\mathbb{R}^4\) 上任何 \(L_p\) 度量。</p>
+<p><b>例 5.4（用四元数表示 SO(3)）</b>：单位四元数构成 \(\mathbb{R}^4\) 中的 \(\mathbb{S}^3\)，但 SO(3) 还要把<b>对径点等同</b>（\(h\) 和 \(-h\) 是同一个旋转）。考虑这一点后：</p>
+<div class="eq">$$\rho(h_1,h_2) = \min\big\{\|h_1-h_2\|,\ \|h_1+h_2\|\big\}, \tag{5.9}$$</div>
+<p>第二项对应 \(h_1\) 到 \(-h_2\) 的距离。和 SO(2) 一样，(5.9) 是穿过 \(\mathbb{S}^3\) 内部的直线距离。改用<b>球面线性插值</b>的思路，沿 \(\mathbb{S}^3\) 表面量：</p>
+<div class="eq">$$\rho_s(h_1,h_2) = \cos^{-1}(a_1a_2 + b_1b_2 + c_1c_2 + d_1d_2), \tag{5.10}$$</div>
+<div class="eq">$$\rho(h_1,h_2) = \min\big\{\rho_s(h_1,h_2),\ \rho_s(h_1,-h_2)\big\}. \tag{5.11}$$</div>
+<p>这里 \(h_i = (a_i,b_i,c_i,d_i)\)。(5.10) 正是 (5.8) 的四维推广。</p>
+
+<div class="widget wide" data-widget="so2-metric"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>把 θ₁ 放在 10° 附近、θ₂ 放在 350° 附近：天真的 |θ₁−θ₂| ≈ 340°，(5.7) 给出 20°（右边的区间图里绿线改为绕过端点）。</li>
+  <li>比较 (5.6) 弦长和 (5.7) 弧长：两点越远，弦长越「偷懒」；两者不成正比，这就是例 5.2 说的扭曲。</li>
+  <li>切换到「对径点等同」：两点之间最远只有 90°；当 h₂ 越过对面时，最近的变成了 −h₂。这就是 (5.9)、(5.11) 里取 min 的原因。<span class="muted">（补充：四元数是半角表示，绕 z 轴转 10° 和 350° 在 (5.11) 下距离是 10°，对应两个旋转实际相差 20°；见参考代码第 7 项。）</span></li>
+</ul></div>
+
+<p><b>例 5.5（另一个 SE(2) 度量）</b>：SE(2) 的度量必须同时比较平面上的距离和一个角度。即使取 \(c_1 = c_2 = 1\)，\(\mathbb{S}^1\) 用弧度是 \([0,2\pi)\)、用角度是 \([0,360)\)——同一个 \(c_2\) 会给出两个截然不同的度量。\(\mathbb{R}^2\) 和 \(\mathbb{S}^1\) 的单位根本不相容。</p>
+<p><b>例 5.6（机器人位移度量 robot displacement metric）</b>：有时可以用「机器人实际动了多少」来化解这种不相容：</p>
+<div class="eq">$$\rho(q_1,q_2) = \max_{a\in\mathcal{A}}\big\{\|a(q_1) - a(q_2)\|\big\}, \tag{5.12}$$</div>
+<p>\(a(q_i)\) 是机器人 \(\mathcal{A}\) 在位形 \(q_i\) 时点 \(a\) 在世界中的位置。直觉：从 \(q_1\) 到 \(q_2\)，机器人身上<b>移动最远的那个点</b>移动了多远。对能平移和旋转的凸多面体机器人，只需检查顶点。它看上去很理想，但对大多数情况还不知道高效的算法。</p>
+<p><b>例 5.7（\(T^n\)）</b>：把 (5.4)、(5.5) 推广到每个 \(\mathbb{S}^1\) 分量，得到 \(n\) 个系数 \(c_1,\ldots,c_n\)。可以借助机器人位移来定：对连杆链，改变第一个关节整条链都动，应该加大权重；最后一个关节只动最后一节，权重可以小一些。<b>例 5.8（SE(3)）</b>：\(\mathbb{R}^3\) 的度量与 (5.11) 的 SO(3) 度量做笛卡儿积，同样留下要指定的系数（5.3.4 节会再谈机器人位移）。</p>
+
+<div class="widget" data-widget="displacement"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>切换「弧度 / 角度」：同一对位形，(5.4) 的数值能差几十倍——这就是例 5.5。位移度量 (5.12) 不受影响。</li>
+  <li>点「只平移」：每个点都移动同样距离，位移度量 = ‖Δt‖。点「只旋转」：离旋转中心最远的点 a_r 动得最多，位移度量 = a_r 的弦长 ≤ r|Δθ|（式 5.30）。</li>
+  <li>边拖边看：位移度量永远不超过 (5.31) 里的 |Δx| + |Δy| + r|Δθ|——5.3.4 节用的正是这个上界。</li>
+</ul></div>
+
+<h4>伪度量 pseudometric</h4>
+<p>很多规划算法用的「距离」并不满足全部度量公理，称为<b>伪度量</b>。一个常用的构造原则是：把距离定义为某个准则下的<b>最优代价到目标 cost-to-go</b>（回忆 2.3 节）。在连续情形里，代价可以是机器人走过的路程，甚至是消耗的能量。这种伪度量有时<b>不对称</b>：汽车下坡比上坡省能量；只能前进的车从 \(q_1\) 开到 \(q_2\) 很近，从 \(q_2\) 回到 \(q_1\) 可能要绕很远（13.1.2、15.3.1 节的 Dubins 车）。另一个重要例子是 5.4.3 节随机势场里的<b>势函数 potential function</b>：它估计到目标的距离，再加上把机器人推离障碍的斥力项，常常产生局部极小，从而可能违反三角不等式。</p>
+
+<h3 id="s5-1-3">5.1.3 测度论的基本定义</h3>
+<p>测度可以看作给度量空间 \((X,\rho)\) 的子集赋予实数值（「体积」）的函数。理想情况是对任何 \(A \subseteq X\) 给出 \(\mu(A) \in [0,\infty]\)。可惜由于 <b>Banach–Tarski 悖论</b>，当 \(X = \mathbb{R}^n\) 时某些子集无法自洽地赋予体积（\(X\) 有限时不会有这个问题）。补救办法是只对一族「好」子集定义测度。</p>
+<div class="box def">
+  <div class="box-title">定义：σ-代数 sigma algebra</div>
+  <p>\(X\) 的子集族 \(\mathcal{B}\) 满足：</p>
+  <ol style="margin:0">
+    <li>空集属于 \(\mathcal{B}\)；</li>
+    <li>若 \(B\in\mathcal{B}\)，则 \(X\setminus B\in\mathcal{B}\)；</li>
+    <li>\(\mathcal{B}\) 中可数个集合的并仍在 \(\mathcal{B}\) 中。</li>
+  </ol>
+  <p style="margin-top:.4em">由 2、3 可推出可数交也在 \(\mathcal{B}\) 中。\(\mathcal{B}\) 中的集合称为<b>可测集 measurable sets</b>。</p>
+</div>
+<p><b>Borel 集</b>：从度量空间的所有开球</p>
+<div class="eq">$$B(x,r) = \{x'\in X \mid \rho(x,x') < r\} \tag{5.13}$$</div>
+<p>出发，用 σ-代数的公理生成。例如 \(\mathbb{R}^2\) 中的开正方形是 Borel 集：它是可数个开球的并（需要无穷多个，因为圆球要逐渐逼近正方形的直边）。<b>例 5.9</b>：在 \(\mathbb{R}\) 上，开球就是所有开区间 \((x_1,x_2)\)。</p>
+<div class="box def">
+  <div class="box-title">定义：测度 \(\mu : \mathcal{B}\to[0,\infty]\)</div>
+  <ol style="margin:0">
+    <li>\(\mu(\emptyset) = 0\)；</li>
+    <li>对可数个（可以有限个）两两不交的可测集 \(E_1,E_2,\ldots\)，设并集为 \(E\)，则
+    <div class="eq">$$\mu(E) = \sum_i \mu(E_i). \tag{5.14}$$</div></li>
+  </ol>
+</div>
+<ul>
+  <li><b>例 5.10 Lebesgue 测度</b>：\(\mathbb{R}\) 上的长度、\(\mathbb{R}^2\) 上的面积、\(\mathbb{R}^n\) 上的体积。可数集测度为零（单点 \(\{1\}\)、\(\mathbb{Z}\)、\(\mathbb{Q}\) 都是零测集）；维数 \(m < n\) 的集合在 \(\mathbb{R}^n\) 中测度为零——例如 \(\mathbb{S}^2 \subset \mathbb{R}^3\) 没有体积，但限制到 \(\mathbb{S}^2\) 上定义表面积就非零。</li>
+  <li><b>例 5.11 计数测度</b>：\(X\) 有限时 \(\mu(A) = |A|\)，可定义在整个幂集上。</li>
+  <li><b>例 5.12 概率测度</b>：概率公理（9.1.2 节）与测度公理一致；离散与连续情形的期望统一成一个测度论积分（Lebesgue 积分）。</li>
+</ul>
+
+<h3 id="s5-1-4">5.1.4 用对测度：Haar 测度</h3>
+<p>度量和测度都有很多选择，而采样规划算法的性能又强烈依赖于它们。幸运的是，对某些变换群（包括 \(SO(N)\)）存在一个自然的测度——<b>Haar 测度</b>：</p>
+<div class="box def">
+  <div class="box-title">定义：Haar 测度</div>
+  <p>设 \(G\) 是实矩阵群，\(\mu\) 是 \(G\) 上的测度。若对任何可测子集 \(A\subseteq G\) 和任何 \(g\in G\) 都有 \(\mu(A) = \mu(gA) = \mu(Ag)\)，则称 \(\mu\) 为 \(G\) 的 Haar 测度。\(gA\) 表示所有乘积 \(ga\)（\(a\in A\)）的集合。（它在相差一个常数倍的意义下唯一，且对任何局部紧拓扑群都存在。）</p>
+</div>
+<p><b>例 5.13（SO(2)）</b>：把旋转参数化成 \([0,1]/\sim\)，取单位区间上的 Lebesgue 测度。区间 \([1/4,1/2]\) 对应从 \(\theta = \pi/2\) 到 \(\theta=\pi\) 的旋转，测度 \(1/4\)。每个都乘以 \(\theta=\pi\) 的旋转后，变成 \(3\pi/2\) 到 \(2\pi = 0\) 的旋转，测度仍是 \(1/4\)：乘一个旋转只是在 \([0,1]/\sim\) 上平移区间，而长度对平移不变。由这个 Haar 测度还能得到不变度量：\(\rho = \mu([x_1,x_2])\)，取包含两端点的最短区间——这正是例 5.2。反过来，任何非均匀的概率密度都不是 Haar 测度，它会无缘无故地偏重 SO(2) 的某些部分。</p>
+<p><b>例 5.14（SO(3)）</b>：四元数再次救场。用单位四元数表示时，SO(3) 被参数化成对径点等同的 \(\mathbb{S}^3\)，而 \(\mathbb{S}^3\) 上的表面积（三维的「表面体积」）就是 Haar 测度。如果改用欧拉角参数化，就<b>得不到</b> Haar 测度：某些旋转会毫无理由地被赋予更大的权重。下一节的互动图会让你亲眼看到这个偏差。</p>
+</section>
+
+<!-- ============================================================ 5.2 -->
+<section id="s5-2">
+<h2>5.2 采样理论 <span class="en">Sampling Theory</span></h2>
+
+<h3 id="s5-2-1">5.2.1 动机与基本概念</h3>
+<p>\(\mathcal{C}\) 是不可数无穷的，而算法最多只能考察可数个样本；实际上我们还希望它在有限个样本之后就停下。由于常常<b>提前终止</b>，样本的<b>顺序</b>变得至关重要。所以要区分<b>样本集合 sample set</b> 和<b>样本序列 sample sequence</b>：一个序列唯一确定一个集合，但同一个集合可以排成很多序列。</p>
+<div class="box def">
+  <div class="box-title">稠密 dense</div>
+  <p>拓扑空间的子集 \(U\) 在 \(V\) 中稠密，是指 \(\mathrm{cl}(U) = V\)（闭包，4.1.1 节）：给 \(U\) 补上边界点就得到 \(V\)。例如 \((0,1)\) 在 \([0,1]\) 中稠密；更有趣的是，有理数 \(\mathbb{Q}\) <b>可数</b>却在 \(\mathbb{R}\) 中稠密——任何实数（如 \(\pi\)）都有一列分数收敛到它。一个序列的底层集合稠密，就称这个序列稠密。<b>采样方法的最低要求就是产生稠密序列</b>；更强的要求（均匀性、规则性）稍后介绍。</p>
+</div>
+<p><b>随机序列「大概率」稠密</b>：设 \(\mathcal{C} = [0,1]\)，\(I\subset[0,1]\) 是长度为 \(e\) 的区间。独立随机取 \(k\) 个点，全都不落在 \(I\) 里的概率是 \((1-e)^k\)，\(k\to\infty\) 时趋于 0。但无穷随机序列只是<b>以概率 1</b> 稠密，不是「保证」稠密——就像在 \([0,1]\) 里随机取一个数，取到 \(\pi/4\) 的概率是 0，却仍然可能。这对运动规划没有实际影响；但 \(k\) 不大时，只有概率保证而没有绝对的覆盖保证，可能让人沮丧。</p>
+
+<h4>van der Corput 序列</h4>
+<p>1935 年由荷兰数学家 van der Corput 发表，书中称它「美丽却没被充分利用」。设 \(\mathcal{C} = [0,1]/\sim\)（0 与 1 等同，可以看成 SO(2)）。如果要放 16 个样本，理想的集合是 \(S = \{i/16 \mid 0\le i<16\}\)，任何点到最近样本不超过 1/32。但要把它变成<b>序列</b>，怎么排？如果连 16 个够不够都不知道呢？</p>
+<p>朴素做法按大小递增排列：前 8 个点之后，整整一半的 \(\mathcal{C}\) 还没碰过。van der Corput 的妙招是<b>把二进制小数的位反转</b>：原来最高位只翻转一次、最低位每步都翻转；反转后最高位每步都翻转，于是序列在上下两半之间来回跳。记第 \(i\) 个点为 \(\nu(i)\)。</p>
+<ul>
+  <li>\(\nu(i)\) 和 \(\nu(i+1)\) 总是相距很远；任何前缀都覆盖得不错。\(i\) 是 2 的幂时点恰好等距；其它 \(i\) 下，长度为 \(l\) 的区间里大约有 \(il\) 个点（例如 \(i = 10\) 时每个长 1/2 的区间约有 5 个点）。</li>
+  <li>16 这个长度并不重要：用 8 得到的 \(\nu(1),\ldots,\nu(8)\) 完全相同（只是去掉了末尾的 0）；用 32 则前 16 个不变、再接着漂亮地延续下去。于是得到一个<b>不需要事先指定点数</b>的无穷序列，而且它在 \([0,1]/\sim\) 中稠密。</li>
+</ul>
+
+<div class="widget wide" data-widget="vdc"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>把 i 停在 8：朴素序列只占了左半边，最大空隙（红影）是整整一半；van der Corput 已经是间距 1/8 的完美网格。</li>
+  <li>点「自动」看对数图：蓝线在 i = 2, 4, 8, 16, 32 时恰好碰到 1/(2i)，其它时候夹在 1/(2i) 和 1/i 之间——这就是 5.2.3 节说的「分散度以 1/k 为界，k 为 2 的幂时是 1/(2k)」（参考代码第 2 项核对过）。</li>
+  <li>把朴素序列的 N 改成 64：朴素序列整体变了，van der Corput 的前 16 个点却一点没变。换成基 3：这就是 Halton 序列的第二个坐标。</li>
+</ul></div>
+
+<h3 id="s5-2-2">5.2.2 随机采样 <span class="en">Random Sampling</span></h3>
+<p>目标：对任意有界 \(\mathcal{C}\subseteq\mathbb{R}^m\) 生成<b>均匀随机</b>样本——概率密度 \(p(q)\) 在 \(\mathcal{C}\) 上均匀，而且（在有意义时）与 Haar 测度一致，不允许因为参数化选得不好而引入人为偏差。均匀随机欧拉角<b>不</b>给出 SO(3) 上的均匀随机样本；均匀随机单位四元数则完美，因为它和 Haar 测度用的是同一个参数化（都在 \(\mathbb{S}^3\) 上取点）。</p>
+<p>随机采样最容易用在 C-space 上，一个主要原因是它<b>能直接跨笛卡儿积</b>：若 \(X = X_1\times X_2\)，在两边各取均匀随机样本 \(x_1, x_2\)，则 \((x_1,x_2)\) 就是 \(X\) 上的均匀随机样本。例如 15 个机器人各在 \([0,1]^2\) 中平移，\(\mathcal{C} = [0,1]^{30}\)，在 \([0,1]\) 里独立取 30 个随机数拼起来就行。确定性方法（5.2.3、5.2.4）跨积空间要难得多。</p>
+
+<h4>生成 SO(3) 中的随机元素</h4>
+<p>概率密度必须对应 Haar 测度，即在 \(\mathbb{S}^3\) 上随机取点再当作单位四元数。书中引用的一个非常巧妙的方法：在 \([0,1]\) 中均匀随机取 \(u_1,u_2,u_3\)，则</p>
+<div class="eq">$$h = \big(\sqrt{1-u_1}\,\sin 2\pi u_2,\ \sqrt{1-u_1}\,\cos 2\pi u_2,\ \sqrt{u_1}\,\sin 2\pi u_3,\ \sqrt{u_1}\,\cos 2\pi u_3\big) \tag{5.15}$$</div>
+<p>是均匀随机四元数。直觉先降一维：在 \(\mathbb{S}^2\) 上，用 \(u_1\) 选第三个坐标（纬线），\(u_2\) 选经度 \(2\pi u_2\)。为什么均匀？把 \(\mathbb{S}^2\) 想成球形面包的外皮，用切片机平行于赤道切成等厚的片，<b>每片外皮的面积相等</b>。\(\mathbb{S}^3\) 则可以分解成一族圆（Hopf 纤维化 Hopf fibration）：\(\mathbb{S}^2\) 上每点对应一个 \(\mathbb{S}^1\)；(5.15) 用 \(u_2,u_3\) 在 \(\mathbb{S}^2\) 上取点、用 \(u_1\) 在 \(\mathbb{S}^1\) 上取点，再巧妙组合。为了照顾对径等同，落在下半球（\(a<0\)）的 \(h\) 可以换成 \(-h\)，不破坏均匀性。</p>
+
+<h4>生成随机方向</h4>
+<p>有些算法要随机选运动方向：在 \(n+1\) 维 C-space 中，这相当于在 \(\mathbb{S}^n\) 上采样。\(n = 1\) 时取 \(\theta\in[0,2\pi]/\sim\)；\(n = 4\) 时用上面 SO(3) 的技巧；\(n = 3\) 或 \(n > 4\) 时，利用多维高斯密度的球对称性：每个坐标独立取零均值、同方差的高斯样本 \(u_i\)（按中心极限定理，可以用 \([-1,1]\) 上 \(k\ge 12\) 个均匀随机数之和近似），然后归一化 \(u_i/\|u\|\)。<b>不能</b>每个坐标直接取均匀随机数，那样方向会偏向立方体的角。</p>
+
+<div class="widget wide" data-widget="sphere-sampling"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>「经纬度都均匀」：直方图两端翘起来，两极明显更密——纬度均匀不等于面积均匀。换成「切面包」，直方图变平。</li>
+  <li>「立方体里均匀再归一化」：把球转到正对某个角方向（x、y、z 同号），点更密；「高斯再归一化」则处处均匀。</li>
+  <li>SO(3) 两个选项对比：均匀欧拉角让旋转后的 x 轴在两极堆积（参考代码第 8 项：两端格子约为理想值的 2 倍）；(5.15) 的四元数则均匀铺满。</li>
+</ul></div>
+
+<h4>伪随机数与随机性检验</h4>
+<p>计算机生成的数并不随机，通常用<b>伪随机数生成器</b>——一种模拟随机行为的确定性方法。既然样本不是真随机，「跨笛卡儿积依然均匀」的优点就不一定成立，有时会冒出意想不到的确定性依赖。书中推荐 Mersenne twister。为了看清困难，书中介绍了经典的<b>线性同余生成器 linear congruential generator</b>：取整数 \(M\)、\(a\)、\(c\)，要求 \(\gcd(M,a)=1\)、\(0\le c< M\)，从种子 \(1\le y_0\le M\) 出发</p>
+<div class="eq">$$y_{i+1} = a\,y_i + c \bmod M, \tag{5.16}$$</div>
+<div class="eq">$$x_i = y_i / M. \tag{5.17}$$</div>
+<p>序列是周期的，所以 \(M\) 通常很大（如 \(2^{31}-1\)）。周期性可能带来规律性，尤其是跨笛卡儿积生成 \(\mathbb{R}^n\) 中的点时。</p>
+<p><b>卡方检验 chi-square test</b>：设 \(\mathcal{C} = [0,1]^2\) 被分成 \(10\times10\) 个小盒子，随机取 \(k\) 个点组成 \(P\)，每个盒子应该大约有 \(k/100\) 个点。定义误差</p>
+<div class="eq">$$e(P) = \sum_{i=1}^{100}\big(b_i - k/100\big)^2, \tag{5.18}$$</div>
+<p>\(b_i\) 是第 \(i\) 个盒子里的点数，\(e(P)\) 服从卡方分布。令人意外的是，目标<b>不是</b>让 \(e(P)\) 最小：\(k = 1{,}000{,}000\) 时如果每个盒子恰好 10,000 个点，\(e(P)=0\)，这种事几乎不可能发生——误差太小反而说明「太均匀，不像随机」。这种不规则性在 Voronoi 图（图 5.3）上看得很清楚：每个样本 \(x\) 有一个 Voronoi 区域 \(\mathrm{Vor}(x)\)，其中每点到 \(x\) 最近；区域大小、形状参差不齐。对运动规划来说，这种不规则可能是坏事，5.2.3、5.2.4 的确定性方法部分修补了它（但也有缺点）。</p>
+
+<div class="widget wide" data-widget="sample-compare" data-method="random" data-overlays="vor,chi"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>伪随机、k = 196（图 5.3 的点数）：看 Voronoi 单元大小差异有多大；多点几次「换个种子」，e(P) 在 0.99k ≈ 194 附近波动。<span class="muted">（补充：每个 bᵢ 是二项分布，E[e(P)] = 100 · k · (1/100)(1 − 1/100) = 0.99k，参考代码第 6 项用模拟核对过。）</span></li>
+  <li>换成「LCG（坏参数）」：点全落在几条平行线上，e(P) 却未必很大——卡方检验只看盒子计数，看不出这种结构。</li>
+  <li>换成「Sukharev 网格」并把 k 调到 100：e(P) = 0，完美得「不像随机」。</li>
+</ul></div>
+
+<h3 id="s5-2-3">5.2.3 低分散度采样 <span class="en">Low-Dispersion Sampling</span></h3>
+<p>随机采样之外的另一条路：优化一个叫<b>分散度 dispersion</b> 的准则。直觉是让<b>最大的未覆盖区域尽可能小</b>，这是网格分辨率概念的推广。网格规划算法若能任意提高分辨率，就是分辨率完备的；同样，降低分散度到任意小也能得到分辨率完备的算法。所以分散度可以看作「分辨率」的强大推广。</p>
+<div class="box def">
+  <div class="box-title">定义：分散度</div>
+  <p>度量空间 \((X,\rho)\) 中有限样本集 \(P\) 的分散度</p>
+  <div class="eq">$$\delta(P) = \sup_{x\in X}\Big\{\min_{p\in P}\{\rho(x,p)\}\Big\}. \tag{5.19}$$</div>
+  <p style="margin:0">即<b>最大空球的半径</b>（\(L_\infty\) 下「球」是正方体）；在 \(X\) 的边界处空球会被截断。若 \(X\) 是闭集，sup 就是 max。注意书中的脚注：这个名字和直觉是反的——分散度<b>低</b>说明点「分散得好」，越低越好。</p>
+</div>
+<p>和 Voronoi 图的联系（\(\mathbb{R}^2\)、\(L_2\)）：Voronoi 顶点（三个以上区域相交处）是离最近样本最远的候选点；在每个 Voronoi 顶点放一个开圆盘，半径等于到最近三个（或更多）样本的距离，最大的那个半径就是分散度（还要考虑边界）。</p>
+
+<h4>做好网格：Sukharev 网格</h4>
+<p>优化分散度会让点分布得更均匀——它们因此通不过统计检验，但对运动规划往往更好。设 \(\rho\) 是 \(L_\infty\)、\(X=[0,1]^n\)、点数 \(k\) 给定：把 \([0,1]^n\) 切成小正方体，每个中心放一个点，每轴 \(\lfloor k^{1/n}\rfloor\) 个（图 5.5a，\(n=2\)、\(k=196\)）。多出的点放哪儿都不影响分散度。这叫 <b>Sukharev 网格</b>，它达到最优分散度，于是任何 \(k\) 点集都满足下界</p>
+<div class="eq">$$\delta(P) \ge \frac{1}{2\left\lfloor k^{1/d}\right\rfloor}. \tag{5.20}$$</div>
+<p>这意味着保持分散度不变，所需点数随维数 \(d\) <b>指数增长</b><sup class="fn"><a href="#fn-d" id="fn-d-ref">注</a></sup>。为什么用 \(L_\infty\) 而不是更自然的 \(L_2\)？因为 \(L_2\) 情形极难优化（\(\mathbb{R}^2\) 中可以用等边三角形铺砌、每个中心放一点；但连 \([0,1]^3\) 中放固定个数点的最佳方式，对大多数 \(k\) 都还未解决）。</p>
+<p><b>其它拓扑</b>：若 \(X = [0,1]^n/\sim\) 是环面（没有边界），Sukharev 网格仍最优，而且可以整体平移而不增加分散度；平移到原点的<b>标准网格</b>也一样好（第一个点 \((0,0)\) 经等同后其实和另外 \(2^n-1\) 个角点是同一点）。圆柱则最好用 Sukharev 网格，但可以平移表现为 \(\mathbb{S}^1\) 的那些坐标。矩形（非正方形）的 \(X\) 可以用正方体铺；SO(3) 这种复杂空间没有上述意义的网格，但可以在内接正多面体（如立方体）的面上放 Sukharev 网格，再「提升」到 \(\mathbb{S}^n\) 上（图 5.6a）。</p>
+<p><b>例 5.15</b>：\(n=2\)、\(k=9\)、\(X=[0,1]^2\) 时，Sukharev 网格的坐标取 1/6、1/2、5/6，\(L_\infty\) 分散度 1/6，点间距 1/3（恰好是分散度的两倍）。若 \(X\) 是环面，九个点可以平移成标准网格（坐标 0、1/3、2/3），分散度和间距都不变。<span class="muted">（参考代码第 3 项：数值核对了这两个 1/6；补充：同一个标准网格放在<b>正方形</b>上分散度是 1/3，因为角 (1,1) 离最近点 1/3。）</span></p>
+
+<div class="widget wide" data-widget="sample-compare" data-method="sukharev" data-metric="linf" data-k="9" data-overlays="vor,ball"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>Sukharev、L∞、k = 9：分散度 = 1/6 ≈ 0.1667，恰好等于下界 (5.20)。换成「标准网格」：正方形上变成 1/3；切到「环面」又回到 1/6（例 5.15）。</li>
+  <li>k 从 9 拖到 15：Sukharev 多出的 6 个点（灰色）随便放，分散度仍是 1/6；到 16 才降到 1/8。</li>
+  <li>切到 L2 并比较「伪随机」与 Sukharev 的最大空球：随机点的分散度通常大得多。</li>
+</ul></div>
+
+<p><b>格 lattice</b>：网格有格结构，邻居只要加减向量就能得到。设 \(g_j\) 是 \(n\) 维<b>生成元 generator</b>，格点可以写成</p>
+<div class="eq">$$x = \sum_{j=1}^{n} k_j\,g_j \tag{5.21}$$</div>
+<p>（\(n\) 个独立生成元，图 5.6b）。在 2D 网格里生成元就是「上」和「右」：\(X=[0,100]^2\)、整数间距时，(50,50) 的邻居是加上 (0,1)、(0,−1)、(−1,0)、(1,0)。一般的格生成元不必正交（图 5.5b）。5.4.2 节会用格结构来定义搜索图。</p>
+
+<h4>无穷网格序列与分散度界</h4>
+<p>点数 \(k\) 事先未知时，需要一个对任何维数都有 van der Corput 那种好性质的无穷序列——<b>多分辨率网格 multi-resolution grid</b>：分辨率反复加倍。\(\mathbb{R}^n\) 中先在原点放一点；放满 \(2^n\) 个点时每轴 2 个；\(4^n\) 个点时每轴 4 个；一般地 \(2^{ni}\) 个点时每轴 \(2^i\) 个。若只允许完整网格，高维时就没法用：\(n = 10\) 时完整网格出现在 1、\(2^{10}\)、\(2^{20}\)、\(2^{30}\)……个样本处。所以必须接受<b>部分网格</b>，并定义一个把点放得很好的无穷序列。</p>
+<p>van der Corput 可以直接推广：在 \(T^2 = [0,1]^2/\sim\) 上，二进制计数的最低两位选 \([0,1]^2\) 的象限，再两位选象限里的象限……每到 \(k = 2^{2i}\) 就得到完整网格，其它 \(k\) 是部分网格，但都有最优 \(L_\infty\) 分散度。\(n\) 维时每次取 \(n\) 位选「卦限」。多分辨率的 Sukharev 网格更难做：基数变成 3，每 \(3^{ni}\) 个点才凑满一层（一维时先 1/2，再 1/6、5/6，9 个点时下一层才完整）。</p>
+<p><b>渐近界</b>：对 \(X=[0,1]^n\) 和任何 \(L_p\) 度量，最好的渐近分散度是 \(O(k^{-1/n})\)，其中可以藏一个常数 \(f(n)\)。van der Corput 的分散度以 \(1/k\) 为界（\(f(n)=1\)），\(k\) 为 2 的幂时是 \(1/(2k)\)；多分辨率 Sukharev 网格的常数是 3/2；还存在常数为 \(1/\ln 4\) 的非网格低分散度序列（习题 10），而且它们甚至不是均匀分布的。</p>
+
+<div class="widget" data-widget="dim-curse"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>δ = 0.05 时：2 维 100 个点，6 维 10⁶ 个，10 维 10¹⁰ 个（参考代码第 4 项）。这就是「网格在高维不适用」的根源。</li>
+  <li>把 δ 放宽到 0.25（每轴 2 个点）：20 维仍要约 10⁶ 个点——高维下哪怕最粗的网格也贵。</li>
+</ul></div>
+
+<h3 id="s5-2-4">5.2.4 低差异采样 <span class="en">Low-Discrepancy Sampling</span></h3>
+<p>有时点和坐标轴对齐是坏事：网格里的一行点可能恰好对准 \(\mathcal{C}_{free}\) 中的一条走廊。有时用很少的样本就意外地解出来，有时又需要特别多——这种对齐效应很难预测，会让计算时间的<b>方差</b>变大。差异理论（为数值积分发展起来）试图在均匀撒点的同时避免对齐。</p>
+<div class="box def">
+  <div class="box-title">定义：差异 discrepancy</div>
+  <p>设 \(X\) 是测度空间（如 \([0,1]^n\)），\(\mathcal{R}\) 是 \(X\) 的一族子集，称为<b>值域空间 range space</b>，通常取所有轴对齐矩形。对 \(k\) 个样本 \(P\)：</p>
+  <div class="eq">$$D(P,\mathcal{R}) = \sup_{R\in\mathcal{R}}\left\{\left|\frac{|P\cap R|}{k} - \frac{\mu(R)}{\mu(X)}\right|\right\}, \tag{5.22}$$</div>
+  <p style="margin:0">\(|P\cap R|\) 是落在 \(R\) 里的点数。每一项都在问：用 \(P\) 估计 \(R\) 的体积准不准？例如 \(\mu(R) = 1/5\) 时，希望约 1/5 的点落在 \(R\) 中。差异就是所有 \(R\) 上最大的估计误差（图 5.7）。它和卡方检验有关，但对<b>所有可能的盒子</b>取最坏情况。</p>
+</div>
+<p><b>渐近界</b>（轴对齐盒子、\([0,1]^n\)）：单个序列（\(k\) 不指定）最好是 \(O(k^{-1}\log^n k)\)；若对每个 \(k\) 都可以重新选一组点，最好是 \(O(k^{-1}\log^{n-1} k)\)——后者更低，因为每个点集都可以完全不同，而序列只能在已有点上逐个添加。</p>
+<p><b>差异与分散度的关系</b>：对任何 \(P\subset[0,1]^n\)，</p>
+<div class="eq">$$\delta(P, L_\infty) \le D(P,\mathcal{R})^{1/d}, \tag{5.23}$$</div>
+<p>所以低差异推出低分散度，反之不成立：轴对齐网格的分散度很低，但因为与 \(\mathcal{R}\) 的边界对齐，差异很高。只追求低分散度（少一个约束）通常能得到更低的分散度，所以实际应用中要权衡。</p>
+
+<h4>低差异采样方法</h4>
+<p>三类：① Halton / Hammersley；② (t,s)-序列与 (t,m,s)-网；③ 格。</p>
+<p><b>Halton 序列</b>是 van der Corput 的 \(n\) 维推广，只是每个坐标用不同的基。取 \(n\) 个两两互素的整数 \(p_1,p_2,\ldots,p_n\)（通常取前 \(n\) 个素数 2, 3, …）。把 \(i\) 写成 \(p\) 进制 \(i = a_0 + pa_1 + p^2a_2 + p^3a_3+\cdots\)，反转并移到小数点后：</p>
+<div class="eq">$$r(i,p) = \frac{a_0}{p} + \frac{a_1}{p^2} + \frac{a_2}{p^3} + \frac{a_3}{p^4} + \cdots. \tag{5.24}$$</div>
+<p>\(p=2\) 就是 van der Corput。从 \(i=0\) 开始，Halton 序列的第 \(i\) 个样本是</p>
+<div class="eq">$$\big(r(i,p_1),\ r(i,p_2),\ \ldots,\ r(i,p_n)\big). \tag{5.25}$$</div>
+<p>若点数 \(k\) 已知，<b>Hammersley 点集</b>分布得更好：只用 \(n-1\) 个不同素数<sup class="fn"><a href="#fn-d">注</a></sup>，从 \(i=0\) 开始，第 \(i\) 个样本是</p>
+<div class="eq">$$\big(i/k,\ r(i,p_1),\ \ldots,\ r(i,p_{n-1})\big). \tag{5.26}$$</div>
+<p>两者都达到渐近最优差异，但渐近分析里的常数随维数增长得比指数还快（分散度的常数也指数增长，远不如 5.2.3 的方法），维数超过 10 左右性能明显变差。<span class="muted">（参考代码第 5 项列出了 Halton 与 Hammersley 的前 8 个点。）</span></p>
+<p><b>(t,s)-序列 / (t,m,s)-网</b>的关键是在一些特殊的「规范矩形」上强制零差异，其余矩形只贡献很小的差异；最有名的是 Sobol' 和 Faure 序列，Niederreiter–Xing 序列有已知最好的渐近常数 \((a/n)^n\)。<b>格</b>则是允许非正交轴的网格推广：取正无理数 \(\alpha\)，对固定的 \(k\)，第 \(i\) 个点是 \((i/k, \{i\alpha\})\)，\(\{\cdot\}\) 表示小数部分；图 5.5b 取黄金比 \(\alpha = (\sqrt5+1)/2\)。\(n\) 维时选 \(n-1\) 个不同的无理数：</p>
+<div class="eq">$$\Big(\frac{i}{k},\ \{i\alpha_1\},\ \ldots,\ \{i\alpha_{n-1}\}\Big). \tag{5.27}$$</div>
+<p>近期分析表明某些格点集的渐近差异非常接近最好的非格点集，所以把点限制在格上几乎不损失性能，还额外得到规则的邻域结构，对路径规划很有用。传统上格需要事先指定 \(k\)，但「可扩展格」（无穷序列）越来越受关注。</p>
+
+<div class="widget wide" data-widget="sample-compare" data-method="halton" data-overlays="vor,disc"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>Halton vs 伪随机（k = 196）：Halton 的 Voronoi 单元更整齐（对比图 5.8a 与 5.3），分散度和星差异通常都更低。</li>
+  <li>打开「最差的锚定盒」：紫框是使差异最大的那个盒子，框里的点数和「面积 × k」差得最多。网格（标准 / Sukharev）在这里吃亏——它们分散度低、差异却高，正是 (5.23) 之后那句话。</li>
+  <li>比较 Hammersley 和「黄金比格点」：都要事先知道 k，第一个坐标都是 i/k。<span class="muted">（补充说明：这里显示的是只取一角在原点的「星差异」D*，比 (5.22) 的全体盒子好算；两者满足 D* ≤ D ≤ 2ᵈD*。）</span></li>
+</ul></div>
+</section>
+
+<!-- ============================================================ 5.3 -->
+<section id="s5-3">
+<h2>5.3 碰撞检测 <span class="en">Collision Detection</span></h2>
+<p>决定了样本放在哪之后，下一个问题是判断位形是否碰撞。碰撞检测虽然常被当作黑盒，研究它的内部有助于理解它提供什么信息、要花多少计算。<b>在大多数运动规划应用里，绝大部分计算时间都花在碰撞检测上。</b>算法从复杂度极好的理论算法，到针对特定应用调优的启发式实用算法都有。4.3 节的方法可以把 \(\mathcal{C}_{obs}\) 的几何模型写成逻辑谓词来做碰撞检测（2D 凸机器人与凸障碍时是线性时间），但一般来说，<b>不完整构造 \(\mathcal{C}_{obs}\)</b> 能更高效地判断 \(q\) 是否碰撞。</p>
+
+<h3 id="s5-3-1">5.3.1 基本概念</h3>
+<p>碰撞检测是一个逻辑谓词 \(\phi : \mathcal{C}\to\{\mathrm{true},\mathrm{false}\}\)：\(q\in\mathcal{C}_{obs}\) 时 \(\phi(q) = \mathrm{true}\)。布尔值不告诉我们离碰撞还有多远，而这对规划算法很重要。<b>距离函数</b> \(d:\mathcal{C}\to[0,\infty)\) 给出 \(\mathcal{A}(q)\) 与 \(\mathcal{O}\) 之间最近点对在世界 \(\mathcal{W}\) 中的距离<sup class="fn"><a href="#fn-f" id="fn-f-ref">1</a></sup>。一般地，对 \(\mathbb{R}^n\) 中两个有界闭集 \(E\)、\(F\)：</p>
+<div class="eq">$$\rho(E,F) = \min_{e\in E}\Big\{\min_{f\in F}\{\|e-f\|\}\Big\}, \tag{5.28}$$</div>
+<p>\(\|\cdot\|\) 是欧氏范数；显然若 \(E\cap F\neq\emptyset\) 则 \(\rho(E,F)=0\)。只判断是否碰撞时，计算通常快得多，因为需要的信息更少。</p>
+<p><b>两阶段碰撞检测</b>：设机器人是 \(m\) 个相连的刚体 \(\mathcal{A}_1,\ldots,\mathcal{A}_m\)，\(\mathcal{O}\) 有 \(k\) 个连通分量。</p>
+<ol>
+  <li><b>宽阶段 broad phase</b>：避免对相距很远的物体做昂贵计算。给每个物体套简单的包围盒，盒子不重叠就跳过；有时可以用散列大幅减少要测试的盒子对。多刚体机器人要事先指定哪些刚体对需要检测（4.3.1 节）。</li>
+  <li><b>窄阶段 narrow phase</b>：逐对仔细检查，方法见 5.3.2、5.3.3。</li>
+</ol>
+
+<h3 id="s5-3-2">5.3.2 层次方法 <span class="en">Hierarchical Methods</span></h3>
+<p>设要检查两个复杂的非凸物体 \(E\)、\(F\)（可以是机器人的一部分，也可以是障碍；由三角形等图元组成）。层次方法把每个物体分解成一棵树：每个顶点代表一个包含物体某个子集的<b>包围区域 bounding region</b>，根的包围区域包含整个物体。选择包围区域类型时有两条相反的标准：</p>
+<ol>
+  <li>尽可能<b>紧</b>地贴合物体；</li>
+  <li>两个区域的相交测试尽可能<b>快</b>。</li>
+</ol>
+<p>图 5.9 给出 L 形物体的四种常见选择：(a) 球、(b) 轴对齐包围盒 AABB、(c) 有向包围盒 OBB、(d) 凸包——通常一个比一个紧，但相交测试也一个比一个贵。</p>
+<p><b>建树</b>：对每个顶点，取它的包围区域里物体的点集 \(X\)，构造两个更小的包围区域使它们的并覆盖 \(X\)，各自覆盖的部分大小相近（例如把三角形分成数量差不多的两组），递归下去，直到很简单的集合（如单个三角形）为止（图 5.10）。</p>
+<p><b>查询</b>：若 \(T_e\)、\(T_f\) 的根包围区域不相交，就断定不碰撞，无需任何额外计算。若相交，就把 \(T_e\) 的孩子和 \(T_f\) 比较；若有相交，再把 \(T_f\) 换成它的孩子……只要包围区域重叠就往下走，直到叶子，在叶子处检查真正的三角形。若 \(T_e\) 中顶点 \(v_1\) 的包围区域与 \(T_f\) 中顶点 \(v_2\) 的不相交，那么 \(v_1\) 的孩子就不必与 \(v_2\) 的孩子比较<sup class="fn"><a href="#fn-v" id="fn-v-ref">2</a></sup>。比起朴素地测试所有三角形对，这通常大幅减少比较次数。</p>
+<p>这个方案也能扩展为<b>计算距离</b>：目前找到的最近点对作为上界，若一对包围区域的距离已大于它，就不必考虑其孩子。这时通常还要求每个包围区域是其父区域的真子集；只判断碰撞时不需要这个要求。</p>
+
+<div class="widget wide" data-widget="bvh"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>依次切换 (a)–(d)：「根包围体紧致度」越来越高（物体面积 / 包围体面积），对应图 5.9 的「越来越紧」。</li>
+  <li>把星形拖到远处：只做 1 次包围体测试就结束。拖到 E 的梳齿之间但不碰到：看包围体测试和三角形测试比朴素的「所有三角形对」少多少。</li>
+  <li>「显示第几层」从 0 调到 3：这就是图 5.10 的递归分裂；圆形包围体在第 1 层就把 L 形的两条臂分开了。</li>
+</ul></div>
+
+<h3 id="s5-3-3">5.3.3 增量方法 <span class="en">Incremental Methods</span></h3>
+<p><b>增量距离计算</b>假设两次调用之间物体只移动一点点。在这个假设下，对凸多面体能达到「几乎常数时间」；非凸物体可以分解成凸块。代价是模型必须<b>连贯 coherent</b>：所有图元要严丝合缝地拼起来——2D 中线段必须首尾相接构成多边形，不能有孤立的线段或折线；3D 中多面体的面必须完美拼合，不能是一堆任意的三角形。</p>
+<p>以 2D 凸多边形为例。<b>特征 feature</b> 是凸多边形的所有顶点和边，\(n\) 条边的多边形有 \(2n\) 个特征。多边形外任何一点都有一个（欧氏距离意义下的）最近特征；对特征 \(F\)，以 \(F\) 为最近特征的点集称为 \(F\) 的 <b>Voronoi 区域</b> \(\mathrm{Vor}(F)\)。图 5.11 画了五边形的全部十个区域，顶点区域（V）和边区域（E）交替出现。</p>
+<p>两个不相交的凸多边形，最近点由一对点决定（除平行边情形外唯一）。这对点所在的特征只有三种组合：<b>顶点–顶点</b>、<b>边–顶点</b>、<b>边–边</b>（此时两边必平行）。设 \(F_1\)、\(F_2\) 分别是 \(P_1\)、\(P_2\) 的特征，\((x_1,y_1)\in F_1\)、\((x_2,y_2)\in F_2\) 是这两个特征之间的最近点对。若</p>
+<div class="eq">$$(x_1,y_1)\in\mathrm{Vor}(F_2)\quad\text{且}\quad(x_2,y_2)\in\mathrm{Vor}(F_1), \tag{5.29}$$</div>
+<p>则 \(P_1\) 与 \(P_2\) 的距离就等于 \(F_1\) 与 \(F_2\) 的距离——可以在常数时间内确定。物体只动一点点时，最近特征对很可能不变，这就是「几乎常数时间」的来由。若特征对变了，就用 (5.29) 检查相邻特征，直到找到新的最近对；最坏情况下这个搜索可能很贵，但那违背了「两次调用之间移动不多」的假设。3D 凸多面体的特征是面、边、顶点，情形更多，但思路相同。</p>
+
+<div class="widget wide" data-widget="feature-voronoi"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>「拖一个点」：沿五边形外围绕一圈，高亮区域在 V 和 E 之间交替；在 E 区域里最近点是垂足，在 V 区域里最近点是顶点。</li>
+  <li>「拖另一个凸多边形」：慢慢拖，「上一对仍满足 (5.29)」大多数时候是「是」；猛地一甩，就会看到需要换特征。右下角统计了需要换特征的帧所占比例。</li>
+  <li>把四边形转到某条边和五边形的边平行，再贴近：组合类型变成「边-边」。</li>
+</ul></div>
+
+<h3 id="s5-3-4">5.3.4 检查一条路径段 <span class="en">Checking a Path Segment</span></h3>
+<p>碰撞检测判断一个位形是否在 \(\mathcal{C}_{free}\) 里，但规划算法需要整条路径都在 \(\mathcal{C}_{free}\) 里。规划器与碰撞检测的接口通常是验证一条<b>路径段</b>（往往很短）。不可能逐点检查——那需要不可数无穷次调用。</p>
+<p>设要检查 \(\tau:[0,1]\to\mathcal{C}\) 是否满足 \(\tau([0,1])\subset\mathcal{C}_{free}\)。常见做法是在 \([0,1]\) 上采样，只在样本处调用碰撞检测。实践中常取固定的 C-space 步长 \(\Delta q>0\)，选足够近的 \(t_1,t_2\) 使 \(\rho(\tau(t_1),\tau(t_2))\le\Delta q\)；\(\Delta q\) 往往凭实验确定。太小浪费大量时间；太大则机器人可能「跳过」一个薄障碍。</p>
+<p><b>有理论保证的做法</b>需要两样东西：距离信息，以及 \(\mathcal{A}\) 上的点能移动多远的界（即例 5.6 的机器人位移）。以 \(\mathcal{W}=\mathbb{R}^2\) 中平移加旋转的刚体为例：若碰撞检测告诉我们 \(\mathcal{A}(q)\) 离障碍至少 \(d\)，而从 \(q\) 沿 \(\tau\) 到下一个候选 \(q'\) 时 \(\mathcal{A}\) 上没有点移动超过 \(d\)，那么 \(q'\) 以及两者之间的位形都无碰撞（这里假设中间位形的每个坐标都夹在 \(q_i\) 与 \(q'_i\) 之间；若允许走任意路径则没有这种保证）。平移时所有点移动相同距离；旋转时移动距离取决于点到旋转中心 \((0,0)\) 的远近。设 \(a_r=(x_r,y_r)\) 是 \(\mathcal{A}\) 上模最大的点，\(r=\sqrt{x_r^2+y_r^2}\)（图 5.12）。从 \(\theta\) 转到 \(\theta'\)（沿 \(\mathbb{S}^1\) 上的最短路）时，对任何 \(a\in\mathcal{A}\)：</p>
+<div class="eq">$$\|a(x_t,y_t,\theta) - a(x_t,y_t,\theta')\| \le \|a_r(x_t,y_t,\theta) - a_r(x_t,y_t,\theta')\| < r|\theta-\theta'|. \tag{5.30}$$</div>
+<p>这是一个松的上界（\(a_r\) 实际走圆弧，最多位移 \(2\pi r\)）。\(x_t\)、\(y_t\) 也可以各自变化不超过 \(d\)；三者同时变化时，下面的区域都在 \(\mathcal{C}_{free}\) 中：</p>
+<div class="eq">$$\{(x'_t,y'_t,\theta')\in\mathcal{C} \mid |x_t-x'_t| + |y_t-y'_t| + r|\theta-\theta'| < d\}. \tag{5.31}$$</div>
+<p>这类界可以用来设定一个保证中间点都在 \(\mathcal{C}_{free}\) 中的步长 \(\Delta q\)，具体值可随 \(d\) 和路径方向变化。SO(3) 时最好用四元数差 \(\|h-h'\|\) 表示界；也可以用欧拉角把 (5.31) 推广成六项（三平移、三旋转，每个旋转部分取垂直于该轴的平面内模最大的点）。</p>
+<p><b>多连杆</b>时复杂得多：每个点由第 3.3、3.4 节的运动学非线性地变换。有时能导出 Lipschitz 条件</p>
+<div class="eq">$$\|a(q) - a(q')\| < c\,\|q-q'\|, \tag{5.32}$$</div>
+<p>Lipschitz 常数 \(c\) 越小，允许 \(q\) 变化越大。更好的做法是对每个参数分别给界：</p>
+<div class="eq">$$\|a(q_1,\ldots,q_{i-1},q_i,q_{i+1},\ldots,q_n) - a(q_1,\ldots,q_{i-1},q'_i,q_{i+1},\ldots,q_n)\| < c_i|q_i-q'_i|, \tag{5.33}$$</div>
+<div class="eq">$$\|a(q)-a(q')\| < \sum_{i=1}^n c_i|q_i-q'_i|. \tag{5.34}$$</div>
+<p>书中的例子：平面上 50 节、每节长 10 的链，C-space 是 \(T^{50}\)。伸直时（所有 \(\theta_i=0\)）末端在 \((500,0)\)；改变 \(\theta_1\) 会让 \(\mathcal{A}_{50}\) 大幅移动，改变 \(\theta_{50}\) 则只动一点。所以应该给每个关节不同的 \(\Delta q_i\)，\(\Delta\theta_1\) 要比 \(\Delta\theta_{50}\) 小。但如果链完全折叠（每个 \(\theta_i = \pi\)），扰动 \(\theta_1\) 时 \(\mathcal{A}_{50}\) 就没那么快——Lipschitz 常数虽然可以对整个 \(\mathcal{C}\) 成立，但在 \(q\) 附近的局部区域里可能有更好的界，可以通过分析变换的 Jacobian（如 (3.53)、(3.57)）得到线性的方法。</p>
+
+<div class="widget" data-widget="chain-lipschitz"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>n = 50、伸直：c₁ = 500、c₅₀ = 10（书中的数字，参考代码第 9 项核对过）；柱状图从左到右线性下降。</li>
+  <li>切到「折叠」：c₁ 掉到 10。同样的 Δθ₁，红色的扰动后链几乎原地不动——这就是「局部界可以比全局界好得多」。</li>
+  <li>看「实际最大位移」和「上界 cᵢ|Δθᵢ|」：实际值是弦长 2cᵢ sin(Δθᵢ/2)，Δθ 小时两者几乎相等，大时上界变松（习题 19 要你改进它）。</li>
+</ul></div>
+
+<p><b>检查的顺序</b>也很重要。设 \(\Delta q\) 为常数、路径是匀速参数化：应该从 0 一路走到 1 吗？实验表明最好用<b>递归二分</b>策略：路径无碰撞时没区别，有碰撞时通常能省时间。这正是 [0,1] 上的采样问题，van der Corput 序列 \(\nu\) 刚好合适：图 5.2 的最后一列就是每一步该检查的位置。先检查 \(\tau(1)\)，然后按 \(\tau(0),\tau(1/2),\tau(1/4),\tau(3/4),\tau(1/8),\ldots\) 的顺序；发现碰撞或分散度降到 \(\Delta q\) 以下就停。若 \(\Delta q\) 不是常数，在允许变化更大的区域可以跳过 \(\nu\) 的某些点。</p>
+
+<div class="widget wide" data-widget="segment-check"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>默认 Δq = 0.1 时能查到薄墙；把 Δq 调到 0.2 左右再「一次跑完」：两种顺序都报告「无碰撞」，而精确求交说「碰撞」——这就是「跳过薄障碍」。</li>
+  <li>把 τ(1) 拖到右下角，让线段穿过那块厚障碍，比较两种顺序的「已检查的点」：二分顺序几步就撞上，「从 0 走到 1」要一路走过去。线段完全无碰撞时，两者检查的点数相同（书中原话：没区别）。</li>
+  <li>「用距离认证」<span class="muted">（补充：针对点机器人的简化版）</span>：每一步都前进到当前最近障碍的距离 d，绿圈里一定无碰撞，所以结论是<b>证明</b>而不是猜测；代价是贴着障碍走时步子会变得很小。</li>
+</ul></div>
+</section>
+
+<!-- ============================================================ 5.4 -->
+<section id="s5-4">
+<h2>5.4 增量采样与搜索 <span class="en">Incremental Sampling and Searching</span></h2>
+
+<h3 id="s5-4-1">5.4.1 通用框架</h3>
+<p>5.4、5.5 节的算法都遵循<b>单查询</b>模型：对每个机器人和障碍集只给一次 \((q_I,q_G)\)，预计算没有好处，问题就变成一种搜索。这些算法与 2.2.4 节总结的搜索算法族惊人地相似，主要区别在第 3 步：施加动作 \(u\) 换成了生成一条路径段 \(\tau_s\)；另外搜索图 \(\mathcal{G}\) 是<b>无向</b>的，边代表路径，而不是代表动作的有向边。</p>
+<div class="box algo">
+  <div class="box-title">单查询、基于采样的规划模板</div>
+  <div class="panel-body">
+  <ol style="margin:0">
+    <li><b>初始化</b>：\(\mathcal{G}(V,E)\) 是无向搜索图，\(V\) 至少含一个顶点（通常是 \(q_I\)、\(q_G\) 或两者），\(E\) 为空。</li>
+    <li><b>顶点选择方法 VSM</b>：选一个顶点 \(q_{cur}\in V\) 来扩展。</li>
+    <li><b>局部规划方法 LPM</b>：对某个 \(q_{new}\in\mathcal{C}_{free}\)（不一定已在 \(V\) 中），尝试构造 \(\tau_s:[0,1]\to\mathcal{C}_{free}\)，\(\tau_s(0)=q_{cur}\)、\(\tau_s(1)=q_{new}\)，并用 5.3.4 节的方法检查碰撞。失败就回到第 2 步。</li>
+    <li><b>插入边</b>：把 \(\tau_s\) 作为从 \(q_{cur}\) 到 \(q_{new}\) 的边加入 \(E\)；\(q_{new}\) 不在 \(V\) 中就插入。</li>
+    <li><b>检查是否有解</b>：判断 \(\mathcal{G}\) 是否编码了一条解路径。单棵搜索树时这很简单，否则可能复杂且昂贵。</li>
+    <li><b>回到第 2 步</b>：除非已找到解或满足某个终止条件（此时报告失败）。</li>
+  </ol>
+  </div>
+</div>
+<p>这里 \(\mathcal{G}\) 是拓扑图（例 4.6）：每个顶点是一个位形，每条边是连接两个位形的路径。书中把「路线图 roadmap」这个词留给「包含足够多路径、使任何查询都容易解出」的图（5.6 节、第 6 章）。VSM 的角色类似 2.2.1 节的优先队列 \(Q\)；LPM 之所以叫「局部」，是因为路径段通常很简单（如最短路径）、走得不远，并不试图解决整个问题，而且常常会失败。改变第 2、3 步的实现，就得到一大族算法。</p>
+<p>用高分辨率网格近似 \(\mathcal{C}\) 后，第 2.2 节的任何搜索算法都能用，问题看起来就是例 2.1 的高维版本（「迷宫」的墙由 \(\mathcal{C}_{obs}\) 构成）。但在高维高分辨率网格上，大多数经典离散搜索都容易困在局部极小里。图 5.13 给了四种高维 \(\mathcal{C}_{obs}\) 的困难：</p>
+<ul>
+  <li><b>(a) 碗 / 空腔</b>：搜索必须有某种多分辨率特性，否则会在空腔里探索太多点——\(n\) 维 C-space 中碗里的网格点数通常是 \(100^n\) 量级，所有第 2.2 节的算法都会先把碗「填满」才能逃出来。</li>
+  <li><b>(b) 虫子陷阱 bug trap</b>：从 \(q_I\) 出发必须找到一个狭窄的出口。二维里看着不难，但若出口在每个参数方向上都很窄，在高维中「火山口」相对整个陷阱小得天文数字。从 \(q_G\) 出发的树也许更容易进去 → <b>双向</b>方法：两个波前（以 \(q_I\)、\(q_G\) 为中心）相遇所需覆盖的面积，通常比单个波前从 \(q_I\) 走到 \(q_G\) 少。双向搜索通过让 VSM 在两棵树之间交替实现；LPM 有时探索新区域，有时尝试连接两棵树。</li>
+  <li><b>(c) 双虫子陷阱</b>：可能需要从别处再长出树来——<b>多方向（多于两棵树）</b>方法。但哪些树对该尝试连接、多久一次、选哪些顶点，都会引出大量启发式参数。</li>
+  <li><b>(d)</b> 魔鬼代言人构造的例子，几乎所有采样规划算法都注定失败；还能构造需要依次穿过多条窄走廊的更难版本。必须接受：除非能额外利用问题特有的结构，有些问题对采样规划来说是没有希望的。</li>
+</ul>
+<p class="small muted">本页的 2D 地图里有「碗（图 5.13a）」「虫子陷阱（图 5.13b）」「双虫子陷阱（图 5.13c）」，可以在下面的网格搜索、随机势场和 RRT 规划器里选用。</p>
+
+<h3 id="s5-4-2">5.4.2 改造离散搜索算法</h3>
+<p>最直接的办法：在 \(\mathcal{C}\) 上定义网格，用 2.2 节的算法做离散搜索。每条边对应 \(\mathcal{C}_{free}\) 中的一条路径；有些边因碰撞而不存在，但这要在搜索过程中<b>逐步揭示</b>，因为显式表示 \(\mathcal{C}_{obs}\) 太昂贵（4.3 节）。</p>
+<p>设 \(n\) 维 C-space 表示成单位立方体 \(\mathcal{C}=[0,1]^n/\sim\)（等同反映拓扑；通常需要重新参数化，如角度 \(\theta\in[0,2\pi)\) 换成 \(\theta/2\pi\)；SO(3) 用四元数时要把 \(\mathbb{S}^3\) 的上半部分变形成 \([0,1]^3/\sim\)）。各坐标的分辨率为正整数 \(k_1,\ldots,k_n\)，可以用标准网格或 Sukharev 网格。令</p>
+<div class="eq">$$\Delta q_i = [0\ \cdots\ 0\ \ 1/k_i\ \ 0\ \cdots\ 0], \tag{5.35}$$</div>
+<p>（前 \(i-1\) 个和后 \(n-i\) 个分量为 0）。网格点就是能写成</p>
+<div class="eq">$$\sum_{i=1}^n j_i\,\Delta q_i \tag{5.36}$$</div>
+<p>的位形，\(j_i\in\{0,1,\ldots,k_i\}\) 可以看作数组下标（也可以用 (5.21) 的一般格）。\(j_i = 0\) 或 \(j_i = k_i\) 的是边界网格点，由于等同，它们可能有多种表示。</p>
+<p><b>邻域</b>：对非边界网格点 \(q\)，1-邻域是</p>
+<div class="eq">$$N_1(q) = \{q+\Delta q_1,\ldots,q+\Delta q_n,\ q-\Delta q_1,\ldots,q-\Delta q_n\}, \tag{5.37}$$</div>
+<p>最多 \(2n\) 个（2D 中就是上下左右；可能因障碍而更少）。2-邻域是</p>
+<div class="eq">$$N_2(q) = \{q\pm\Delta q_i\pm\Delta q_j \mid 1\le i,j\le n,\ i\neq j\}\cup N_1(q). \tag{5.38}$$</div>
+<p>类似地可以定义任何 \(k\le n\) 的 \(k\)-邻域；\(n\)-邻域最多 \(3^n-1\) 个邻居。边界点的定义要照顾等同和 C-space 的边界。</p>
+<p><b>得到离散规划问题</b>（图 5.14，[0,1]² 中 9 个 Sukharev 网格点）：若 \(q_I\)、\(q_G\) 不是网格点，就把它们连到附近的网格点。经验法则：用 \(k\)-邻居时，把 \(q_I\)、\(q_G\) 连到不比「典型网格点的最远 \(k\)-邻居」更远的网格点。事先检查所有顶点和边就得到路线图（5.6 节）；这里假设 \(\mathcal{G}\) 是在搜索中「即时」揭示的——和 2.2 节的情形一样：候选边由 \(k\)-邻域给出，检查过的边和顶点存进数据结构，不必再检查。</p>
+
+<div class="widget wide" data-widget="grid-search"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>「窄通道」地图：k = 8、16 都「此分辨率下无解」。点「迭代加密」——k = 3 就找到了！因为奇数 k 的 Sukharev 网格恰好有一个点落在通道正中（试试 k = 5、7）。要到 k = 32 左右，偶数网格才靠「足够细」穿过去。这就是 5.2.4 节说的「网格和走廊对齐」：时好时坏，难以预测。</li>
+  <li>同一个 k，比较 1-邻域和 2-邻域：2-邻域的路径更短（可以走斜线），但每个顶点要检查更多边。</li>
+  <li>只有被 A* 扩展到的区域才做了碰撞检测（蓝点 / 红点），灰点从未被检查——这就是「边在搜索中才揭示」。</li>
+</ul></div>
+
+<p><b>分辨率问题</b>：分辨率合适时这个方法很好用；每轴点太多则搜索太慢，太少又可能错过解——这是采样规划的根本权衡（更一般地说，样本要多到使分散度足够小）。避免手选分辨率有两条路：</p>
+<ol>
+  <li><b>逐步加密直到找到解</b>，采样与搜索交错进行。若每次把分辨率加倍，\(2^n\to4^n\to8^n\)，增长太快（\(n=10\) 时先 1024 个点，失败后下一次就超过一百万个）。更好的是仿照迭代加深（2.2.2 节）：丢弃之前的工作，第 \(i\) 次用每轴 \(i\) 个点，网格大小 \(2^n, 3^n, 4^n,\ldots\)；较大网格上的搜索代价远大于浪费在低分辨率上的时间，所以丢掉之前的工作无伤大雅。再进一步，可以不要求完整网格：每次只给一个轴加分辨率；或者让样本来自无穷稠密序列 \(\alpha\)，每加 100 个点搜索一次。最紧密的交错是用<b>并查集 union-find</b> 维护 \(\mathcal{G}\) 的连通分量：每加一个点，近乎常数时间就能知道 \(q_I\)、\(q_G\) 是否已连通——这得到一个完全不需要分辨率参数的算法（最好选带格结构的序列，便于确定邻域）。</li>
+  <li><b>放弃改造离散算法</b>，直接为连续问题设计算法：5.4.3、5.4.4、5.5 节。</li>
+</ol>
+<p>如果一开始就把分辨率设得高得离谱（\(100^n\) 个点）呢？那就把负担全压在搜索算法上：如果搜索算法本身擅长避开局部极小、自带多分辨率特性，就可能表现很好。5.4.3 节在高分辨率网格上做最佳优先搜索 + 随机游走；5.5 节则更进一步，不需要显式的分辨率和邻域——可以看作每轴点数趋于无穷的极限情形。</p>
+
+<h3 id="s5-4-3">5.4.3 随机势场 <span class="en">Randomized Potential Fields</span></h3>
+<p>改造离散算法只在点数少时有效（每轴点数小或维数低）：若需要每轴 50 个点、维数 10，就不可能搜遍 \(50^{10}\) 个样本；带最佳优先启发式的规划器也许不必搜大部分，但对图 5.13a 这样的简单问题，也会在碗里耗太久。<b>随机势场法</b>在最佳优先搜索卡住时用<b>随机游走</b>逃离局部极小。它是最早发展出超越经典离散搜索技巧的采样规划器之一，当年解出了多达 31 个自由度的问题；缺点是有很多启发式参数要针对每个问题调整，这种挫败感催生了 5.4.4、5.5、5.6 节更好的方法。</p>
+<p>最复杂的部分是<b>势函数</b> \(g(q)\)：一个试图估计到目标距离的伪度量，通常包含到目标距离的<b>吸引项</b>和惩罚靠近障碍的<b>排斥项</b>（最有效的方法之一是在 \(\mathcal{W}\) 上构造代价到目标函数再提升到 \(\mathcal{C}\)）。这里只假设有某个 \(g(q)\)，和 2.2.2 节的代价到目标记号一致，但不要求它最优、甚至不要求是低估。</p>
+<p><b>随机游走</b>在高分辨率网格（如每轴 50 点）上进行：每次迭代，每个坐标 \(q_i\) 按公平硬币的结果加或减 \(\Delta q_i\)（要尊重等同）；若新位形碰撞或越出边界就丢弃，从原位形重试，直到得到 \(\mathcal{C}_{free}\) 中的新位形。整个规划器是图 5.15 的<b>三状态机</b>（书中称状态为「模式 mode」以免混淆）：</p>
+<ul>
+  <li><b>最佳优先 BEST FIRST</b>：从 \(q_I\) 开始做梯度下降。VSM 选最新的顶点；LPM 在它邻域内朝使 \(g\) 减小的方向建新顶点（方向可以随机或确定性采样，随机时可用 5.2.2 的球面采样）。试了若干次（又一个参数）仍不能降低 \(g\)，就切到随机游走。</li>
+  <li><b>随机游走 RANDOM WALK</b>：从最新顶点出发游走，\(g\) 降低或达到迭代上限（上限本身从一个预定的随机变量中抽取）时结束，回到最佳优先，计数器 \(i\) 加 1。</li>
+  <li><b>回溯 BACKTRACK</b>：若尝试了 \(K\) 次随机游走后最佳优先仍失败（合理值 \(K=20\)），就从随机游走得到的顶点中随机选一个，计数器重置，回到最佳优先。</li>
+</ul>
+<p><b>路径平滑</b>：随机游走使路径往往复杂到没法直接用。常用办法是反复随机取 \(t_1<t_2\)，尝试用直线段（一般地是 \(\mathcal{C}\) 中的最短路径）替换 \(\tau\) 在这两点之间的部分：</p>
+<div class="eq">$$\tau'(t) = \begin{cases}\tau(t) & 0\le t\le t_1\\ a\,\tau(t_1) + (1-a)\,\tau(t_2) & t_1\le t\le t_2\\ \tau(t) & t_2\le t\le 1,\end{cases} \tag{5.39}$$</div>
+<p>其中 \(a=(t_2-t)/(t_2-t_1)\)。新路径要检查碰撞，通过才替换，否则丢弃、换一对 \(t_1,t_2\)。</p>
+
+<div class="widget wide" data-widget="potential-field"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>「碗」地图：最佳优先直冲进碗底卡住（图 5.13a），右边状态机亮起「随机游走」；看它需要几次游走、甚至几次回溯才逃出来。</li>
+  <li>把「游走步数上限」调到 20：游走太短，几乎逃不出碗。再换「虫子陷阱」地图：大多数情况下 6 万次迭代都出不来。参数敏感、遇到难题就失败，正是书中说它被弃用的原因。</li>
+  <li>到达目标后点「路径平滑 (5.39)」：绿线从锯齿状变成几段直线，长度通常从几十缩到 1 以下（我们在「碗」上试了 10 次，都从 7–81 缩到约 0.8）。<span class="muted">（本图的实现细节是我们的选择：网格每轴 50 点，即 Δq = 0.02，与书中举的例子相同；g 只用到目标的欧氏距离；最佳优先在 8 个网格邻居中取 g 最小者；游走上限在均值的 0.5–1.5 倍间均匀抽取。）</span></li>
+</ul></div>
+
+<h3 id="s5-4-4">5.4.4 其它方法</h3>
+<p>下面几个有影响的方法似乎都比随机势场有优势，而且都用了随机化（也许受势场法启发）。</p>
+<div class="table-wrap">
+<table class="data">
+  <tr><th>方法</th><th>VSM / LPM 的做法</th><th>优点</th><th>缺点</th></tr>
+  <tr><td>Ariadne's Clew 算法</td><td><b>搜索</b>与<b>探索</b>两个模式交替。探索：VSM 随机选顶点 \(v_e\)，LPM 找一个容易连到 \(v_e\)、又离图中其它顶点尽可能远的新位形（用遗传算法优化一个汇总距离的全局函数）。搜索：尝试把刚加的顶点延伸到目标。</td><td>关键思想（影响了下两个方法和 5.5 节）：要花一部分时间<b>探索空间</b>，而不是只盯着找解。</td><td>放置新顶点的优化问题很难解；遗传算法需要针对问题调参。</td></tr>
+  <tr><td>扩展空间规划器 Expansive-space planner</td><td>VSM 选顶点 \(v_e\) 的概率与其预定邻域内的其它顶点数成反比（「孤立」的顶点更可能被选中）；LPM 在 \(v_e\) 的邻域内随机生成 \(v_n\)，以与 \(v_n\) 邻域内顶点数成反比的概率插入。固定次数内反复选同一个顶点。借用了双向搜索。</td><td>用一个出奇简单的准则就能解很多有趣问题。</td><td>大量与问题相关的调参；需要系统地搜索长迷宫时性能下降；邻域半径实际上就是在选分辨率。</td></tr>
+  <tr><td>随机游走规划器 Random-walk planner</td><td>VSM 只选最近加入的顶点；LPM 从多元高斯中采方向和步长，协方差根据过去 \(k\) 次迭代的成功情况自适应调整（\(k\) 也许是唯一的参数）。</td><td>出奇地简单高效，几乎不用调参；可与势场规划器结合。</td><td>和上一个方法类似：难以穿过长而弯曲的走廊。</td></tr>
+</table>
+</div>
+</section>
+
+<!-- ============================================================ 5.5 -->
+<section id="s5-5">
+<h2>5.5 快速探索稠密树 <span class="en">Rapidly Exploring Dense Trees</span></h2>
+<p>这一节的增量采样与搜索方法在实践中表现很好，而且<b>不需要调参</b>。思路是增量地构造一棵搜索树，逐步提高分辨率，却不必显式设置任何分辨率参数；在极限下树稠密地覆盖空间。它有点像空间填充曲线，只不过不是一条长路径，而是组织成一棵树的许多短路径。一个稠密样本序列 \(\alpha\) 引导树的增长：序列随机时，得到的树叫<b>快速探索随机树 RRT</b>（rapidly exploring random tree）；不论随机还是确定性，这一族统称<b>快速探索稠密树 RDT</b>（rapidly exploring dense tree）。这个方法最初是为微分约束下的运动规划开发的（14.4.3 节）。<span class="small muted">书中脚注：最初的 RRT 带一个步长参数，这里的表述去掉了它；实现时为了简单，也可以退回原来的写法——下面的规划器里「步长 ε」就是那个参数。</span></p>
+
+<h3 id="s5-5-1">5.5.1 探索算法 <span class="en">The Exploration Algorithm</span></h3>
+<p>先不管规划查询，只想从初始位形出发尽可能接近每一个位形。\(\alpha\) 是 \(\mathcal{C}\) 中的无穷稠密序列，\(\alpha(i)\) 是第 \(i\) 个样本（可以是均匀随机序列——只以概率 1 稠密；也可以带非均匀偏置，只要仍以概率 1 稠密）。RDT 是一个拓扑图 \(\mathcal{G}(V,E)\)；令 \(\mathcal{S}\subset\mathcal{C}_{free}\) 是 \(\mathcal{G}\) 到达的所有点，称为<b>扫掠集 swath</b>：</p>
+<div class="eq">$$\mathcal{S} = \bigcup_{e\in E} e([0,1]). \tag{5.40}$$</div>
+<div class="box algo">
+  <div class="box-title">图 5.16　SIMPLE_RDT(q₀)：无障碍时构造 RDT</div>
+  <div class="pseudo">
+    <span class="ln">G.init(q₀);</span>
+    <span class="ln"><span class="kw">for</span> i = 1 <span class="kw">to</span> k <span class="kw">do</span></span>
+    <span class="ln">    G.add_vertex(α(i));</span>
+    <span class="ln">    q<sub>n</sub> ← nearest(S(G), α(i));</span>
+    <span class="ln">    G.add_edge(q<sub>n</sub>, α(i));</span>
+  </div>
+</div>
+<p>每次迭代把 \(\alpha(i)\) 连到 swath 中离它最近的点（通常沿最短路径），所以 \(\alpha(i)\) 都成为顶点，树是稠密的。若最近点 \(q_n\) 是顶点（图 5.17），就从 \(q_n\) 连一条边到 \(\alpha(i)\)；若最近点在某条边的内部（图 5.18），就把这条边<b>分裂</b>成两条，让 \(q_n\) 成为新顶点，再连到 \(\alpha(i)\)。所以每次迭代边数可能增加一条或两条。</p>
+<p>这和 5.4.1 的框架不完全吻合：nearest 起 VSM 的作用，但可以从 swath 的任何地方选点（可推广为「扫掠点选择方法 SSM」，14.3.4 节）；LPM 沿最短路径把 \(\alpha(i)\) 连到 \(q_n\)。图 5.19 是 \(\mathcal{C}=[0,1]^2\)、\(q_0=(1/2,1/2)\) 时 45 次和 2345 次迭代的样子：先长出几条奔向远角的主枝，再用越来越小的枝逐渐填满——一种分形行为（\(\alpha\) 均匀随机时是随机分形）。树在逐步提高分辨率（降低分散度），这对采样规划恰好理想。</p>
+
+<div class="widget wide" data-widget="rdt-explore"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>点几次「单步」并打开 Voronoi 区域：α(i) 落在哪个 Voronoi 区域，树就从那个顶点（或它附近的边）长出去。外围顶点的 Voronoi 区域大，所以树<b>被拉向未探索的区域</b>——这就是 RRT 的「Voronoi 偏向」。</li>
+  <li>「跑到 45 步」再「跑到 2345 步」：对照图 5.19，先是几条长主枝伸向角落，后来是越来越密的小枝。</li>
+  <li>比较两种 nearest：「整个 swath」时会出现边分裂（统计里的计数），树更像图 5.18；「只看顶点」时树的形状略有不同，但大致行为一样。换成 Halton 或多分辨率网格 α，得到的是确定性的 RDT。</li>
+</ul></div>
+
+<h4>有障碍时：RDT</h4>
+<p>\(\mathcal{C}_{obs}\) 不显式表示，所以要在建树时考虑它（图 5.20、5.21）：</p>
+<div class="box algo">
+  <div class="box-title">图 5.21　RDT(q₀)：有障碍的 RDT</div>
+  <div class="pseudo">
+    <span class="ln">G.init(q₀);</span>
+    <span class="ln"><span class="kw">for</span> i = 1 <span class="kw">to</span> k <span class="kw">do</span></span>
+    <span class="ln">    q<sub>n</sub> ← nearest(S, α(i));</span>
+    <span class="ln">    q<sub>s</sub> ← stopping-configuration(q<sub>n</sub>, α(i));</span>
+    <span class="ln">    <span class="kw">if</span> q<sub>s</sub> ≠ q<sub>n</sub> <span class="kw">then</span></span>
+    <span class="ln">        G.add_vertex(q<sub>s</sub>);</span>
+    <span class="ln">        G.add_edge(q<sub>n</sub>, q<sub>s</sub>);</span>
+  </div>
+</div>
+<p>stopping-configuration 给出沿 \(\alpha(i)\) 方向、在碰到 \(\mathcal{C}_{free}\) 边界之前能到达的最近位形。最近点 \(q_n\) 的定义不变（忽略障碍），但新边可能到不了 \(\alpha(i)\)，只到 \(q_s\)——撞上障碍前的最后一个点。能离障碍边界多近取决于 5.3.4 节的碰撞检查方法。若 \(q_n\) 已经在该方向上贴着边界，这一轮就不加新顶点。</p>
+
+<h3 id="s5-5-2">5.5.2 高效找最近点</h3>
+<p><b>精确解</b>：设 \(\mathcal{G}\) 的边都是 \(\mathbb{R}^m\) 中的线段。早期的边会被分裂很多次，但找最近点时最好把它当作一整条——称为<b>超线段 supersegment</b>（如图 5.19 中从根伸出的三条大枝）。需要一个常数时间的「点到线段距离」原语，nearest 就是遍历所有超线段取最小（也许可以再用层次数据结构剪掉大批超线段，但书中说这还有待实验检验）。边不是线段时更麻烦：例如 SO(3) 中的最短路径是 \(\mathbb{S}^3\) 上的圆弧。可以为 nearest 另外维护一套参数化——把 SO(3) 表示成 \([0,1]^3/\sim\)（即 \(\mathbb{RP}^3\)）用直线段，但这与 Haar 测度不一致，会引入偏差；或者用 4D 立方体紧紧包住 \(\mathbb{S}^3\)，把点向外投到立方体面上（由于对径等同，只需 8 个面中的 4 个），同一面上线性插值，跨面时在拐角处折成两段——扭曲更小但仍有；或者实现「点到圆弧」的距离原语，曲线更复杂时精确的 nearest 可能太贵。</p>
+<p><b>近似解</b>容易得多，但会引入分辨率参数：在长线段上插入中间顶点（图 5.22），保证 \(\mathcal{G}\) 中相邻顶点距离不超过 \(\Delta q\)；然后忽略边的内部，只找最近的<b>顶点</b>。这是迄今最容易实现的方法，也恰好符合 5.4.1 的框架。代价是 nearest 的时间与顶点数成线性，而顶点数会大大增加。可以把顶点放进高效的最近邻数据结构来弥补，最实用的是 <b>Kd 树</b>（图 5.23）。</p>
+<p><b>Kd 树</b>是二叉搜索树的多维推广。\(\mathbb{R}^2\) 中：按 \(x\) 坐标排序，取中位点 \(p\)，用过 \(p\) 的竖直线把其余点分成两组；每组再按 \(y\) 坐标取中位点，用水平线分开；下一层又用竖直线……\(\mathbb{R}^n\) 中依次循环 \(n\) 个坐标。构造 \(k\) 个点的 Kd 树需要 \(O(nk\lg k)\) 时间；穿越树时要小心拓扑等同。查询时先下降到包含查询点的叶子，算出该叶子中数据点的距离、取最近者，再递归访问周围那些<b>可能有更近点</b>的叶子<sup class="fn"><a href="#fn-kd" id="fn-kd-ref">3</a></sup>。最近点能在关于 \(k\) 的对数时间内找到。可惜这些界里藏着一个随维数 \(n\) 指数增长的常数：实践中 Kd 树在约 20 维以内有用，再高就退化得太厉害。经验法则：点数多于 \(2^n\) 时 Kd 树应比朴素最近邻快。精确解、朴素近似、Kd 树近似之间要按具体应用权衡；实现复杂度大概是多数人选择「朴素最近邻 + 近似」的原因。</p>
+
+<div class="widget wide" data-widget="kdtree"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>点数 14（和图 5.23 一样）：对照左边的划分线和右边的树，蓝 = 竖直线（按 x 分），绿 = 水平线（按 y 分）。</li>
+  <li>点数调到 300，拖动 q：距离计算次数通常只有十几次，而朴素扫描要 300 次；灰色整块被剪掉。</li>
+  <li>把 q 放在两个区域交界附近：需要回头检查的兄弟子树变多——红色虚线圆跨过了分割线。</li>
+</ul></div>
+
+<h3 id="s5-5-3">5.5.3 用树来规划 <span class="en">Using the Trees for Planning</span></h3>
+<p>到目前为止只是在探索 \(\mathcal{C}_{free}\)。RRT/RDT 可以用在很多规划算法里（例如帮随机势场规划器逃离局部极小）。</p>
+<p><b>单树搜索</b>：用图 5.21 从 \(q_I\) 长树，并定期检查能否连到 \(q_G\)。简单做法是在稠密序列 \(\alpha\) 里按固定间隔插入 \(q_G\)（例如每 100 个样本插一次），每次就尝试从树上最近的顶点到达 \(q_G\)。用随机序列（RRT）时，书中推荐：每次迭代抛一枚正面概率 99/100 的硬币，正面取下一个伪随机样本作 \(\alpha(i)\)，反面令 \(\alpha(i)=q_G\)。1/100 是任意选的，但实验上在好用的范围内：偏置太强，RRT 会像随机势场一样贪心；太弱则没有把树连到 \(q_G\) 的动力。也可以给随机采样的密度加一个温和的朝目标偏置，但这种偏置很难选，应谨慎使用（或干脆避免）。</p>
+<p><b>平衡的双向搜索</b>：从 \(q_I\)、\(q_G\) 各长一棵 RDT 通常好得多，尤其对 5.4.1 节的虫子陷阱。网格上的双向搜索很容易保证两边相遇；对 RDT 则要特别设计，使两棵树既能连上、又保持「快速探索」的性质。另一个想法是让搜索<b>平衡</b>：两棵树大小相同。</p>
+<div class="box algo">
+  <div class="box-title">图 5.24　RDT_BALANCED_BIDIRECTIONAL(q<sub>I</sub>, q<sub>G</sub>)</div>
+  <div class="pseudo">
+    <span class="ln">T<sub>a</sub>.init(q<sub>I</sub>); T<sub>b</sub>.init(q<sub>G</sub>);</span>
+    <span class="ln"><span class="kw">for</span> i = 1 <span class="kw">to</span> K <span class="kw">do</span></span>
+    <span class="ln">    q<sub>n</sub> ← nearest(S<sub>a</sub>, α(i));</span>
+    <span class="ln">    q<sub>s</sub> ← stopping-configuration(q<sub>n</sub>, α(i));</span>
+    <span class="ln">    <span class="kw">if</span> q<sub>s</sub> ≠ q<sub>n</sub> <span class="kw">then</span></span>
+    <span class="ln">        T<sub>a</sub>.add_vertex(q<sub>s</sub>);</span>
+    <span class="ln">        T<sub>a</sub>.add_edge(q<sub>n</sub>, q<sub>s</sub>);</span>
+    <span class="ln">        q′<sub>n</sub> ← nearest(S<sub>b</sub>, q<sub>s</sub>);</span>
+    <span class="ln">        q′<sub>s</sub> ← stopping-configuration(q′<sub>n</sub>, q<sub>s</sub>);</span>
+    <span class="ln">        <span class="kw">if</span> q′<sub>s</sub> ≠ q′<sub>n</sub> <span class="kw">then</span></span>
+    <span class="ln">            T<sub>b</sub>.add_vertex(q′<sub>s</sub>);</span>
+    <span class="ln">            T<sub>b</sub>.add_edge(q′<sub>n</sub>, q′<sub>s</sub>);</span>
+    <span class="ln">        <span class="kw">if</span> q′<sub>s</sub> = q<sub>s</sub> <span class="kw">then return</span> SOLUTION;</span>
+    <span class="ln hl">    <span class="kw">if</span> |T<sub>b</sub>| &gt; |T<sub>a</sub>| <span class="kw">then</span> SWAP(T<sub>a</sub>, T<sub>b</sub>);</span>
+    <span class="ln"><span class="kw">return</span> FAILURE</span>
+  </div>
+</div>
+<p>\(T_a\) 和 \(T_b\) 一开始分别从 \(q_I\)、\(q_G\) 出发，之后可能交换，所以 \(T_a\) 不一定是含 \(q_I\) 的那棵。每次迭代，\(T_a\) 像图 5.16 那样朝 \(\alpha(i)\) 长一步；若加了新顶点 \(q_s\)，就让 \(T_b\) 朝 <b>\(q_s\)</b>（而不是 \(\alpha(i)\)）长，于是 \(T_b\) 试着长向 \(T_a\)。第 13 行检查两者是否连上。第 14 行是平衡搜索的关键：对图 5.13b 的虫子陷阱或图 1.2 的拼图尤其重要——<b>如果一棵树探索困难，就该把更多精力放在它身上，所以新的探索总是在较小的树上进行</b><sup class="fn"><a href="#fn-swap" id="fn-swap-ref">4</a></sup>。「较小」可以用顶点总数，也可以用所有线段的总长度。</p>
+<p><b>不平衡</b>的双向搜索则在每次迭代都交换两棵树。另外，\(\alpha\) 是确定性序列时要小心：即使 \(\alpha\) 稠密，分给两棵树之后每棵得到的样本未必稠密；让两棵树各用自己的确定性序列就能避免。用同一个（伪）随机序列做双向 RRT 则没有这个问题。<b>多于两棵树</b>对双虫子陷阱（图 5.13c）特别有帮助，可以从难以到达的地方（甚至随机位形）长新树；但树越多，如何在探索与连接之间分配时间、尝试哪些连接，就变成复杂的决策问题，仍有很多研究问题。极限情形是从每个 \(\alpha(i)\) 都长一棵新树、并尽量连接相邻的树——这就得到一张与查询无关、很好地覆盖空间的图，也就是下一节的主题。</p>
+
+<div class="widget wide" data-widget="rrt-planner"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>「虫子陷阱」：先用单树 RRT（偏置 0.01）跑，再换平衡双向。各点一次「批量跑 20 次」（同一组随机种子），比较成功率和迭代次数中位数。</li>
+  <li>单树时把目标偏置拉到 0.3：在「杂乱障碍」上可能更快，在虫子陷阱里却容易一头撞在墙上——偏置太强就变贪心。</li>
+  <li>对比「按正文」和「按第 14 行字面」两种平衡方式（脚注 4），以及「不平衡（每轮交换）」。把步长 ε 从 ∞ 调到 0.05：这就是原始 RRT 的写法，每步只走 ε。</li>
+</ul></div>
+</section>
+
+<!-- ============================================================ 5.6 -->
+<section id="s5-6">
+<h2>5.6 多查询的路线图方法 <span class="en">Roadmap Methods for Multiple Queries</span></h2>
+<p>现在假设会给很多对 \((q_I,q_G)\)，而机器人模型和障碍固定不变——<b>多查询</b>版本。这时值得花大量时间做预处理，让以后的查询能很快回答。目标是构造一张叫<b>路线图 roadmap</b> 的拓扑图：从 \(q_I\)、\(q_G\) 都容易连上它，并且能快速搜索。这个框架主要由 [90] 以<b>概率路线图 PRM</b>（probabilistic roadmaps）之名提出，但「概率」对方法并不重要，所以书中称这一族为<b>基于采样的路线图 sampling-based roadmaps</b>，以区别于第 6 章的组合路线图。</p>
+
+<h3 id="s5-6-1">5.6.1 基本方法</h3>
+<p>\(\mathcal{G}(V,E)\) 仍是拓扑图，\(E\) 中都是映射到 \(\mathcal{C}_{free}\) 的路径。计算分两个阶段：</p>
+<ul>
+  <li><b>预处理阶段</b>：投入大量精力构造 \(\mathcal{G}\)，使它在某种意义上从 \(\mathcal{C}_{free}\) 的每个部分都可达——所以称为路线图。</li>
+  <li><b>查询阶段</b>：给定 \(q_I\)、\(q_G\)，用局部规划器把它们连进 \(\mathcal{G}\)，再用 2.2 节的任何离散搜索找出一串边，构成从 \(q_I\) 到 \(q_G\) 的路径。</li>
+</ul>
+<div class="box algo">
+  <div class="box-title">图 5.25　BUILD_ROADMAP：基于采样的路线图的基本构造</div>
+  <div class="pseudo">
+    <span class="ln">G.init(); i ← 0;</span>
+    <span class="ln"><span class="kw">while</span> i &lt; N</span>
+    <span class="ln">    <span class="kw">if</span> α(i) ∈ C<sub>free</sub> <span class="kw">then</span></span>
+    <span class="ln">        G.add_vertex(α(i)); i ← i + 1;</span>
+    <span class="ln">        <span class="kw">for each</span> q ∈ neighborhood(α(i), G)</span>
+    <span class="ln hl">            <span class="kw">if</span> ((<span class="kw">not</span> G.same_component(α(i), q)) <span class="kw">and</span> connect(α(i), q)) <span class="kw">then</span></span>
+    <span class="ln">                G.add_edge(α(i), q);</span>
+  </div>
+</div>
+<p>算法使用均匀稠密序列 \(\alpha\)。每次迭代先检查 \(\alpha(i)\in\mathcal{C}_{free}\)；若在 \(\mathcal{C}_{obs}\) 中就继续迭代，直到得到无碰撞样本。书中的图注说明：\(\alpha(i)\) 碰撞时 \(i\) 不增加，这样 \(i\) 正确地统计路线图的顶点数<sup class="fn"><a href="#fn-i" id="fn-i-ref">5</a></sup>。然后尝试把 \(\alpha(i)\) 连到附近的顶点 \(q\)：connect 是 5.4.1 节典型的 LPM，多数实现只检查 \(\alpha(i)\) 与 \(q\) 之间的最短路径；实验上用 5.3.4 节末尾的多分辨率、基于 van der Corput 的检查方法最高效。也可以用更复杂的连接方法（如图 5.24 的双向算法）。</p>
+<p>第 6 行的 <b>same_component</b> 条件保证 \(\alpha(i)\) 与 \(q\) 在不同连通分量里时才浪费时间做碰撞检查，于是每连一条边，连通分量数就减 1；用并查集实现几乎是常数时间。有些实现会去掉它，尤其是想得到多条不同解路径（例如不同同伦类）时：这时把条件换成 \(\mathcal{G}.\mathrm{vertex\_degree}(q) < K\)，\(K\) 取固定值（如 15）。</p>
+<p><b>选邻居</b>：几种实现里都最好把候选顶点<b>按到 \(\alpha(i)\) 的距离递增排序</b>——短路径检查更便宜、也更可能无碰撞；一旦连上，就省掉了那些终将属于同一分量的远处顶点的昂贵检查。</p>
+<ol>
+  <li><b>Nearest K</b>：考虑离 \(\alpha(i)\) 最近的 \(K\) 个点（典型值 \(K = 15\)）。拿不准就用这个。</li>
+  <li><b>Component K</b>：从每个连通分量各取最多 \(K\) 个最近样本，合理值 \(K=1\)，否则尝试的连接太多。</li>
+  <li><b>Radius</b>：取以 \(\alpha(i)\) 为中心、半径 \(r\) 的球内所有点，可设上限 \(K\)（典型 20）防止尝试太多。半径可以随点数增加自适应缩小（若知道 \(\alpha\) 的分散度或差异，可据此缩小）。样本很规则（如网格）时最近 \(K\) 个与球内的点基本等价；样本很不规则（如随机）时最近 \(K\) 个似乎更好。</li>
+  <li><b>Visibility</b>：5.6.2 节的变体值得尝试连接 \(\mathcal{G}\) 中的所有顶点。</li>
+</ol>
+<p>这些都要求 \(\mathcal{C}\) 是度量空间。一个还没得到多少关注的变体是让邻居相对 \(\alpha(i)\) 的<b>方向</b>分布均匀：如果最近的 20 个点都挤在同一个方向，也许值得改连一个更远但在相反方向的点。</p>
+<p><b>查询阶段</b>：假装 \(q_I\)、\(q_G\) 是从 \(\alpha\) 里抽到的，再跑两次图 5.25 的迭代把它们连进 \(\mathcal{G}\)；成功后在图中搜索一条连接两者的路径，它直接对应 \(\mathcal{C}_{free}\) 中的一条解路径。可惜若失败，<b>无法断定是否有解</b>。若知道 \(\alpha\) 的分散度，至少可以断言在规划器的分辨率下无解：若有解，它必须穿过一条宽度不超过最大空球半径的走廊。</p>
+<p><b>一点分析</b>：图 5.27 那样的弯曲细管里，connect 多半会失败，尽管连接存在；高维版本更难。很多规划问题要求机器人在间隙很小的地方运动，这在 \(\mathcal{C}_{free}\) 中形成窄通道。对路线图方法来说，即使穿过一条走廊也很难（除非用更复杂的 LPM）。设 \(V(q)\) 是 connect 方法能从 \(q\) 连到的所有位形——直观上就是视线可见的集合（图 5.28a）。\(\mathcal{C}_{free}\) 的 <b>ε-goodness</b> 定义为</p>
+<div class="eq">$$\epsilon(\mathcal{C}_{free}) = \min_{q\in\mathcal{C}_{free}}\left\{\frac{\mu(V(q))}{\mu(\mathcal{C}_{free})}\right\}, \tag{5.41}$$</div>
+<p>\(\mu\) 是测度。直观上 \(\epsilon\) 是从任何一点都能看到的 \(\mathcal{C}_{free}\) 的那一小部分。用 \(\epsilon\) 和顶点数可以给出找到解的概率界；但 ε-goodness 非常保守（对所有位形取最坏情况），而且它由 \(\mathcal{C}_{free}\) 的结构定义，无法高效计算。这类结果有助于理解采样规划，但很难用来判断某个算法在具体问题上表现如何。</p>
+
+<div class="widget wide" data-widget="prm"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>「窄通道」、N = 120、均匀随机：常常是两侧两个不同颜色的分量，查询失败（我们用 10 个种子试过，约一半失败）。把采样换成「桥测试」：窄通道附近的顶点从不到 1 个变成二十多个，查询几乎总能成功——代价是「抽样次数」涨到几万。</li>
+  <li>N 建好后拖动 qI、qG：查询几乎瞬间完成，不需要重建——这就是多查询的意义。</li>
+  <li>关掉 same_component：边数和 connect 调用都会增加，图里出现环。比较四种邻域在「connect 调用」上的差别（每次改参数都用同一个随机种子重建，方便对比）。</li>
+</ul></div>
+
+<h3 id="s5-6-2">5.6.2 可见性路线图 <span class="en">Visibility Roadmap</span></h3>
+<p>最有用的变体之一。它非常努力地让路线图<b>小而覆盖好</b>。运行时间往往比图 5.25 长，但如果彻底贯彻多查询的理念，额外开销通常值得。两种顶点：</p>
+<ul>
+  <li><b>守卫 guard</b>：看不见其它守卫，即 \(V(q)\) 中没有别的守卫。</li>
+  <li><b>连接点 connector</b>：至少看见两个守卫，即存在守卫 \(q_1,q_2\) 使 \(q\in V(q_1)\cap V(q_2)\)。</li>
+</ul>
+<p>构造过程类似图 5.25，但 neighborhood 返回 \(\mathcal{G}\) 的<b>所有</b>顶点。新意在于用一个严格的准则决定是否保留 \(\alpha(i)\) 及其边，共三种情形：</p>
+<ol>
+  <li>\(\alpha(i)\) 连不到任何守卫：它获得成为新守卫的「特权」，插入 \(\mathcal{G}\)。</li>
+  <li>\(\alpha(i)\) 能连到至少两个<b>不同连通分量</b>中的守卫：成为连接点，连同连到这些守卫的边一起插入。</li>
+  <li>以上都不满足（只能连到同一分量的守卫）：丢弃。</li>
+</ol>
+<p>最后一条让路线图顶点数大幅减少。缺点是守卫不能被后来更好的守卫替换，守卫的位置强烈依赖 \(\alpha\) 中样本的顺序；早期守卫放得不好，方法可能表现很差。能在后续迭代中重新分配守卫的自适应方案会更好，但如何高效实现仍是开放问题。尽管丢弃了很多样本，用随机采样时算法仍是概率完备的，\(\alpha\) 稠密时仍是分辨率完备的。</p>
+
+<div class="widget wide" data-widget="visibility-roadmap"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>点「单个样本」十几次：开头几乎每个样本都成为守卫（看不见任何守卫），之后开始出现连接点，最后绝大多数样本都被丢弃。</li>
+  <li>点「+100」再看统计：几百个样本只留下十几二十个顶点——对比上面的 PRM。</li>
+  <li>把鼠标移到自由空间：黄色区域就是 V(q)。点「估计 ε-goodness」，红点是试过的点里视野最小的那个——通常藏在角落或窄缝里，这就是 (5.41) 那么保守的原因。<span class="muted">（ε 的估计是补充演示：用射线近似 V(q)，用随机点近似 min。）</span></li>
+</ul></div>
+
+<h3 id="s5-6-3">5.6.3 改进路线图的启发式</h3>
+<p>为了用采样构造好的路线图，出现了大量启发式。多数利用 C-space 形状和/或机器人与障碍的几何、运动学的特定性质，重点通常是大幅减少所需样本数。</p>
+<ul>
+  <li><b>顶点增强 vertex enhancement</b>：把力气花在图 5.25 中难以连接的顶点上。在 \(V\) 上定义概率分布 \(P(v)\)，反复按 \(P(v)\) 抽一个顶点，从它出发做一些随机运动到达新位形，把新位形加为顶点并按普通迭代的 neighborhood 尝试连接。推荐的统计量是 \(n_f/(n_t+1)\)，\(n_t\) 是对 \(v\) 尝试连接的总次数，\(n_f\) 是失败次数；\(P(v) = \frac{n_f/(n_t+1)}{m}\)，\(m\) 是所有顶点统计量之和（归一化）。</li>
+  <li><b>在 \(\mathcal{C}_{free}\) 边界上采样</b>（图 5.29a）：有时沿 \(\partial\mathcal{C}_{free}\) 采样比把样本浪费在大片空地上好。对每个落进 \(\mathcal{C}_{obs}\) 的 \(\alpha(i)\)，选若干随机方向（可用 5.2.2 的 \(\mathbb{S}^n\) 采样），沿每个方向二分查找一个尽量靠近 \(\mathcal{C}_{obs}\) 的 \(\mathcal{C}_{free}\) 样本：设 \(\tau(0)\in\mathcal{C}_{obs}\)、\(\tau(1)\in\mathcal{C}_{free}\)，先测中点 \(\tau(1/2)\)：在 \(\mathcal{C}_{free}\) 中就说明边界在 \(\tau(0)\) 与 \(\tau(1/2)\) 之间，否则在 \(\tau(1/2)\) 与 \(\tau(1)\) 之间；下一步测 \(\tau(1/4)\) 或 \(\tau(3/4)\)，递归直到所需分辨率。</li>
+  <li><b>高斯采样 Gaussian sampling</b>：动机相同，但偏置更温和，由方差参数控制。先均匀随机取 \(q_1\in\mathcal{C}\)，再按以 \(q_1\) 为均值的高斯取 \(q_2\)（要照顾等同和边界）。若一个在 \(\mathcal{C}_{free}\)、另一个在 \(\mathcal{C}_{obs}\)，就把在 \(\mathcal{C}_{free}\) 的那个作为路线图顶点。某些例子中这能大幅减少所需顶点。</li>
+  <li><b>桥测试 bridge test</b>（图 5.29b）：再进一步，用一条线段上的三个样本：两端在 \(\mathcal{C}_{obs}\)、中间在 \(\mathcal{C}_{free}\) 时，中间那个成为顶点。直觉：窄走廊至少在一个方向上很薄，桥测试指出某点位于薄走廊中，而那里往往正是放顶点的要害位置。</li>
+  <li><b>中轴采样 medial-axis sampling</b>：反过来，让样本离边界尽可能远。在度量空间 \((X,\rho)\) 中，极大球 \(B(x,r)\subseteq X\) 是不被任何其它球真包含的球；所有极大球的中心构成<b>中轴 medial axis</b>（图 5.30：矩形的中轴是五条线段）。\(\mathcal{C}_{free}\) 的中轴基于能内切于 \(\mathrm{cl}(\mathcal{C}_{free})\) 的最大球。由于 \(\mathcal{C}_{free}\) 是隐式表示的，在中轴上采样一般很难：可以用碰撞检测给出的距离信息，从样本 \(\alpha(i)\) 出发反复扰动以增大它到 \(\partial\mathcal{C}_{free}\) 的距离；也有人提议在 \(\mathcal{W}\setminus\mathcal{O}\) 的中轴上采样——那更容易计算，可以启发式地引导 \(\mathcal{C}_{free}\) 中好顶点的放置。</li>
+</ul>
+
+<div class="widget wide" data-widget="sampling-heuristics"></div>
+<div class="box intuition"><div class="box-title">试一试</div><ul>
+  <li>「窄通道」地图，保留 150 个样本：比较「均匀随机」和「桥测试」在「窄通道里」的样本数，以及各自的尝试次数——桥测试拒绝了大量尝试，但留下的样本更有用。</li>
+  <li>「边界采样」：紫色线是最后几个样本的二分过程，数字 1–4 是图 5.29a 的测试顺序；所有样本都贴着障碍边缘。</li>
+  <li>「中轴采样」+「弯曲细管」：紫色轨迹是爬坡过程，样本被推到通道中线上。调大高斯 / 桥测试的 σ，看样本离边界多远。</li>
+</ul></div>
+</section>
+
+<!-- ============================================================ 末尾 -->
+<section id="cheatsheet">
+<h2>本章速查表</h2>
+<div class="table-wrap">
+<table class="data">
+  <thead><tr><th style="width:9em">概念</th><th>要点</th></tr></thead>
+  <tbody>
+    <tr><td>三种完备性</td><td>完备（组合方法）；分辨率完备（确定性稠密采样，无解可能不停）；概率完备（随机采样，概率 → 1）。</td></tr>
+    <tr><td>度量公理</td><td>非负、自反（=0 ⇔ 相等）、对称、三角不等式。</td></tr>
+    <tr><td>\(L_p\)</td><td>(5.1)；\(L_1\) 曼哈顿、\(L_2\) 欧氏、\(L_\infty = \max_i|x_i-x'_i|\)；积空间 \(c_1\rho_x + c_2\rho_y\)（常数任选，无唯一正确）。</td></tr>
+    <tr><td>SO(2) / SO(3)</td><td>(5.7) \(\min\{|\Delta\theta|, 2\pi-|\Delta\theta|\}\)；四元数取 \(\min\) 处理 \(h\sim-h\)：(5.9) 弦、(5.11) 沿 \(\mathbb{S}^3\)。</td></tr>
+    <tr><td>位移度量</td><td>(5.12) 机器人上移动最远的点；单位天然统一，但一般难算。伪度量可以不对称、可违反三角不等式。</td></tr>
+    <tr><td>Haar 测度</td><td>\(\mu(A)=\mu(gA)=\mu(Ag)\)；SO(2) 是 \([0,1]/\sim\) 上的长度；SO(3) 是 \(\mathbb{S}^3\) 上的面积；均匀欧拉角不是。</td></tr>
+    <tr><td>均匀随机旋转 / 方向</td><td>(5.15)：\(u_1,u_2,u_3\) 均匀 → 均匀四元数；方向：各坐标取高斯再归一化（不能各坐标均匀）。</td></tr>
+    <tr><td>van der Corput</td><td>二进制位反转；\(2^m\) 个点时等距；分散度 \(\le 1/k\)（2 的幂时 \(1/2k\)）；与总数无关、可无限延续。</td></tr>
+    <tr><td>卡方 (5.18)</td><td>10×10 盒子；随机点 \(e(P)\) 应在期望附近，\(e(P)=0\) 反而「太均匀」。</td></tr>
+    <tr><td>分散度 (5.19)</td><td>最大空球半径，越小越好；Sukharev 网格 \(L_\infty\) 最优，下界 (5.20) \(1/(2\lfloor k^{1/d}\rfloor)\) → 点数随维数指数增长。</td></tr>
+    <tr><td>差异 (5.22)</td><td>所有轴对齐盒子上「点数比例 − 体积比例」的最大误差；低差异 ⇒ 低分散度 (5.23)，反之不成立（网格）。</td></tr>
+    <tr><td>Halton / Hammersley / 格</td><td>(5.24)(5.25) 每坐标不同素数基；(5.26) 首坐标 \(i/k\)；(5.27) \((i/k,\{i\alpha\})\)。维数 > 10 左右变差。</td></tr>
+    <tr><td>碰撞检测</td><td>谓词 \(\phi\) / 距离 \(d\)；宽阶段（包围盒、散列）+ 窄阶段；层次包围体（球、AABB、OBB、凸包：越来越紧、越来越贵）；增量法用特征 Voronoi 区域与 (5.29)，几乎常数时间。</td></tr>
+    <tr><td>路径段检查</td><td>固定 \(\Delta q\)（经验）或距离 + 位移界 (5.30)(5.31)(5.34)；按 van der Corput 二分顺序检查。</td></tr>
+    <tr><td>单查询模板</td><td>初始化 → VSM → LPM → 插边 → 检查解 → 重复；单向 / 双向 / 多方向（虫子陷阱）。</td></tr>
+    <tr><td>网格搜索</td><td>(5.35)–(5.38)；\(N_1\) 有 \(2n\) 个、\(n\)-邻域 \(3^n-1\) 个；边在搜索时才检查；迭代加密 \(2^n,3^n,\ldots\) 或并查集交错。</td></tr>
+    <tr><td>随机势场</td><td>最佳优先 / 随机游走 / 回溯三模式，\(K\approx20\)；参数多；(5.39) 随机捷径平滑。</td></tr>
+    <tr><td>RDT / RRT</td><td>连到 swath 上最近点（可能分裂边）；Voronoi 偏向；有障碍时 stopping-configuration；无分辨率参数。</td></tr>
+    <tr><td>最近点</td><td>精确（超线段）或近似（中间顶点 + Kd 树，约 20 维以内有效，点数 > \(2^n\) 才划算）。</td></tr>
+    <tr><td>用 RRT 规划</td><td>单树 + 目标偏置（约 1/100）；平衡双向（图 5.24，探索较小的树）；不平衡（每轮交换）。</td></tr>
+    <tr><td>PRM</td><td>预处理 + 查询；same_component + 并查集；邻域：Nearest K（≈15）、Component K（1）、Radius（≤20）、Visibility；失败不能断定无解；ε-goodness (5.41)。</td></tr>
+    <tr><td>可见性路线图</td><td>守卫互不可见；连接点连接 ≥ 2 个分量；其余丢弃 → 很小的路线图。</td></tr>
+    <tr><td>采样启发式</td><td>顶点增强、边界二分、高斯、桥测试（窄通道）、中轴。</td></tr>
+  </tbody>
+</table>
+</div>
+</section>
+
+<section id="pitfalls">
+<h2>常见陷阱</h2>
+<ol>
+  <li><b>角度直接相减</b>：忘了 \(0\sim2\pi\) 的等同，10° 与 350° 被算成相差 340°。用 (5.7)。</li>
+  <li><b>四元数忘了 \(h\sim-h\)</b>：两个几乎相同的旋转可能被算成「很远」。用 (5.9) 或 (5.11) 取 min。</li>
+  <li><b>混用单位</b>：SE(2) 的 \(\|\Delta t\| + c|\Delta\theta|\) 中，弧度与角度、米与毫米会让同一个 \(c\) 代表完全不同的度量（例 5.5）。</li>
+  <li><b>用均匀欧拉角当均匀旋转</b>、<b>每个坐标均匀再归一化当随机方向</b>：都有偏差。用 (5.15) 和高斯归一化。</li>
+  <li><b>把「分散度」的高低理解反了</b>：分散度越低越好。</li>
+  <li><b>网格与走廊对齐</b>：网格有时「运气好」一下解出、有时完全错过窄通道，计算时间方差大——这正是低差异采样的动机。</li>
+  <li><b>只检查端点 / 步长太大</b>：会跳过薄障碍。步长要么由距离和位移界保证，要么至少按 van der Corput 顺序检查以便尽早发现碰撞。</li>
+  <li><b>把 PRM / RRT 的失败当成「无解」</b>：采样方法最多是分辨率完备或概率完备；失败只说明「在这个分辨率 / 这些样本下没找到」。</li>
+  <li><b>RRT 目标偏置过大</b>：退化成贪心算法，在虫子陷阱里撞墙。</li>
+  <li><b>双向 RDT 用确定性序列时两棵树共用一个序列</b>：每棵树分到的样本未必稠密；应各用各的序列。</li>
+  <li><b>高维用 Kd 树</b>：约 20 维以上退化，点数少于 \(2^n\) 时不如朴素扫描。</li>
+</ol>
+</section>
+
+<section id="exercises">
+<h2>习题导引</h2>
+<p class="small muted">只给思路，不给完整解答。标「互动」的可以先在本页对应的图里做实验。</p>
+<ol>
+  <li><b>积空间度量 (5.4)</b>：逐条验证四个公理；三角不等式由两边各自的三角不等式乘以正常数再相加得到。</li>
+  <li><b>\(\rho^2\) 是度量吗？</b> 在 \(\mathbb{R}\) 上取 0、1、2：\(\rho^2(0,1)+\rho^2(1,2) = 2 < 4 = \rho^2(0,2)\)，三角不等式失败。</li>
+  <li><b>离散度量</b>（\(x\neq x'\) 时为 1，否则为 0）：四条公理都满足，它在任何集合上都是度量。<span class="muted">（原书题面把 if 印成了 is。）</span></li>
+  <li><b>(5.28) 在 SE(3) 上是度量吗？</b> 两个不同位形只要物体有重叠，距离就是 0，违反自反性。</li>
+  <li><b>平均分散度 (5.42) 的蒙特卡罗估计</b>：在 \(X\) 中均匀随机取很多点 \(x\)，对每个求 \(\min_p\rho(x,p)\)，取平均。可以拿互动图「采样方法对比」里的点集来想。</li>
+  <li><b>van der Corput 的平均分散度</b>：每段长 \(g\) 的空隙里，到最近点的平均距离是 \(g/4\)，所以平均分散度 = \(\sum g^2/4\)。前 \(i = 2^m + j\) 个点恰有 \(2j\) 段长 \(2^{-(m+1)}\) 的空隙和 \(2^m - j\) 段长 \(2^{-m}\) 的空隙，于是答案是 \((2^{m+1}-j)/2^{2m+3}\)（<b>补充推导</b>，参考代码第 11 项逐一核对过；\(i\) 为 2 的幂时就是 \(1/(4i)\)）。</li>
+  <li><b>\(\mathbb{S}^3\) 上的 Lebesgue 测度是 SO(3) 的 Haar 测度</b>：左乘、右乘单位四元数都是 \(\mathbb{R}^4\) 的正交变换（保持距离），所以保持 \(\mathbb{S}^3\) 上的面积。</li>
+  <li><b>Haar 测度有助于选度量吗？</b> 例 5.13 给了一个从 Haar 测度得到不变度量的例子；想想不变度量对平移 / 旋转的意义。</li>
+  <li><b>基 \(p\) 的 van der Corput 的最坏分散度</b>：先在互动图里切到基 3 观察空隙的结构，再推广第 6 题的计数论证。</li>
+  <li><b>\(\ln(2i-3)/\ln4\) 的小数部分</b>：画出这些点（书中提示）；它的分散度常数是 \(1/\ln4\)，但点<b>不</b>均匀分布——低分散度不需要均匀。</li>
+  <li><b>证明 (5.20)</b>：记 \(m = \lfloor k^{1/d}\rfloor\)，则 \((m+1)^d > k\)。取间距为 \(1/m\) 的 \((m+1)^d\) 个格点 \(\{0, 1/m, \ldots, 1\}^d\)：半径小于 \(1/(2m)\) 的 \(L_\infty\) 球（边长小于 \(1/m\)）最多盖住其中一个，\(k\) 个这样的球盖不住全部格点，所以 \(\delta \ge 1/(2m)\)。</li>
+  <li><b>证明 (5.23)</b>：以最大空 \(L_\infty\) 球为盒子 \(R\)，\(|P\cap R| = 0\) 而 \(\mu(R)\) 至少是 \(\delta^d\)（注意边界截断时的处理）。</li>
+  <li><b>让差异接近 1</b>：值域空间可以任意设计，比如取「恰好避开所有点的大集合」。</li>
+  <li><b>四元数扰动的位移界</b>：用 \(\|h-h'\|\) 表示旋转角的变化，再乘以离转轴最远的距离。</li>
+  <li><b>造虫子陷阱</b>：想想什么样的 \(\mathcal{A}\) 和 \(\mathcal{O}\) 会让 \(\mathcal{C}_{obs}\) 形成「瓶子」。（互动：本页的「虫子陷阱」地图。）</li>
+  <li><b>\(k\)-邻居最多几个</b>：恰有 \(j\) 个坐标变化的有 \(\binom{n}{j}2^j\) 个，所以是 \(\sum_{j=1}^k\binom{n}{j}2^j\)；\(k=n\) 时为 \(3^n-1\)。</li>
+  <li><b>10 维里选 50 个邻居</b>：考虑方向均匀分布（参考 5.6.1 节末「方向均匀」的想法与 \(\mathbb{S}^n\) 采样）。</li>
+  <li><b>隐式高分辨率网格 vs 直接在 C-space 上长树</b>：对照 5.4.2 节末尾「分辨率趋于无穷的极限」那段话。</li>
+  <li><b>改进 (5.31)</b>：旋转点走的是圆弧，弦长 \(2r\sin(|\Delta\theta|/2)\) 比 \(r|\Delta\theta|\) 紧。（互动：「每个关节该用多大的步长」里对比「实际最大位移」与上界。）</li>
+  <li><b>（开放问题）RRT 有 \(n+1\) 条主枝</b>：在「快速探索稠密树」图里多跑几次 45 步，数一数 2D 中的主枝——是否大致是 3 条、方向接近正三角形的三个顶点？</li>
+  <li>–26. <b>实现题</b>：21 → 「特征的 Voronoi 区域」；22 → 「PRM」「可见性路线图」「采样启发式」；23 → 「RRT 规划器」与「Kd 树」；24 → 在 RRT 规划器的基础上加更多树；25 → 对比 5.4.4 的扩展空间规划器；26 → 用第 4 章图 4.5 的平坦流形（圆柱、环面、Möbius 带……）替换本页的 [0,1]²。</li>
+</ol>
+</section>
+
+<section id="notes">
+<h2>脚注</h2>
+<div class="box small">
+  <p id="fn-d" style="margin:0 0 6px"><b>注</b>　原书在 5.2.3、5.2.4 节里维数时而写 \(n\)、时而写 \(d\)：(5.20)、(5.23) 用 \(d\)，正文与 (5.21)、(5.25)–(5.27) 用 \(n\)；Hammersley 一段说「只用 \(d-1\) 个不同素数」，而 (5.26) 写的是 \(p_{n-1}\)。两者指的都是维数。<a href="#fn-d-ref">↩</a></p>
+  <p id="fn-f" style="margin:0 0 6px"><sup>1</sup> 原书 5.3.1 节写「the real value in the range of \(f\)」，但这里的距离函数记作 \(d\)，应为 \(d\) 的值域。<a href="#fn-f-ref">↩</a></p>
+  <p id="fn-v" style="margin:0 0 6px"><sup>2</sup> 原书写「no children of \(v_1\) have to be compared to children of \(v_1\)」，后一个 \(v_1\) 应为 \(v_2\)。<a href="#fn-v-ref">↩</a></p>
+  <p id="fn-kd" style="margin:0 0 6px"><sup>3</sup> 原书说递归访问「比当前最近点<b>更远</b>（further）」的周围叶子。按 Kd 树查询的逻辑，应当访问那些<b>区域到查询点的距离小于</b>当前最近距离的叶子（其余的才可以剪掉），本页的 Kd 树互动图就是这样实现的。<a href="#fn-kd-ref">↩</a></p>
+  <p id="fn-swap" style="margin:0 0 6px"><sup>4</sup> 这是我们的判断：按字面，图 5.24 第 14 行在 \(|T_b| > |T_a|\) 时交换，交换后 \(T_a\) 是<b>较大</b>的树，而第 3–7 行用 \(\alpha(i)\) 做新探索的正是 \(T_a\)，这与正文「新的探索总是在较小的树上进行」不一致；与正文一致的写法是 \(|T_a| > |T_b|\) 时交换（保证 \(T_a\) 较小）。RRT 规划器里同时提供了两种写法，可以自己比较。我们在「虫子陷阱」地图上用 12 个固定随机种子各跑一次（上限 6000 次迭代）：按正文的平衡双向成功 11 次（迭代次数中位数约 700），按第 14 行字面只成功 1 次——被困在瓶子里的那棵树分不到探索机会。<a href="#fn-swap-ref">↩</a></p>
+  <p id="fn-i" style="margin:0"><sup>5</sup> 图 5.25 的伪代码里 \(i\) 同时扮演「样本序号」和「顶点计数」两个角色：按字面，第 4 行先执行 \(i\leftarrow i+1\)，第 5–7 行的 \(\alpha(i)\) 就成了下一个还没检查的样本，应理解为刚插入的那个；而 \(\alpha(i)\in\mathcal{C}_{obs}\) 时 \(i\) 不变，第 3 行又会反复检查同一个样本。实现时应把两者分成两个计数器（本页的 PRM 就是这样做的）。<a href="#fn-i-ref">↩</a></p>
+</div>
+</section>
+
+<nav class="pager">
+  <a href="ch4-configuration-space.html"><span class="dir">← 上一章</span>第 4 章 配置空间</a>
+  <a class="next" href="../index.html"><span class="dir">回到首页 →</span>全书路线图与进度</a>
+</nav>
+
+<footer class="page-foot">
+  内容依据 Steven M. LaValle《Planning Algorithms》（Cambridge University Press, 2006）Part II 第 5 章整理与讲解，原书可在 <a href="https://lavalle.pl/planning/" target="_blank" rel="noopener">lavalle.pl/planning</a> 免费阅读；本地副本见 <a href="../book/ch5.pdf">book/ch5.pdf</a>。互动图为学习辅助，标「补充」的内容不是书中原文；数值例子由 <a href="code/ch5_sampling.py">part2/code/ch5_sampling.py</a> 核对。
+</footer>
+
+</main>
+</div>
+</body>
+</html>
